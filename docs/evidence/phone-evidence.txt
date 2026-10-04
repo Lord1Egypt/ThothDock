@@ -1,0 +1,74 @@
+### device
+SM-A165F
+16
+6.12.38-android16-5-abA165FXXSBDZH6-4k aarch64
+### docker version
+Client:
+ Version:           29.8.1
+ API version:       1.41 (downgraded from 1.56)
+ Go version:        go1.26.8
+ Git commit:        4a63305
+ Built:             Tue Sep 15 16:24:36 2026
+ OS/Arch:           linux/arm64
+ Context:           default
+
+Server: ThothDock 0.1.0-dev (Docker Engine API 1.41 compatible; not affiliated with Docker, Inc.)
+ Engine:
+  Version:          0.1.0-dev
+  API version:      1.41 (minimum version 1.24)
+  Go version:       go1.27.1
+  Git commit:       c5b75bc+wip
+  Built:            
+  OS/Arch:          linux/arm64
+  Experimental:     false
+ proot:
+  Version:          PRoot trixie-v0.2.0-71-g54a965fc-dirty
+  Path:             /data/local/tmp/thothdock/bin/libproot.so
+### docker images
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+alpine:3.20          ab3fe4defd29       8.82MB             0B        
+debian:trixie-slim   3fde68c8327d        101MB             0B        
+### two containers from one image stay independent
+Error response from daemon: Invalid container name (a), only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed
+Error response from daemon: Invalid container name (b), only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed
+Error response from daemon: No such container: a
+b sees:
+Error response from daemon: No such container: b
+(b printed the image original, not a write)
+### detached lifecycle
+89b44b73bfd30e5990c6c767c95ed53be9b86719f3870636b9880154b9ff5945
+CONTAINER ID   IMAGE         COMMAND                   CREATED         STATUS         PORTS     NAMES
+89b44b73bfd3   alpine:3.20   "sh -c trap \"echo go…"   3 seconds ago   Up 3 seconds             ticker
+### process tree: the container process is a Garden PRoot tracee
+  PID  PPID USER         NAME                       
+12606     1 shell        thothdock
+12699  3605 shell        sh
+12966 12606 shell        libproot.so
+12969 12966 shell        sh
+13154 12969 shell        sleep
+23792 23700 u0_a247      libproot.so
+23985 23930 u0_a702      libproot.so
+### no dockerd/containerd/runc anywhere
+0
+docker
+libandroid-shmem.so
+libproot.so
+libproot_loader.so
+libtalloc.so.2
+thothdock
+tick 1
+tick 2
+ticker
+got TERM
+status=exited exit=0
+### ps -a
+CONTAINER ID   IMAGE                COMMAND                   CREATED         STATUS                              PORTS     NAMES
+89b44b73bfd3   alpine:3.20          "sh -c trap \"echo go…"   4 seconds ago   Exited (0) Less than a second ago             ticker
+c25510d4b599   debian:trixie-slim   "sh -c apt-get updat…"    7 minutes ago   Exited (0) 6 minutes ago                      apttest
+cd35c9d00ce9   alpine:3.20          "sh -c apk add -q --…"    8 minutes ago   Exited (0) 7 minutes ago                      curltest
+Deleted Containers:
+89b44b73bfd30e5990c6c767c95ed53be9b86719f3870636b9880154b9ff5945
+c25510d4b599bd2b3f9d18f4c32abb8183da9649a77c2f59b396fd73556f00aa
+cd35c9d00ce9a76605894032f3ba59afdd4217cf30e3d5255e42626372b92075
+
+Total reclaimed space: 0B

@@ -1,0 +1,93 @@
+$ export DOCKER_HOST=unix://$HOME/.local/share/thothdock/run/thothdock.sock
+$ ls -l $HOME/.local/share/thothdock/run/
+total 0
+-rw------- 1 lordegypt lordegypt 0 Oct  4 22:18 thothdock.lock
+srw------- 1 lordegypt lordegypt 0 Oct  4 22:42 thothdock.sock
+$ docker version
+Client:
+ Version:           29.8.1
+ API version:       1.41 (downgraded from 1.56)
+ Go version:        go1.26.8
+ Git commit:        4a63305
+ Built:             Tue Sep 15 16:24:42 2026
+ OS/Arch:           linux/amd64
+ Context:           default
+
+Server: ThothDock 0.1.0-dev (Docker Engine API 1.41 compatible; not affiliated with Docker, Inc.)
+ Engine:
+  Version:          0.1.0-dev
+  API version:      1.41 (minimum version 1.24)
+  Go version:       go1.27.1
+  Git commit:       4bc341c
+  Built:            
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ proot:
+  Version:          PRoot 7266fb3e
+  Path:             <scratch>/upstream-proot/proot
+$ docker info  (server section)
+Server:
+ Containers: 0
+  Running: 0
+  Paused: 0
+  Stopped: 0
+ Images: 1
+ Server Version: 0.1.0-dev
+ Storage Driver: thothdock-copy
+  Backing: private copy of the image root filesystem per container (no OverlayFS)
+  Platform: linux/amd64
+ Logging Driver: json-file
+ Cgroup Driver: none
+ Plugins:
+  Volume: 
+  Network: 
+  Log: json-file
+ Swarm: inactive
+ Runtimes: proot
+ Default Runtime: proot
+ Init Binary: 
+ containerd version: 
+ runc version: 
+ init version: 
+ Kernel Version: 6.18.40.1-microsoft-standard-WSL2
+ Operating System: Ubuntu 24.04.4 LTS
+ OSType: linux
+ Architecture: x86_64
+ CPUs: 12
+ Total Memory: 12.67GiB
+ Name: DESKTOP-66VNBGC
+ ID: c4771ad7-4139-7369-a94f-e872cf4d0357
+ Docker Root Dir: /home/lordegypt/.local/share/thothdock
+ Debug Mode: false
+ Experimental: false
+ Live Restore Enabled: false
+
+$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+$ docker images
+IMAGE         ID             DISK USAGE   CONTENT SIZE   EXTRA
+alpine:3.20   bf8527eb54c3        7.8MB             0B        
+$ docker run --rm alpine:3.20 echo hello from ThothDock
+hello from ThothDock
+[exit 0]
+$ echo piped | docker run --rm -i alpine:3.20 tr a-z A-Z
+PIPED
+$ docker run --rm alpine:3.20 nosuchcmd
+docker: Error response from daemon: exec: "nosuchcmd": executable file not found in $PATH
+
+Run 'docker run --help' for more information
+[exit 127]
+$ docker network ls
+Error response from daemon: ThothDock does not implement networks (no network namespaces; containers share the device network)
+[exit 1]
+$ docker run --rm --memory 64m alpine:3.20 true
+docker: Error response from daemon: ThothDock does not support memory limits: containers run under PRoot without cgroups, so the limit would not be enforced (see docs/COMPATIBILITY.md)
+
+Run 'docker run --help' for more information
+[exit 125]
+$ pgrep -a "dockerd|containerd|runc"  (in this Linux environment)
+(no dockerd, containerd or runc process)
+$ daemon log (first lines)
+time=2026-10-04T22:42:28.661+03:00 level=INFO msg="ThothDock listening" version=0.1.0-dev api=1.41 socket=/home/lordegypt/.local/share/thothdock/run/thothdock.sock root=/home/lordegypt/.local/share/thothdock runtime=<scratch>/upstream-proot/proot link2symlink=false
+
+  export DOCKER_HOST=unix:///home/lordegypt/.local/share/thothdock/run/thothdock.sock

@@ -424,3 +424,39 @@ func contains(list []string, s string) bool {
 func logsAll() logsReadOptions { return logsReadOptions{Tail: -1} }
 
 type logsReadOptions = logs.ReadOptions
+
+func TestHostsResolvAndHostnameFiles(t *testing.T) {
+	f := newFixture(t)
+	hc := HostConfig{Dns: []string{"9.9.9.9"}, DnsSearch: []string{"example.org"}, ExtraHosts: []string{"db:10.0.0.5"}}
+	id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image, Hostname: "box"}, HostConfig: &hc}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(f.layout.Containers(), id)
+	read := func(n string) string { b, _ := os.ReadFile(filepath.Join(dir, n)); return string(b) }
+	if r := read("resolv.conf"); r != "nameserver 9.9.9.9\nsearch example.org\n" {
+		t.Fatalf("resolv.conf %q", r)
+	}
+	if h := read("hosts"); !strings.Contains(h, "127.0.1.1\tbox\n") || !strings.HasSuffix(h, "10.0.0.5\tdb\n") {
+		t.Fatalf("hosts %q", h)
+	}
+	if read("hostname") != "box\n" {
+		t.Fatal(read("hostname"))
+	}
+	f.e.Start(id)
+	waitFor(t, f.e, id, "")
+	s := f.rt.Started[0]
+	targets := map[string]bool{}
+	for _, b := range s.Binds {
+		targets[b.Target] = true
+	}
+	if !targets["/etc/hosts"] || !targets["/etc/resolv.conf"] || !targets["/etc/hostname"] || !contains(s.Env, "HOSTNAME=box") {
+		t.Fatalf("%+v", s)
+	}
+	for _, bad := range []HostConfig{{Dns: []string{"not-an-ip"}}, {ExtraHosts: []string{"x:y"}}, {ExtraHosts: []string{"evil\nline:1.2.3.4"}}} {
+		bad := bad
+		if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &bad}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
+			t.Fatalf("%+v accepted: %v", bad, err)
+		}
+	}
+}

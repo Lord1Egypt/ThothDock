@@ -1,0 +1,12 @@
+### two containers from one image stay independent
+ca writes and reads:
+changed-by-ca
+cb then reads the same path:
+Welcome to Alpine!
+
+The Alpine Wiki cont
+image rootfs still:
+Welcome to Alpine!
+
+The Alpine Wiki cont
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
