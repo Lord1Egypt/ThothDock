@@ -162,25 +162,34 @@ func serve(args []string) error {
 		RuntimePath: rcfg.Path, RuntimeVersion: prootVersion(st.runtime), Started: time.Now()}
 	handler := srv.Handler()
 
-	sock := o.socketPath(l)
-	if len(sock) > 107 {
-		return fmt.Errorf("socket path %s is %d bytes; Unix sockets allow 107: use a shorter --root or --socket", sock, len(sock))
-	}
-	if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		return err
-	}
-	if err := os.Chmod(sock, 0o600); err != nil {
-		ln.Close()
-		return err
-	}
-	defer os.Remove(sock)
 	httpSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second}
 	errc := make(chan error, 2)
-	go func() { errc <- httpSrv.Serve(ln) }()
+	sock := o.socketPath(l)
+	if o.socket == "none" {
+		// Only for environments that may not create socket files (adb's
+		// shell domain on Android); the production transport is the socket.
+		if o.devTCP == "" {
+			return errors.New("--socket none needs --dev-tcp")
+		}
+		sock = "(none)"
+	} else {
+		if len(sock) > 107 {
+			return fmt.Errorf("socket path %s is %d bytes; Unix sockets allow 107: use a shorter --root or --socket", sock, len(sock))
+		}
+		if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		ln, err := net.Listen("unix", sock)
+		if err != nil {
+			return err
+		}
+		if err := os.Chmod(sock, 0o600); err != nil {
+			ln.Close()
+			return err
+		}
+		defer os.Remove(sock)
+		go func() { errc <- httpSrv.Serve(ln) }()
+	}
 	if o.devTCP != "" {
 		tl, err := net.Listen("tcp", o.devTCP)
 		if err != nil {
@@ -191,7 +200,9 @@ func serve(args []string) error {
 	}
 	log.Info("ThothDock listening", "version", version.Version, "api", version.APIVersion, "socket", sock,
 		"root", l.Root, "runtime", rcfg.Path, "link2symlink", rcfg.LinkToSymlink)
-	fmt.Fprintf(os.Stderr, "\n  export DOCKER_HOST=unix://%s\n\n", sock)
+	if o.socket != "none" {
+		fmt.Fprintf(os.Stderr, "\n  export DOCKER_HOST=unix://%s\n\n", sock)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

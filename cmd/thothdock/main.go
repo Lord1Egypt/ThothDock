@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/version"
 )
 
@@ -28,6 +29,7 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
+	platform.UseAndroidTrustStore()
 	var err error
 	switch os.Args[1] {
 	case "serve":

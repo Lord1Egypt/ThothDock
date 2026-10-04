@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
+	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/version"
 )
 
@@ -45,13 +46,8 @@ func machine() string {
 	return unix.ByteSliceToString(u.Machine[:])
 }
 
-func isAndroid() bool {
-	_, err := os.Stat("/system/build.prop")
-	return err == nil || os.Getenv("ANDROID_ROOT") != ""
-}
-
 func operatingSystem() string {
-	if isAndroid() {
+	if platform.IsAndroid() {
 		return "Android"
 	}
 	f, err := os.Open("/etc/os-release")

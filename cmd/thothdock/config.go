@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -43,7 +42,7 @@ type options struct {
 func (o *options) register(fs *flag.FlagSet) {
 	def, _ := platform.DefaultRoot()
 	fs.StringVar(&o.root, "root", def, "data root (env THOTHDOCK_ROOT)")
-	fs.StringVar(&o.socket, "socket", "", "Unix socket path (default <root>/run/thothdock.sock)")
+	fs.StringVar(&o.socket, "socket", "", "Unix socket path (default <root>/run/thothdock.sock); \"none\" only with --dev-tcp")
 	fs.StringVar(&o.proot, "proot", os.Getenv("THOTHDOCK_PROOT"), "PRoot executable (env THOTHDOCK_PROOT; on Android the edition's libproot.so)")
 	fs.StringVar(&o.prootLoader, "proot-loader", os.Getenv("PROOT_LOADER"), "PRoot loader (env PROOT_LOADER; on Android libproot_loader.so)")
 	fs.StringVar(&o.prootLibDir, "proot-lib-dir", "", "directory with PRoot's shared libraries (libtalloc.so.2), prepended to LD_LIBRARY_PATH")
@@ -119,10 +118,9 @@ func (o *options) runtimeConfig(l platform.Layout) (runtime.PRootConfig, error) 
 	return cfg, nil
 }
 
-var prootVersionRe = regexp.MustCompile(`\b(v?[0-9]+\.[0-9]+(\.[0-9]+)*)\s*$`)
-
-// prootVersion asks proot for its version: "--version" prints a banner
-// whose first line ending in a version number carries it.
+// prootVersion asks proot for its version. "--version" prints an ASCII-art
+// banner whose last art line ends with the version: "5.1.0" upstream, a
+// git description such as "trixie-v0.2.0-71-g54a965fc" in Garden builds.
 func prootVersion(rt *runtime.PRootRuntime) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -130,8 +128,10 @@ func prootVersion(rt *runtime.PRootRuntime) string {
 	cmd.Env = rt.Env(runtime.Spec{})
 	out, _ := cmd.CombinedOutput()
 	for _, line := range strings.Split(string(out), "\n") {
-		if m := prootVersionRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
-			return "PRoot " + strings.TrimPrefix(m[1], "v")
+		if strings.HasPrefix(line, "|__|") {
+			if f := strings.Fields(line); len(f) > 0 {
+				return "PRoot " + f[len(f)-1]
+			}
 		}
 	}
 	return "unknown"

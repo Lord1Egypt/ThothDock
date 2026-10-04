@@ -170,3 +170,17 @@ func TestFakeRuntime(t *testing.T) {
 		t.Fatalf("%+v", ex)
 	}
 }
+
+func TestPRootOptionCheck(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "proot")
+	// An upstream-style PRoot without --kill-on-exit is refused at startup.
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"  -r *path*, --rootfs=*path*\n  -0, --root-id\n  -i *string*, --change-id=*string*\n  --link2symlink\"\n"), 0o755)
+	if _, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir}); err == nil || !strings.Contains(err.Error(), "lacks --kill-on-exit") {
+		t.Fatalf("want missing-option error, got %v", err)
+	}
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
+	if _, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir}); err != nil {
+		t.Fatal(err)
+	}
+}

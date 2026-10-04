@@ -3,6 +3,7 @@ package runtime
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -54,7 +55,40 @@ func NewPRoot(cfg PRootConfig) (*PRootRuntime, error) {
 	if err := os.MkdirAll(cfg.TmpDir, 0o700); err != nil {
 		return nil, err
 	}
-	return &PRootRuntime{cfg: cfg}, nil
+	r := &PRootRuntime{cfg: cfg}
+	if err := r.checkOptions(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// requiredOptions are PRoot options ThothDock cannot work without. Garden's
+// PRoot (termux-derived) has them; upstream PRoot 5.1.0 as shipped by
+// Debian lacks --kill-on-exit, without which a container's background
+// processes would outlive it.
+var requiredOptions = []string{"--kill-on-exit", "--root-id", "--change-id", "--link2symlink"}
+
+// checkOptions reads proot --help once at startup, so an unsuitable PRoot
+// fails the daemon clearly instead of every container later.
+func (r *PRootRuntime) checkOptions() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, r.cfg.Path, "--help")
+	cmd.Env = r.Env(Spec{})
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return fmt.Errorf("proot: %s --help did not finish: %w", r.cfg.Path, ctx.Err())
+	}
+	help := string(out)
+	for _, opt := range requiredOptions {
+		if !strings.Contains(help, opt) {
+			if err != nil {
+				return fmt.Errorf("proot: %s cannot run: %v: %s", r.cfg.Path, err, strings.TrimSpace(help))
+			}
+			return fmt.Errorf("proot: %s lacks %s; ThothDock needs Garden's (termux-derived) PRoot", r.cfg.Path, opt)
+		}
+	}
+	return nil
 }
 
 func (r *PRootRuntime) Name() string { return "proot" }
