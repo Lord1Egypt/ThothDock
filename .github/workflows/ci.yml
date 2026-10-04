@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install talloc headers
+        run: sudo apt-get update -q && sudo apt-get install -y -q libtalloc-dev
+      - name: Build host PRoot (termux/proot at Garden's pin)
+        run: scripts/build-host-proot.sh "$RUNNER_TEMP/proot"
+      - name: Unit, security and runtime tests (race detector)
+        env:
+          THOTHDOCK_TEST_PROOT: ${{ runner.temp }}/proot/proot
+        run: go test -race -count=1 ./...
+
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build linux/${{ matrix.goarch }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -trimpath -ldflags "-s -w -X github.com/Lord1Egypt/ThothDock/internal/version.GitCommit=${GITHUB_SHA::7}" -o thothdock-linux-${{ matrix.goarch }} ./cmd/thothdock
+          file thothdock-linux-${{ matrix.goarch }}
+
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install talloc headers
+        run: sudo apt-get update -q && sudo apt-get install -y -q libtalloc-dev
+      - name: Build
+        run: |
+          scripts/build-host-proot.sh "$RUNNER_TEMP/proot"
+          go build -o "$RUNNER_TEMP/thothdock" ./cmd/thothdock
+      - name: Docker CLI against ThothDock (no dockerd involved)
+        env:
+          SMOKE_PULL: "1"
+        run: |
+          docker --version
+          tests/smoke/docker-cli-smoke.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/proot/proot"
