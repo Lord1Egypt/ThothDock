@@ -161,16 +161,17 @@ func useResolver(path string) {
 	if _, err := os.Stat("/etc/resolv.conf"); err == nil && path == "/etc/resolv.conf" {
 		return
 	}
-	servers := nameservers(path)
-	if len(servers) == 0 {
+	if len(nameservers(path)) == 0 {
 		return
 	}
+	// The file is read on every lookup: Android rewrites it when the
+	// network changes.
 	net.DefaultResolver = &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			var d net.Dialer
-			var lastErr error
-			for _, s := range servers {
+			lastErr := errors.New("no nameservers in " + path)
+			for _, s := range nameservers(path) {
 				c, err := d.DialContext(ctx, network, net.JoinHostPort(s, "53"))
 				if err == nil {
 					return c, nil

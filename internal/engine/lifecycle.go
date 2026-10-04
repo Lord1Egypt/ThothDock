@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -424,16 +425,22 @@ func (e *Engine) Attach(ref string) (*Container, AttachStreams, error) {
 	return c, as, nil
 }
 
-// Shutdown stops every running container (stop signal, then SIGKILL after
-// timeout) so nothing outlives the daemon.
+// Shutdown stops every running container in parallel (stop signal, then
+// SIGKILL after timeout) so nothing outlives the daemon.
 func (e *Engine) Shutdown(timeout int) {
+	var wg sync.WaitGroup
 	for _, r := range e.List() {
 		if IsRunning(r.State.Status) {
 			e.log.Info("stopping container for shutdown", "id", r.ID[:12])
-			t := timeout
-			e.Stop(r.ID, &t)
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				t := timeout
+				e.Stop(id, &t)
+			}(r.ID)
 		}
 	}
+	wg.Wait()
 }
 
 // Counts returns running, stopped and total containers.

@@ -124,6 +124,7 @@ func serve(args []string) error {
 	var o options
 	o.register(fs)
 	shutdownTimeout := fs.Int("shutdown-timeout", 10, "seconds containers get to stop when the daemon exits")
+	exitWithParent := fs.Bool("exit-with-parent", false, "shut down when the parent process (the Android app) dies")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -133,6 +134,21 @@ func serve(args []string) error {
 		}
 	}
 	log := newLogger(o.debug)
+	if *exitWithParent {
+		if err := exitWhenParentDies(); err != nil {
+			return err
+		}
+	}
+	// Android apps start with SIGHUP ignored, and an ignored disposition
+	// survives exec. Handling it here gives every container process the
+	// default disposition, as under dockerd.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			log.Debug("SIGHUP ignored by the daemon")
+		}
+	}()
 	l, err := o.layout()
 	if err != nil {
 		return err
@@ -145,6 +161,10 @@ func serve(args []string) error {
 		return err
 	}
 	defer lock.Close()
+	if err := writePidFile(l); err != nil {
+		return err
+	}
+	defer os.Remove(pidFile(l))
 	if err := clearTmp(l); err != nil {
 		return err
 	}
@@ -173,21 +193,11 @@ func serve(args []string) error {
 		}
 		sock = "(none)"
 	} else {
-		if len(sock) > 107 {
-			return fmt.Errorf("socket path %s is %d bytes; Unix sockets allow 107: use a shorter --root or --socket", sock, len(sock))
-		}
-		if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		ln, err := net.Listen("unix", sock)
+		ln, created, err := listenUnix(sock)
 		if err != nil {
 			return err
 		}
-		if err := os.Chmod(sock, 0o600); err != nil {
-			ln.Close()
-			return err
-		}
-		defer os.Remove(sock)
+		defer removeOwnSocket(sock, created)
 		go func() { errc <- httpSrv.Serve(ln) }()
 	}
 	if o.devTCP != "" {
@@ -214,10 +224,28 @@ func serve(args []string) error {
 		}
 	}
 	log.Info("shutting down")
-	sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	httpSrv.Shutdown(sctx)
-	st.engine.Shutdown(*shutdownTimeout)
+	stop()
+	// A second SIGINT/SIGTERM, or a shutdown that overruns its budget,
+	// ends the daemon at once; containers die with it (PDEATHSIG).
+	again := make(chan os.Signal, 1)
+	signal.Notify(again, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpSrv.Shutdown(sctx)
+		st.engine.Shutdown(*shutdownTimeout)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-again:
+		log.Warn("second signal: exiting without waiting for containers")
+		return errors.New("interrupted during shutdown")
+	case <-time.After(time.Duration(*shutdownTimeout+5) * time.Second):
+		log.Warn("shutdown overran its budget: exiting")
+		return errors.New("shutdown timed out")
+	}
 	log.Info("stopped")
 	return nil
 }
