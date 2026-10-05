@@ -14,5 +14,5 @@ PRoot. They are stated plainly; none is hidden behind a silent emulation.
 | Resource limits | `--memory`, `--cpus`, `--pids-limit`, ulimits, devices, `--privileged` and capabilities are refused (HTTP 501), never ignored. |
 | Lifetime | Containers do not outlive the app. Closing the last terminal window, Exit and force-stop end the daemon and every container. Running containers are reported `Exited (137)` after a kill. |
 | Volumes | No copy-up of image content into a new named volume; image `VOLUME`s do not become anonymous volumes. |
-| Exit codes | A workload killed by a signal reports `128+signal` (a shell loop killed by SIGTERM reports 143; fixed in 0.1.0-rc.1, it reported 0 in the Golden QA build). |
+| Exit codes | A workload killed by a signal reports `128+signal` (a shell loop killed by SIGTERM reports 143; fixed since the Golden QA build, which reported 0). |
 | Images | Pulled from registries over HTTPS only when you run `docker pull` / `docker run`; nothing is downloaded in the background. |
