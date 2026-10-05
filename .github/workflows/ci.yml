@@ -21,6 +21,11 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: vendor directory is in sync with go.mod
+        run: |
+          go mod vendor
+          git diff --exit-code -- vendor go.mod go.sum
+          go mod verify
 
   test:
     runs-on: ubuntu-24.04
