@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 )
@@ -38,15 +40,24 @@ func (e *Engine) Start(ref string) error {
 	if err := e.persist(c); err != nil {
 		return err
 	}
-	proc, err := e.Runtime.Start(spec)
+	fws, assigns, err := e.openPorts(c)
 	if err != nil {
 		e.startFailed(c, err)
 		return err
 	}
+	proc, err := e.Runtime.Start(spec)
+	if err != nil {
+		for _, f := range fws {
+			f.Close()
+		}
+		e.startFailed(c, err)
+		return err
+	}
+	c.forwarders, c.ports = fws, assigns
 	st := &c.rec.State
 	st.Status = StatusRunning
 	st.Pid = proc.Pid()
-	st.PidStart = processStart(proc.Pid())
+	st.PidStart = procid.StartTime(proc.Pid())
 	st.StartedAt = time.Now().UTC()
 	st.ExitCode = 0
 	c.proc = proc
@@ -96,7 +107,29 @@ func (e *Engine) startFailed(c *Container, err error) {
 	}
 }
 
+// procParams is what differs between a container's main process and an
+// exec'd one; everything else (root filesystem, binds, base environment,
+// user resolution, executable lookup) is shared.
+type procParams struct {
+	User      string   // "" = the container's user
+	WorkDir   string   // "" = the container's working directory
+	ExtraEnv  []string // overlaid on the container's environment
+	Argv      []string // argv[0] is looked up in the container's PATH
+	Tty       bool
+	OpenStdin bool
+	Stdout    io.Writer
+	Stderr    io.Writer
+}
+
 func (e *Engine) buildSpec(c *Container) (runtime.Spec, error) {
+	return e.buildSpecFor(c, procParams{
+		Argv: append([]string{c.rec.Path}, c.rec.Args...),
+		Tty:  c.rec.Config.Tty, OpenStdin: c.rec.Config.OpenStdin,
+		Stdout: c.logger.Writer("stdout"), Stderr: c.logger.Writer("stderr"),
+	})
+}
+
+func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) {
 	rootfs := filepath.Join(c.dir, "rootfs")
 	root, err := securefs.OpenRoot(rootfs)
 	if err != nil {
@@ -104,23 +137,35 @@ func (e *Engine) buildSpec(c *Container) (runtime.Spec, error) {
 	}
 	defer root.Close()
 	cfg := c.rec.Config
-	user, err := resolveUser(root, cfg.User)
+	userSpec := cfg.User
+	if p.User != "" {
+		userSpec = p.User
+	}
+	user, err := resolveUser(root, userSpec)
 	if err != nil {
 		return runtime.Spec{}, err
 	}
 	env := append([]string{}, cfg.Env...)
 	env = mergeEnv([]string{"HOSTNAME=" + cfg.Hostname}, env)
-	if !hasEnv(env, "HOME") {
+	env = mergeEnv(env, p.ExtraEnv)
+	if !hasEnv(env, "HOME") || (p.User != "" && !hasEnvIn(p.ExtraEnv, "HOME")) {
 		home := user.Home
 		if home == "" {
 			home = "/"
 		}
-		env = append(env, "HOME="+home)
+		env = mergeEnv(env, []string{"HOME=" + home})
 	}
-	if cfg.Tty && !hasEnv(env, "TERM") {
+	if p.Tty && !hasEnv(env, "TERM") {
 		env = append(env, "TERM=xterm")
 	}
-	exe, err := lookPath(root, c.rec.Path, cfg.WorkingDir, env)
+	cwd := cfg.WorkingDir
+	if p.WorkDir != "" {
+		cwd = p.WorkDir
+	}
+	if len(p.Argv) == 0 {
+		return runtime.Spec{}, errdefs.Invalid("no command specified")
+	}
+	exe, err := lookPath(root, p.Argv[0], cwd, env)
 	if err != nil {
 		return runtime.Spec{}, err
 	}
@@ -129,17 +174,23 @@ func (e *Engine) buildSpec(c *Container) (runtime.Spec, error) {
 		{Source: filepath.Join(c.dir, "hostname"), Target: "/etc/hostname"},
 		{Source: filepath.Join(c.dir, "resolv.conf"), Target: "/etc/resolv.conf"},
 	}
-	for _, b := range c.rec.Binds {
+	mounts, err := e.bindSources(c.rec.Binds)
+	if err != nil {
+		return runtime.Spec{}, err
+	}
+	for _, b := range mounts {
 		binds = append(binds, runtime.Bind{Source: b.Source, Target: b.Target})
 	}
 	return runtime.Spec{
 		ID: c.rec.ID, Rootfs: rootfs,
-		Args: append([]string{exe}, c.rec.Args...), Env: env, Cwd: cfg.WorkingDir,
+		Args: append([]string{exe}, p.Argv[1:]...), Env: env, Cwd: cwd,
 		UID: user.UID, GID: user.GID, Binds: binds,
-		Tty: cfg.Tty, OpenStdin: cfg.OpenStdin,
-		Stdout: c.logger.Writer("stdout"), Stderr: c.logger.Writer("stderr"),
+		Tty: p.Tty, OpenStdin: p.OpenStdin,
+		Stdout: p.Stdout, Stderr: p.Stderr,
 	}, nil
 }
+
+func hasEnvIn(env []string, key string) bool { return hasEnv(env, key) }
 
 // monitor waits for the process, records its exit and wakes waiters.
 func (e *Engine) monitor(c *Container, proc runtime.Process, done chan struct{}) {
@@ -152,6 +203,8 @@ func (e *Engine) monitor(c *Container, proc runtime.Process, done chan struct{})
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
 	c.proc = nil
+	c.closePortsLocked()
+	c.killExecsLocked()
 	c.stdin.end()
 	c.stdin = newStdinBroker()
 	if err := e.persist(c); err != nil {
@@ -384,6 +437,7 @@ func (e *Engine) Remove(ref string, force bool) error {
 		return err
 	}
 	c.gone = true
+	e.forgetExecs(c)
 	c.notifyLocked(WaitResult{StatusCode: c.rec.State.ExitCode}, "not-running", "next-exit", "removed")
 	c.mu.Unlock()
 	e.mu.Lock()

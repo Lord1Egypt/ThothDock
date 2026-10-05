@@ -267,3 +267,102 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 	return l.f.Close()
 }
+
+// maxTailBytes bounds the memory a tail request may use, whatever N is.
+const maxTailBytes = 8 << 20
+
+// Scan streams the stored entries matching opts to emit, oldest first, without
+// holding them all in memory:
+//
+//   - with opts.Tail >= 0 only the newest entries are kept (at most Tail, and at
+//     most maxTailBytes of text), then emitted;
+//   - otherwise each entry is emitted as it is read.
+//
+// The logger's lock is held only to open the files and, when following, to
+// subscribe -- never while emit runs -- so a slow client cannot stall the
+// container's output. The returned channel (opts.Follow) starts exactly where
+// the scan ends.
+func (l *Logger) Scan(opts ReadOptions, emit func(Entry) error) (chan Entry, error) {
+	l.mu.Lock()
+	var files []*os.File
+	var limits []int64
+	closeAll := func() {
+		for _, f := range files {
+			f.Close()
+		}
+	}
+	for i, p := range []string{l.path + ".1", l.path} {
+		f, err := os.Open(p)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			closeAll()
+			l.mu.Unlock()
+			return nil, err
+		}
+		files = append(files, f)
+		limit := int64(-1) // the rotated file is complete
+		if i == 1 {
+			limit = l.size // the live file: only what exists now
+		}
+		limits = append(limits, limit)
+	}
+	var live chan Entry
+	if opts.Follow {
+		live = make(chan Entry, subBuffer)
+		l.entries[live] = struct{}{}
+	}
+	l.mu.Unlock()
+	defer closeAll()
+
+	keep := func(e Entry) bool {
+		return (opts.Since.IsZero() || !e.Time.Before(opts.Since)) && (opts.Until.IsZero() || !e.Time.After(opts.Until))
+	}
+	var ring []Entry
+	ringBytes := 0
+	fail := func(err error) (chan Entry, error) {
+		if live != nil {
+			l.UnsubscribeEntries(live)
+		}
+		return nil, err
+	}
+	for i, f := range files {
+		var r io.Reader = f
+		if limits[i] >= 0 {
+			r = io.LimitReader(f, limits[i])
+		}
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 64*1024), 1<<20)
+		for sc.Scan() {
+			var e Entry
+			if json.Unmarshal(sc.Bytes(), &e) != nil || !keep(e) {
+				continue
+			}
+			if opts.Tail < 0 {
+				if err := emit(e); err != nil {
+					return fail(err)
+				}
+				continue
+			}
+			if opts.Tail == 0 {
+				continue
+			}
+			ring = append(ring, e)
+			ringBytes += len(e.Log) + 64
+			for len(ring) > opts.Tail || ringBytes > maxTailBytes {
+				ringBytes -= len(ring[0].Log) + 64
+				ring = ring[1:]
+			}
+		}
+		if err := sc.Err(); err != nil {
+			return fail(err)
+		}
+	}
+	for _, e := range ring {
+		if err := emit(e); err != nil {
+			return fail(err)
+		}
+	}
+	return live, nil
+}

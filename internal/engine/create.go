@@ -3,7 +3,6 @@ package engine
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,14 +44,10 @@ func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 		return nil, unsupported("capability changes", "PRoot processes run with the Android app's (empty) capability set")
 	case len(hc.Devices) > 0 || len(hc.DeviceRequests) > 0:
 		return nil, unsupported("device passthrough", "an unprivileged app cannot create or grant device nodes")
-	case len(hc.Mounts) > 0:
-		return nil, unsupported("the Mounts API", "planned for the volumes phase; use -v with an approved directory")
 	case len(hc.VolumesFrom) > 0:
-		return nil, unsupported("--volumes-from", "planned for the volumes phase")
+		return nil, unsupported("--volumes-from", "not implemented yet")
 	case len(hc.Links) > 0:
 		return nil, unsupported("container links", "there is no container network")
-	case len(hc.PortBindings) > 0 || hc.PublishAllPorts:
-		return nil, unsupported("port publishing", "planned; containers already share the device network, so a service listening on port N is reachable at 127.0.0.1:N")
 	case hc.ReadonlyRootfs:
 		return nil, unsupported("read-only root filesystems", "PRoot cannot enforce read-only mounts")
 	case len(hc.Tmpfs) > 0:
@@ -97,50 +92,6 @@ func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 		return nil, unsupported("network "+hc.NetworkMode, "user-defined networks need network namespaces")
 	}
 	return warnings, nil
-}
-
-// resolveBinds applies the bind policy: only absolute host paths whose
-// canonical form lies inside an allowed root, read-write, never named
-// volumes yet.
-func (e *Engine) resolveBinds(binds []string) ([]BindRecord, error) {
-	var out []BindRecord
-	for _, b := range binds {
-		parts := strings.Split(b, ":")
-		if len(parts) < 2 || len(parts) > 3 {
-			return nil, errdefs.Invalid("invalid bind %q: want SOURCE:TARGET[:OPTIONS]", b)
-		}
-		src, dst := parts[0], parts[1]
-		if len(parts) == 3 {
-			for _, o := range strings.Split(parts[2], ",") {
-				switch o {
-				case "rw", "":
-				case "ro":
-					return nil, unsupported("read-only binds", "PRoot binds are always writable; ThothDock refuses rather than grant write access")
-				default:
-					return nil, unsupported("bind option "+o, "only rw exists")
-				}
-			}
-		}
-		if !strings.HasPrefix(src, "/") {
-			return nil, unsupported("named volumes", "planned for the volumes phase")
-		}
-		if !strings.HasPrefix(dst, "/") || strings.ContainsAny(dst, "\x00\n") || path.Clean(dst) == "/" {
-			return nil, errdefs.Invalid("invalid bind target %q: must be an absolute path other than /", dst)
-		}
-		canon, err := filepath.EvalSymlinks(src)
-		if err != nil {
-			return nil, errdefs.Invalid("bind source %q: %v", src, err)
-		}
-		canon, err = filepath.Abs(canon)
-		if err != nil {
-			return nil, err
-		}
-		if !e.bindAllowed(canon) {
-			return nil, errdefs.Forbidden("bind source %q is outside the directories this daemon allows (thothdock serve --allow-bind)", src)
-		}
-		out = append(out, BindRecord{Source: canon, Target: path.Clean(dst)})
-	}
-	return out, nil
 }
 
 func (e *Engine) bindAllowed(canon string) bool {
@@ -191,10 +142,19 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if len(req.Healthcheck) > 0 && string(req.Healthcheck) != "null" {
 		return "", nil, unsupported("health checks", "not implemented yet")
 	}
-	binds, err := e.resolveBinds(hc.Binds)
+	binds, err := e.resolveMounts(hc)
 	if err != nil {
 		return "", nil, err
 	}
+	exposed := req.ExposedPorts
+	if exposed == nil {
+		exposed = img.Config.Config.ExposedPorts
+	}
+	_, portWarnings, err := e.planPorts(hc, exposed)
+	if err != nil {
+		return "", nil, err
+	}
+	warnings = append(warnings, portWarnings...)
 
 	cfg := req.ContainerConfig
 	ic := img.Config.Config
@@ -287,6 +247,11 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 		return "", nil, err
 	}
 	warnings = append(warnings, moreWarnings...)
+	if err := prepareMountpoints(filepath.Join(dir, "rootfs"), binds); err != nil {
+		release()
+		securefs.RemoveTree(dir)
+		return "", nil, err
+	}
 	c := &Container{rec: rec, dir: dir, stdin: newStdinBroker()}
 	if c.logger, err = logs.Open(filepath.Join(dir, "container.log"), e.cfg.LogMaxSize); err != nil {
 		release()

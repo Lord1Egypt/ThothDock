@@ -198,3 +198,49 @@ Android app context (u0_aNNN, one uid)
 Not covered: a daemon crash loop in the field (the restart policy gives up after
 3 failures a minute and shows `unavailable`), Android's low-memory killer, and
 Doze with the screen off for long periods.
+
+## 8. Golden candidate round — MEASURED (2026-10-05)
+
+Device: Samsung SM-A165F, Android 16, unrooted. QA app
+`com.thothterm.debian.qa.thothdock`; no production package touched.
+
+### Process model
+
+```
+Android app (uid u0_aNNN)
+ ├─ TermService ── supervisor thread ── libthothdock.so serve   (daemon, app context)
+ │                                        ├─ /files/thothdock/sock/thothdock.sock (0600)
+ │                                        ├─ container PRoot  (Pdeathsig = daemon)
+ │                                        ├─ exec PRoot       (second tracee, same rootfs)
+ │                                        └─ port forwarders  (goroutines, 127.0.0.1)
+ ├─ guest shell PRoot ── docker CLI ──▶ /run/thothdock/thothdock.sock (bind mount)
+ └─ Containers screen ── LocalSocket ──▶ same socket (same API, no private state)
+```
+
+### Lifecycle facts (each observed on the device)
+
+| Event | Result |
+|---|---|
+| App backgrounded 45 s with a running container and a published port | daemon, container and port unchanged; the port answered from `adb shell` |
+| Force-stop of the app | daemon and container PRoot die with it (Pdeathsig, `--exit-with-parent`); the listener is released; the socket file is left behind and **replaced by the next start** after an identity check (pid + `/proc` start time) |
+| Relaunch after force-stop | a single new daemon; a container that was running is reconciled to `Exited (137)`; its port is free |
+| `kill -9` of the daemon while a container runs | the container's PRoot exits at once; the app supervisor restarts the daemon in about 2 s; the CLI works again immediately |
+| Exit (menu, confirmed) | no `libthothdock`, no PRoot worker, socket and pid files removed, no service record, no listener |
+| Shell uid (`adb shell`) opening the socket | `Permission denied` on the directory and on the socket |
+
+### Why the daemon is not inside the guest
+
+Nested PRoot does not work on this device (documented in §6), so the daemon runs
+next to the guest PRoot and the socket directory is bind-mounted into the guest.
+
+### Update model
+
+ThothDock ships inside the app: updating the app updates the daemon. The Docker
+CLI is the unmodified static 29.8.1 binary pinned by SHA-256. In Debian/Ubuntu
+guests the Docker **client** packages remain upgradable with apt; the engine
+packages are held by Engine Guard (see COMPATIBILITY.md).
+
+### Root semantics
+
+"root" inside a container is PRoot's fake root (`--root-id`); it grants no
+Android privilege. `--user` changes the faked identity only.

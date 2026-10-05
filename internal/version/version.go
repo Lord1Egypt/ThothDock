@@ -3,7 +3,7 @@ package version
 
 var (
 	// Version is the ThothDock release version.
-	Version = "0.1.0-dev"
+	Version = "0.1.0"
 	// GitCommit is the source commit the binary was built from.
 	GitCommit = "unknown"
 	// BuildTime is the RFC 3339 build timestamp, when known.

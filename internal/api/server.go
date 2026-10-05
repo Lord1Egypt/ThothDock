@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/engine"
@@ -56,6 +58,17 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /containers/{id}/logs", s.containerLogs)
 	m.HandleFunc("DELETE /containers/{id}", s.removeContainer)
 
+	m.HandleFunc("POST /containers/{id}/exec", s.execCreate)
+	m.HandleFunc("POST /exec/{id}/start", s.execStart)
+	m.HandleFunc("POST /exec/{id}/resize", s.execResize)
+	m.HandleFunc("GET /exec/{id}/json", s.execInspect)
+
+	m.HandleFunc("GET /volumes", s.listVolumes)
+	m.HandleFunc("POST /volumes/create", s.createVolume)
+	m.HandleFunc("POST /volumes/prune", s.pruneVolumes)
+	m.HandleFunc("GET /volumes/{name}", s.inspectVolume)
+	m.HandleFunc("DELETE /volumes/{name}", s.removeVolume)
+
 	m.HandleFunc("GET /images/json", s.listImages)
 	m.HandleFunc("POST /images/create", s.pullImage)
 	m.HandleFunc("GET /images/{rest...}", s.imageGet)
@@ -63,8 +76,6 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("DELETE /images/{rest...}", s.deleteImage)
 
 	for _, p := range []struct{ prefix, what string }{
-		{"/containers/{id}/exec", "docker exec (planned for the next milestone)"},
-		{"/exec/", "docker exec (planned for the next milestone)"},
 		{"/containers/{id}/pause", "pause/unpause (PRoot has no freezer cgroup)"},
 		{"/containers/{id}/unpause", "pause/unpause (PRoot has no freezer cgroup)"},
 		{"/containers/{id}/update", "resource updates (there are no cgroups)"},
@@ -77,7 +88,6 @@ func (s *Server) Handler() http.Handler {
 		{"/build", "docker build (planned)"},
 		{"/commit", "docker commit (planned)"},
 		{"/networks", "networks (no network namespaces; containers share the device network)"},
-		{"/volumes", "named volumes (planned for the volumes phase)"},
 		{"/events", "the event stream (planned)"},
 		{"/system/df", "disk usage reporting (planned)"},
 		{"/swarm", "swarm mode"},
@@ -189,9 +199,20 @@ func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, map[string]string{"message": err.Error()})
 }
 
-// decodeBody reads a bounded JSON body. An empty body leaves v unchanged.
-func decodeBody(r *http.Request, v any) error {
-	body := http.MaxBytesReader(nil, r.Body, maxBody)
+// bodyReadTimeout bounds how long a client may take to deliver a JSON
+// request body. It is a variable so tests can shorten it.
+var bodyReadTimeout = func() *atomic.Int64 { var a atomic.Int64; a.Store(int64(30 * time.Second)); return &a }()
+
+// decodeBody reads a bounded JSON body within bodyReadTimeout. An empty body
+// leaves v unchanged. The deadline is set only for the read and cleared after:
+// an expired read deadline would also cancel the request's context, so it must
+// never outlive the body (long-running requests like wait and pull follow).
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
+	rc := http.NewResponseController(w)
+	if rc.SetReadDeadline(time.Now().Add(time.Duration(bodyReadTimeout.Load()))) == nil {
+		defer rc.SetReadDeadline(time.Time{})
+	}
+	body := http.MaxBytesReader(w, r.Body, maxBody)
 	dec := json.NewDecoder(body)
 	if err := dec.Decode(v); err != nil {
 		if errors.Is(err, io.EOF) {
@@ -200,6 +221,10 @@ func decodeBody(r *http.Request, v any) error {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
 			return errdefs.Invalid("request body exceeds %d bytes", maxBody)
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return errdefs.Invalid("timed out reading the request body")
 		}
 		return errdefs.Invalid("invalid JSON body: %v", err)
 	}

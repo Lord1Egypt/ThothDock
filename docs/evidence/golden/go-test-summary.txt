@@ -1,0 +1,17 @@
+go test -race -count=1 ./...  (THOTHDOCK_TEST_PROOT set, real PRoot) -- exit 0
+tests/subtests: pass=99 fail=0 skip=0
+  github.com/Lord1Egypt/ThothDock/cmd/thothdock        pass=4
+  github.com/Lord1Egypt/ThothDock/internal/oci         pass=5
+  github.com/Lord1Egypt/ThothDock/internal/layer       pass=21
+  github.com/Lord1Egypt/ThothDock/internal/procid      pass=1
+  github.com/Lord1Egypt/ThothDock/internal/registry    pass=2
+  github.com/Lord1Egypt/ThothDock/internal/guard       pass=3
+  github.com/Lord1Egypt/ThothDock/internal/logs        pass=7
+  github.com/Lord1Egypt/ThothDock/internal/runtime     pass=8
+  github.com/Lord1Egypt/ThothDock/internal/portmap     pass=5
+  github.com/Lord1Egypt/ThothDock/internal/image       pass=8
+  github.com/Lord1Egypt/ThothDock/internal/engine      pass=22
+  github.com/Lord1Egypt/ThothDock/internal/api         pass=5
+  github.com/Lord1Egypt/ThothDock/internal/securefs    pass=2
+  github.com/Lord1Egypt/ThothDock/internal/store       pass=2
+  github.com/Lord1Egypt/ThothDock/internal/volume      pass=4

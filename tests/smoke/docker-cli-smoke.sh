@@ -13,12 +13,19 @@ WORK="$(mktemp -d /tmp/tds.XXXXXX)"
 export DOCKER_HOST="unix://$WORK/run/thothdock.sock"
 export DOCKER_CONFIG="$WORK/cli"
 unset DOCKER_CONTEXT
-"$TD" serve --root "$WORK" --proot "$PROOT" > "$WORK.log" 2>&1 &
+ALLOW=
+if [ "${SMOKE_GUARD:-0}" = 1 ]; then
+    mkdir -p "$WORK.guard"
+    "$(dirname "$0")/../../engine-guard/build.sh" "$WORK.guard" >/dev/null
+    cp "$TD" "$WORK.guard/thothdock"
+    ALLOW="--allow-bind $WORK.guard"
+fi
+"$TD" serve --root "$WORK" --proot "$PROOT" $ALLOW > "$WORK.log" 2>&1 &
 PID=$!
 cleanup() {
     kill "$PID" 2>/dev/null || true
     wait "$PID" 2>/dev/null || true
-    case "$WORK" in /tmp/tds.*) rm -rf "$WORK" ;; esac
+    case "$WORK" in /tmp/tds.*) rm -rf "$WORK" "$WORK.guard" ;; esac
 }
 trap cleanup EXIT
 for _ in $(seq 50); do [ -S "$WORK/run/thothdock.sock" ] && break; sleep 0.1; done
@@ -60,5 +67,58 @@ if [ "${SMOKE_PULL:-0}" = 1 ]; then
     [ "$(docker inspect -f '{{.State.Status}}' "$id")" = exited ] || fail "stop"
     docker rm "$id" >/dev/null
     pass "run -d, stop, rm"
+fi
+if [ "${SMOKE_PULL:-0}" = 1 ]; then
+    # --- exec
+    docker run -d --name ex alpine:3.20 sleep 120 >/dev/null
+    [ "$(docker exec ex echo hello)" = hello ] || fail "docker exec echo"
+    docker exec ex sh -c 'exit 42' && fail "exec exit code" || [ $? = 42 ] || fail "exec exit code propagation"
+    [ "$(docker exec -e FOO=bar -w /etc -u nobody ex sh -c 'echo $FOO $PWD $(id -u)')" = "bar /etc 65534" ] || fail "exec env/workdir/user"
+    [ "$(echo piped | docker exec -i ex tr a-z A-Z)" = PIPED ] || fail "exec stdin"
+    docker exec ex sh -c 'echo shared > /tmp/s'; [ "$(docker exec ex cat /tmp/s)" = shared ] || fail "exec shares the filesystem"
+    docker exec ex nosuchcmd >/dev/null 2>&1 && fail "exec of a missing command succeeded"; [ $? = 126 ] || true
+    docker rm -f ex >/dev/null
+    pass "docker exec (stdout, exit code, env/workdir/user, stdin, shared fs)"
+    # --- volumes
+    docker volume create smokevol >/dev/null
+    docker run --rm -v smokevol:/data alpine:3.20 sh -c 'echo persistent > /data/t.txt'
+    [ "$(docker run --rm -v smokevol:/data alpine:3.20 cat /data/t.txt)" = persistent ] || fail "volume persistence"
+    docker run -d --name vholder -v smokevol:/d alpine:3.20 sleep 60 >/dev/null
+    docker volume rm smokevol >/dev/null 2>&1 && fail "in-use volume removed"
+    docker rm -f vholder >/dev/null
+    docker volume create '../escape' >/dev/null 2>&1 && fail "traversal volume name accepted"
+    docker volume rm smokevol >/dev/null || fail "volume rm"
+    pass "named volumes (persistence, in-use protection, hostile name)"
+    # --- port publishing
+    docker run -d --name pub -p 18741:8080 alpine:3.20 sh -c 'while true; do printf "HTTP/1.0 200 OK\r\n\r\nsmoke-web\n" | nc -l -p 8080; done' >/dev/null
+    sleep 2
+    [ "$(curl -s --max-time 5 http://127.0.0.1:18741/)" = smoke-web ] || fail "published port"
+    [ "$(docker port pub)" = "8080/tcp -> 127.0.0.1:18741" ] || fail "docker port"
+    docker run --rm -p 5353:53/udp alpine:3.20 true >/dev/null 2>&1 && fail "UDP publishing accepted"
+    docker run --rm -p 0.0.0.0:18742:80 alpine:3.20 true >/dev/null 2>&1 && fail "non-loopback publishing accepted"
+    docker stop -t 1 pub >/dev/null
+    curl -s --max-time 2 http://127.0.0.1:18741/ >/dev/null && fail "listener survived stop"
+    docker rm pub >/dev/null
+    pass "-p TCP publishing on 127.0.0.1 (curl, collision-free stop, UDP and LAN refused)"
+fi
+if [ "${SMOKE_GUARD:-0}" = 1 ]; then
+    docker pull -q debian:trixie >/dev/null || fail "pull debian"
+    out="$(docker run --rm -v "$WORK.guard":/g debian:trixie sh -c '
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq >/dev/null 2>&1
+        dpkg -i /g/*.deb >/dev/null 2>&1
+        apt-get -y full-upgrade >/dev/null 2>&1
+        apt-get install -y docker.io containerd runc 2>&1 | grep -c "already the newest"
+        apt-get install -y --allow-downgrades docker.io=26.1.5+dfsg1-9+deb13u1 >/dev/null 2>&1 && echo DOWNGRADE-ACCEPTED
+        apt-get install -y docker-cli >/dev/null 2>&1 && echo cli-ok
+        for b in dockerd containerd runc; do command -v $b >/dev/null && echo "PRESENT-$b"; done
+        /g/thothdock doctor --guard >/dev/null && echo doctor-ok
+    ' 2>&1)"
+    echo "$out" | grep -q '^3$' || fail "apt install of engine packages was not a no-op: $out"
+    echo "$out" | grep -q DOWNGRADE-ACCEPTED && fail "real engine downgrade accepted"
+    echo "$out" | grep -q PRESENT && fail "a stock engine binary is present: $out"
+    echo "$out" | grep -q cli-ok || fail "docker-cli could not be installed"
+    echo "$out" | grep -q doctor-ok || fail "doctor --guard failed"
+    pass "Engine Guard (full-upgrade, engine installs no-op, downgrade refused, CLI allowed, doctor)"
 fi
 echo "smoke: all checks passed"

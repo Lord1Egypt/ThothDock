@@ -39,7 +39,7 @@ func newAPI(t *testing.T) *apiFixture {
 	l.Ensure()
 	reg := registrytest.New(t)
 	reg.Image(t, "library/tiny", "1", oci.HostPlatform(), oci.ContainerConfig{Cmd: []string{"/bin/sh"}}, true,
-		[]registrytest.File{{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}})
+		[]registrytest.File{{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/echo", Body: "#!", Mode: 0o755}})
 	blobs := store.NewBlobs(l.Blobs(), l.Tmp())
 	is, err := image.Open(l.Images(), filepath.Join(l.Root, "refs.json"), l.Tmp(), blobs, quiet)
 	if err != nil {
@@ -118,8 +118,10 @@ func TestRoutesVersionsAndErrors(t *testing.T) {
 	expect(t, resp, body, 404, "No such image: ghost:1")
 	resp, body = f.do(t, "POST", "/networks/create", `{}`)
 	expect(t, resp, body, 501, "networks")
-	resp, body = f.do(t, "POST", "/containers/abc/exec", `{}`)
-	expect(t, resp, body, 501, "docker exec")
+	resp, body = f.do(t, "POST", "/containers/abc/exec", `{"Cmd":["ls"]}`)
+	expect(t, resp, body, 404, "No such container")
+	resp, body = f.do(t, "POST", "/exec/deadbeef/start", `{}`)
+	expect(t, resp, body, 404, "No such exec instance")
 	resp, body = f.do(t, "GET", "/nowhere", "")
 	expect(t, resp, body, 404, "page not found")
 	resp, body = f.do(t, "POST", "/containers/x/kill?signal=NOPE", "")
@@ -220,4 +222,189 @@ func TestRunFlowOverHTTP(t *testing.T) {
 	expect(t, resp, body, 204, "")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 404, "No such container")
+}
+
+func TestExecOverHTTP(t *testing.T) {
+	f := newAPI(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		fmt.Fprint(s.Stdout, "out-data")
+		fmt.Fprint(s.Stderr, "err-data")
+		return 9
+	})
+	host := strings.TrimSuffix(f.image, ":1")
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+host+"&tag=1", "")
+	resp, body := f.do(t, "POST", "/v1.41/containers/create?name=xx", `{"Image":"`+f.image+`","Cmd":["/bin/sh"]}`)
+	expect(t, resp, body, 201, "Id")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true}`)
+	expect(t, resp, body, 409, "is not running")
+	f.do(t, "POST", "/v1.41/containers/xx/start", "")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true,"AttachStderr":true,"Privileged":true}`)
+	expect(t, resp, body, 501, "privileged")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true,"AttachStderr":true}`)
+	expect(t, resp, body, 201, "Id")
+	var created struct{ Id string }
+	json.Unmarshal([]byte(body), &created)
+	resp, body = f.do(t, "GET", "/v1.41/exec/"+created.Id+"/json", "")
+	expect(t, resp, body, 200, `"ExitCode":null`)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(f.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	payload := `{"Detach":false,"Tty":false}`
+	fmt.Fprintf(conn, "POST /v1.41/exec/%s/start HTTP/1.1\r\nHost: x\r\nUpgrade: tcp\r\nConnection: Upgrade\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s", created.Id, len(payload), payload)
+	br := bufio.NewReader(conn)
+	status, _ := br.ReadString('\n')
+	if !strings.HasPrefix(status, "HTTP/1.1 101") {
+		t.Fatalf("status %q", status)
+	}
+	for {
+		l, _ := br.ReadString('\n')
+		if l == "\r\n" {
+			break
+		}
+	}
+	got := map[byte]string{}
+	for {
+		var hdr [8]byte
+		if _, err := io.ReadFull(br, hdr[:]); err != nil {
+			break
+		}
+		n := binary.BigEndian.Uint32(hdr[4:])
+		p := make([]byte, n)
+		io.ReadFull(br, p)
+		got[hdr[0]] += string(p)
+	}
+	if got[1] != "out-data" || got[2] != "err-data" {
+		t.Fatalf("frames %q", got)
+	}
+	// The exit code is ready the moment the stream ends.
+	resp, body = f.do(t, "GET", "/v1.41/exec/"+created.Id+"/json", "")
+	expect(t, resp, body, 200, `"ExitCode":9`)
+	expect(t, resp, body, 200, `"Running":false`)
+	resp, body = f.do(t, "POST", "/v1.41/exec/"+created.Id+"/start", `{"Detach":true}`)
+	expect(t, resp, body, 409, "already been started")
+	resp, body = f.do(t, "POST", "/v1.41/exec/"+created.Id+"/resize?h=0&w=5", "")
+	expect(t, resp, body, 400, "invalid terminal size")
+	f.do(t, "DELETE", "/v1.41/containers/xx?force=1", "")
+}
+
+func TestVolumesOverHTTP(t *testing.T) {
+	f := newAPI(t)
+	resp, body := f.do(t, "GET", "/v1.41/volumes", "")
+	expect(t, resp, body, 200, `"Volumes":[]`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"goldenvol","Labels":{"team":"x"}}`)
+	expect(t, resp, body, 201, `"Name":"goldenvol"`)
+	expect(t, resp, body, 201, `"Driver":"local"`)
+	expect(t, resp, body, 201, `"Scope":"local"`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"goldenvol"}`)
+	expect(t, resp, body, 201, `"team":"x"`) // idempotent: the existing volume
+	resp, body = f.do(t, "GET", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 200, `/volumes/goldenvol/_data`)
+	resp, body = f.do(t, "GET", "/v1.41/volumes/nope1", "")
+	expect(t, resp, body, 404, "no such volume")
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"label":["team=x"]}`, "")
+	expect(t, resp, body, 200, `goldenvol`)
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"label":["team=y"]}`, "")
+	expect(t, resp, body, 200, `"Volumes":[]`)
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"bogus":["x"]}`, "")
+	expect(t, resp, body, 400, "invalid filter")
+
+	// Hostile names never reach the file system.
+	for _, name := range []string{"../escape", "a/b", "..", "x\\u0000y", "-lead", "a b", strings.Repeat("a", 300)} {
+		resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"`+name+`"}`)
+		if resp.StatusCode != 400 {
+			t.Errorf("name %q: %d %s", name, resp.StatusCode, body)
+		}
+	}
+	for _, p := range []string{"/v1.41/volumes/..%2f..%2fetc", "/v1.41/volumes/a%2fb", "/v1.41/volumes/%2e%2e"} {
+		resp, _ = f.do(t, "DELETE", p, "")
+		if resp.StatusCode < 400 {
+			t.Errorf("DELETE %s: %d", p, resp.StatusCode)
+		}
+	}
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"nfsvol","Driver":"nfs"}`)
+	expect(t, resp, body, 400, "not available")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"optvol","DriverOpts":{"type":"tmpfs"}}`)
+	expect(t, resp, body, 501, "driver options")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":`)
+	expect(t, resp, body, 400, "invalid JSON")
+
+	// In use by a container -> 409; removed after the container is gone.
+	host := strings.TrimSuffix(f.image, ":1")
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+host+"&tag=1", "")
+	resp, body = f.do(t, "POST", "/v1.41/containers/create?name=holder", `{"Image":"`+f.image+`","HostConfig":{"Binds":["goldenvol:/v"]}}`)
+	expect(t, resp, body, 201, "Id")
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 409, "volume is in use")
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol?force=1", "")
+	expect(t, resp, body, 409, "volume is in use")
+	resp, body = f.do(t, "GET", "/v1.41/containers/holder/json", "")
+	expect(t, resp, body, 200, `"Type":"volume"`)
+	expect(t, resp, body, 200, `"Name":"goldenvol"`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/prune", "")
+	expect(t, resp, body, 200, `"VolumesDeleted":[]`)
+	f.do(t, "DELETE", "/v1.41/containers/holder", "")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/prune", "")
+	expect(t, resp, body, 200, `goldenvol`)
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol?force=1", "")
+	expect(t, resp, body, 204, "") // force on a missing volume succeeds, as in Docker
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 404, "no such volume")
+}
+
+func TestHostileRequestBodies(t *testing.T) {
+	f := newAPI(t)
+	addr := strings.TrimPrefix(f.srv.URL, "http://")
+	old := bodyReadTimeout.Load()
+	bodyReadTimeout.Store(int64(400 * time.Millisecond))
+	defer bodyReadTimeout.Store(old)
+	read := func(c net.Conn) string {
+		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		b, _ := io.ReadAll(c)
+		return string(b)
+	}
+	// Content-Length promises more than is sent, then the client stalls.
+	c, _ := net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /containers/create HTTP/1.1\r\nHost: x\r\nContent-Length: 500\r\nConnection: close\r\n\r\n{\"Image\":")
+	if r := read(c); !strings.Contains(r, "400") || !strings.Contains(r, "timed out reading the request body") {
+		t.Fatalf("stalled body: %q", r)
+	}
+	c.Close()
+	// Chunked body larger than the limit is refused, not buffered.
+	c, _ = net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /volumes/create HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+	chunk := strings.Repeat("a", 64*1024)
+	chunkConn := c
+	go func() {
+		for i := 0; i < 40; i++ { // 2.5 MB > 1 MiB
+			if _, err := fmt.Fprintf(chunkConn, "%x\r\n%s\r\n", len(chunk), chunk); err != nil {
+				return
+			}
+		}
+		fmt.Fprint(chunkConn, "0\r\n\r\n")
+	}()
+	if r := read(c); !strings.Contains(r, "400") {
+		t.Fatalf("oversized chunked body: %q", r[:min(len(r), 200)])
+	}
+	c.Close()
+	// Content-Length larger than the limit is refused up front.
+	c, _ = net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /containers/create HTTP/1.1\r\nHost: x\r\nContent-Length: 99999999\r\nConnection: close\r\n\r\n{}")
+	if r := read(c); !strings.Contains(r, "400") {
+		t.Fatalf("huge content length: %q", r[:min(len(r), 200)])
+	}
+	c.Close()
+	// Garbage and truncated JSON, wrong types.
+	for _, body := range []string{"\x00\x01", `{"Image": 5}`, `{"Image":"a","HostConfig":{"Binds":"notalist"}}`, `[1,2`, `{"Cmd": {"a":1}}`, strings.Repeat("[", 5000)} {
+		resp, b := f.do(t, "POST", "/containers/create", body)
+		if resp.StatusCode != 400 {
+			t.Errorf("body %.30q: %d %s", body, resp.StatusCode, b)
+		}
+	}
+	// The daemon still answers.
+	resp, body := f.do(t, "GET", "/_ping", "")
+	expect(t, resp, body, 200, "OK")
 }

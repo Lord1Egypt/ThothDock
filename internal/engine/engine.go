@@ -25,9 +25,12 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/logs"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/portmap"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 	"github.com/Lord1Egypt/ThothDock/internal/store"
+	"github.com/Lord1Egypt/ThothDock/internal/volume"
 )
 
 // Config is the engine's policy.
@@ -39,6 +42,9 @@ type Config struct {
 	ResolvConf string
 	// LogMaxSize is the rotation size of each container log.
 	LogMaxSize int64
+	// AllowNonLoopbackPublish lets -p name a host address other than
+	// loopback. Off by default: published ports are not exposed to the LAN.
+	AllowNonLoopbackPublish bool
 }
 
 // Engine manages containers.
@@ -47,12 +53,14 @@ type Engine struct {
 	Images  *image.Store
 	Puller  *image.Puller
 	Runtime runtime.Runtime
+	Volumes *volume.Store
 	cfg     Config
 	log     *slog.Logger
 
 	mu         sync.Mutex
 	containers map[string]*Container
 	names      map[string]string // name -> ID
+	execs      map[string]*Exec
 }
 
 // Container is a live container object.
@@ -66,7 +74,11 @@ type Container struct {
 	runDone chan struct{} // closed when the current run has ended
 	stdin   *stdinBroker
 	waiters []*waiter
-	gone    bool // removed
+	execs   map[string]*Exec
+	// forwarders and ports are the published ports of the current run.
+	forwarders []*portmap.Forwarder
+	ports      []PortAssign
+	gone       bool // removed
 }
 
 type waiter struct {
@@ -85,7 +97,11 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 	if cfg.LogMaxSize == 0 {
 		cfg.LogMaxSize = 10 << 20
 	}
-	e := &Engine{Layout: layout, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
+	vols, err := volume.Open(layout.Volumes(), log)
+	if err != nil {
+		return nil, err
+	}
+	e := &Engine{Layout: layout, Volumes: vols, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
 		containers: map[string]*Container{}, names: map[string]string{}}
 	entries, err := os.ReadDir(layout.Containers())
 	if err != nil {
@@ -133,7 +149,7 @@ func (e *Engine) reconcile(c *Container) error {
 	if st.Status != StatusRunning && st.Status != StatusStarting {
 		return nil
 	}
-	if st.Pid > 0 && processStart(st.Pid) == st.PidStart && st.PidStart != 0 {
+	if st.Pid > 0 && procid.Alive(st.Pid, st.PidStart) {
 		e.log.Warn("killing container process left by a previous daemon", "id", c.rec.ID, "pid", st.Pid)
 		syscall.Kill(-st.Pid, syscall.SIGKILL)
 		syscall.Kill(st.Pid, syscall.SIGKILL)
@@ -144,26 +160,6 @@ func (e *Engine) reconcile(c *Container) error {
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
 	return e.persist(c)
-}
-
-// processStart returns the start time (clock ticks after boot) of pid, or
-// 0 when it does not exist.
-func processStart(pid int) uint64 {
-	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return 0
-	}
-	s := string(b)
-	i := strings.LastIndexByte(s, ')')
-	if i < 0 {
-		return 0
-	}
-	f := strings.Fields(s[i+1:])
-	if len(f) < 20 {
-		return 0
-	}
-	v, _ := strconv.ParseUint(f[19], 10, 64)
-	return v
 }
 
 func (e *Engine) persist(c *Container) error {
@@ -243,7 +239,9 @@ func (e *Engine) lookupLocked(ref string) (*Container, error) {
 func (c *Container) Snapshot() Record {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.rec
+	r := c.rec
+	r.Ports = append([]PortAssign(nil), c.ports...)
+	return r
 }
 
 // Dir is the container's directory.

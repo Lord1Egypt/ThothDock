@@ -178,10 +178,15 @@ type Record struct {
 	Binds        []BindRecord    `json:"binds"`
 	State        State           `json:"state"`
 	RestartCount int             `json:"restartCount"`
+	// Ports are the ports published while the container runs; never persisted.
+	Ports []PortAssign `json:"-"`
 }
 
 // BindRecord is an approved bind mount.
 type BindRecord struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
+	// Volume is set for a named volume; Source is then its data directory
+	// when the container was created, and is recomputed at every start.
+	Volume string `json:"volume,omitempty"`
 }

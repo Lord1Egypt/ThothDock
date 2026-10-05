@@ -1,0 +1,41 @@
+malformed JSON on create -> 400 {"message":"invalid JSON body: invalid character 'n' looking for beginning of object key string"} 
+PASS: malformed JSON on create
+truncated JSON on create -> 400 {"message":"invalid JSON body: unexpected EOF"} 
+PASS: truncated JSON on create
+empty body on create -> 400 {"message":"no image specified"} 
+PASS: empty body on create
+2 MB body refused -> 400 {"message":"invalid JSON body: invalid character 'a' looking for beginning of value"} 
+PASS: 2 MB body refused
+traversal volume name -> 400 {"message":"\"../escape\" includes invalid characters for a local volume name, only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed"} 
+PASS: traversal volume name
+absolute volume name -> 400 {"message":"\"/etc\" includes invalid characters for a local volume name, only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed"} 
+PASS: absolute volume name
+NUL in volume name -> 400 {"message":"\"a\\x00b\" includes invalid characters for a local volume name, only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed"} 
+PASS: NUL in volume name
+oversized volume name -> 400 {"message":"\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+PASS: oversized volume name
+bind of / refused -> 403 {"message":"bind source \"/\" is outside the directories this daemon allows (thothdock serve --allow-bind)"} 
+PASS: bind of / refused
+bind of a path outside the allowed roots refused -> 400 {"message":"bind source \"/home/thoth/..\": lstat /home: no such file or directory"} 
+PASS: bind of a path outside the allowed roots refused
+privileged refused -> 501 {"message":"ThothDock does not support privileged containers: PRoot cannot grant kernel privileges (see docs/COMPATIBILITY.md)"} 
+PASS: privileged refused
+unknown API version too new -> 400 {"message":"client version 9.99 is too new. Maximum supported API version is 1.41"} 
+PASS: unknown API version too new
+path traversal in container id is not served -> 307 <a href="/etc/json">Temporary Redirect</a>.  
+PASS: path traversal in container id is not served
+unknown container logs -> 404 {"message":"No such container: nonexistent"} 
+PASS: unknown container logs
+exec on a missing container -> 404 {"message":"No such container: nonexistent"} 
+PASS: exec on a missing container
+archive endpoint is not implemented -> 501 {"message":"ThothDock does not implement docker cp (planned)"} 
+PASS: archive endpoint is not implemented
+UDP publish refused -> 501 {"message":"ThothDock does not support UDP port publishing: only TCP is implemented; 53/udp was refused rather than silently ignored (see docs/COMPATIBILITY.md)
+PASS: UDP publish refused
+the redirect target is not found -> 404 {"message":"page not found"} 
+PASS: the redirect target is not found
+ping after abuse -> 200 OK
+PASS: ping after abuse
+still-serving
+PASS: runs containers after abuse
+RESULT pass=20 fail=0

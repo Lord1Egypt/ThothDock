@@ -3,11 +3,14 @@ package engine
 import (
 	"archive/tar"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +45,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f.reg.Image(t, "library/tiny", "1", oci.HostPlatform(), oci.ContainerConfig{Cmd: []string{"sh"}, Env: []string{"PATH=/bin"}}, true,
 		[]registrytest.File{
-			{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/noexec", Body: "x", Mode: 0o644},
+			{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/noexec", Body: "x", Mode: 0o644}, {Name: "bin/echo", Body: "#!", Mode: 0o755},
 			{Name: "etc/", Type: tar.TypeDir}, {Name: "etc/passwd", Body: "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n"},
 			{Name: "data", Body: "original"},
 		})
@@ -293,9 +296,8 @@ func TestUnsupportedFeaturesAreRefused(t *testing.T) {
 	tr := true
 	cases := map[string]HostConfig{
 		"privileged": {Privileged: true}, "memory": {Memory: 1 << 20}, "cpus": {NanoCpus: 1e9},
-		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "ports": {PortBindings: map[string][]PortBinding{"80/tcp": {{HostPort: "8080"}}}},
-		"restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
-		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume": {Binds: []string{"data:/data"}},
+		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
+		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume-ro": {Binds: []string{"data1:/vol:ro"}},
 		"ro-bind": {Binds: []string{"/tmp:/x:ro"}},
 	}
 	for name, hc := range cases {
@@ -458,5 +460,446 @@ func TestHostsResolvAndHostnameFiles(t *testing.T) {
 		if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &bad}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
 			t.Fatalf("%+v accepted: %v", bad, err)
 		}
+	}
+}
+
+func TestExecRunsInTheContainerRootfsAndEnvironment(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		fmt.Fprintf(s.Stdout, "args=%s cwd=%s uid=%d env=%v\n", strings.Join(s.Args[1:], ","), s.Cwd, s.UID, hasKV(s.Env, "X=1"))
+		fmt.Fprint(s.Stderr, "e\n")
+		return 7
+	})
+	id := f.create("sh")
+	// Not running: refused.
+	if _, err := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}}); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("exec in a stopped container: %v", err)
+	}
+	f.e.Start(id)
+	defer f.e.Remove(id, true)
+	if _, err := f.e.ExecCreate(id, ExecConfig{}); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("no command: %v", err)
+	}
+	if _, err := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}, Privileged: true}); errdefs.KindOf(err) != errdefs.KindUnsupported {
+		t.Fatalf("privileged: %v", err)
+	}
+	xid, err := f.e.ExecCreate(id[:12], ExecConfig{Cmd: StrSlice{"echo", "a", "b"}, Env: []string{"X=1"}, WorkingDir: "/etc", User: "nobody", AttachStdout: true, AttachStderr: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, _ := f.e.ExecGet(xid)
+	var out, errb strings.Builder
+	if err := f.e.ExecStart(x, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	<-x.Done()
+	st := x.Snapshot()
+	if out.String() != "args=a,b cwd=/etc uid=65534 env=true\n" || errb.String() != "e\n" || st.ExitCode == nil || *st.ExitCode != 7 || st.Running {
+		t.Fatalf("out=%q err=%q state=%+v", out.String(), errb.String(), st)
+	}
+	if err := f.e.ExecStart(x, &out, &errb); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("second start: %v", err)
+	}
+	if _, err := f.e.ExecGet("nope"); errdefs.KindOf(err) != errdefs.KindNotFound {
+		t.Fatal(err)
+	}
+	// A command that does not exist is a start failure with Docker's text.
+	bad, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"nosuchcmd"}})
+	bx, _ := f.e.ExecGet(bad)
+	if err := f.e.ExecStart(bx, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "executable file not found") {
+		t.Fatalf("%v", err)
+	}
+	if st := bx.Snapshot(); st.ExitCode == nil || *st.ExitCode != 126 {
+		t.Fatalf("%+v", st)
+	}
+}
+
+func TestExecIsKilledWhenTheContainerStopsAndForgottenOnRemove(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int { <-ctx.Done(); return 0 })
+	id := f.create("sh")
+	f.e.Start(id)
+	xid, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}})
+	x, _ := f.e.ExecGet(xid)
+	if err := f.e.ExecStart(x, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if !x.Snapshot().Running {
+		t.Fatal("exec not running")
+	}
+	zero := 0
+	f.e.Stop(id, &zero)
+	select {
+	case <-x.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("exec outlived its container")
+	}
+	if st := x.Snapshot(); st.Running || st.ExitCode == nil || *st.ExitCode != 137 {
+		t.Fatalf("%+v", st)
+	}
+	f.e.Remove(id, false)
+	if _, err := f.e.ExecGet(xid); errdefs.KindOf(err) != errdefs.KindNotFound {
+		t.Fatalf("exec record kept after the container was removed: %v", err)
+	}
+}
+
+func TestExecStdin(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		b, _ := io.ReadAll(in)
+		s.Stdout.Write(b)
+		return 0
+	})
+	id := f.create("sh")
+	f.e.Start(id)
+	defer f.e.Remove(id, true)
+	xid, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}, AttachStdin: true, AttachStdout: true})
+	x, _ := f.e.ExecGet(xid)
+	var out strings.Builder
+	f.e.ExecStart(x, &out, io.Discard)
+	in := x.Stdin()
+	io.WriteString(in, "typed")
+	in.Close()
+	<-x.Done()
+	if out.String() != "typed" {
+		t.Fatalf("%q", out.String())
+	}
+}
+
+func hasKV(env []string, kv string) bool { return contains(env, kv) }
+
+func volumeHC(binds ...string) *HostConfig { return &HostConfig{Binds: binds} }
+
+func TestNamedVolumePersistsAcrossContainers(t *testing.T) {
+	f := newFixture(t)
+	writer := func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		for _, b := range s.Binds {
+			if b.Target == "/vol" {
+				os.WriteFile(filepath.Join(b.Source, "test.txt"), []byte("persistent"), 0o644)
+			}
+		}
+		return 0
+	}
+	reader := func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		for _, b := range s.Binds {
+			if b.Target == "/vol" {
+				d, _ := os.ReadFile(filepath.Join(b.Source, "test.txt"))
+				s.Stdout.Write(d)
+			}
+		}
+		return 0
+	}
+	f.rt.Program("/bin/sh", writer)
+	a, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("goldenvol:/vol")}, "writer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.e.Volumes.Has("goldenvol") {
+		t.Fatal("volume not created on first use")
+	}
+	f.e.Start(a)
+	waitFor(t, f.e, a, "")
+	// The mount point exists inside the container's own rootfs.
+	if fi, err := os.Stat(filepath.Join(f.layout.Containers(), a, "rootfs/vol")); err != nil || !fi.IsDir() {
+		t.Fatal("mount point not created in the container filesystem")
+	}
+	// In use while the (stopped) container exists.
+	if err := f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("volume removed while referenced: %v", err)
+	}
+	// Remove the container and the image's data stays; a new container sees it.
+	if err := f.e.Remove(a, false); err != nil {
+		t.Fatal(err)
+	}
+	f.rt.Program("/bin/sh", reader)
+	b, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("goldenvol:/vol")}, "reader", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.e.Start(b)
+	waitFor(t, f.e, b, "")
+	c, _ := f.e.Lookup(b)
+	es, _, _ := c.Logger().Read(logsAll())
+	if len(es) != 1 || es[0].Log != "persistent" {
+		t.Fatalf("recreated container does not see the data: %+v", es)
+	}
+	// Auto-removed containers keep named volumes too.
+	f.e.Remove(b, false)
+	d, _, _ := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &HostConfig{Binds: []string{"goldenvol:/vol"}, AutoRemove: true}}, "", "")
+	f.e.Start(d)
+	waitFor(t, f.e, d, "removed")
+	if !f.e.Volumes.Has("goldenvol") {
+		t.Fatal("--rm deleted a named volume")
+	}
+	if err := f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); err != nil {
+		t.Fatalf("unused volume not removable: %v", err)
+	}
+	// An image removal never touches volumes (they are not image data).
+	if _, err := os.Stat(f.e.Volumes.DataPath("goldenvol")); !os.IsNotExist(err) {
+		t.Fatal("volume data left after removal")
+	}
+}
+
+func TestMountsAPIAndHostileMounts(t *testing.T) {
+	f := newFixture(t)
+	mk := func(m string) (string, error) {
+		id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &HostConfig{Mounts: []json.RawMessage{json.RawMessage(m)}}}, "", "")
+		return id, err
+	}
+	if _, err := mk(`{"Type":"volume","Source":"viaMount","Target":"/m"}`); err != nil {
+		t.Fatal(err)
+	}
+	if !f.e.Volumes.Has("viaMount") {
+		t.Fatal("--mount type=volume did not create the volume")
+	}
+	if _, err := mk(`{"Type":"volume","Source":"","Target":"/anon"}`); err != nil {
+		t.Fatalf("anonymous volume: %v", err)
+	}
+	for _, tc := range []struct {
+		name, mount string
+		kind        errdefs.Kind
+	}{
+		{"read-only", `{"Type":"volume","Source":"v1","Target":"/m","ReadOnly":true}`, errdefs.KindUnsupported},
+		{"tmpfs", `{"Type":"tmpfs","Target":"/m"}`, errdefs.KindUnsupported},
+		{"unknown type", `{"Type":"npipe","Source":"x","Target":"/m"}`, errdefs.KindInvalid},
+		{"traversal name", `{"Type":"volume","Source":"../../etc","Target":"/m"}`, errdefs.KindInvalid},
+		{"slash name", `{"Type":"volume","Source":"a/b","Target":"/m"}`, errdefs.KindInvalid},
+		{"driver", `{"Type":"volume","Source":"v2","Target":"/m","VolumeOptions":{"DriverConfig":{"Name":"nfs"}}}`, errdefs.KindInvalid},
+		{"driver opts", `{"Type":"volume","Source":"v3","Target":"/m","VolumeOptions":{"DriverConfig":{"Options":{"type":"tmpfs"}}}}`, errdefs.KindUnsupported},
+		{"relative target", `{"Type":"volume","Source":"v4","Target":"m"}`, errdefs.KindInvalid},
+		{"root target", `{"Type":"volume","Source":"v5","Target":"/"}`, errdefs.KindInvalid},
+		{"proc target", `{"Type":"volume","Source":"v6","Target":"/proc/self"}`, errdefs.KindInvalid},
+		{"managed file", `{"Type":"volume","Source":"v7","Target":"/etc/hosts"}`, errdefs.KindInvalid},
+		{"relative bind", `{"Type":"bind","Source":"rel/path","Target":"/m"}`, errdefs.KindInvalid},
+		{"host bind outside policy", `{"Type":"bind","Source":"/tmp","Target":"/m"}`, errdefs.KindForbidden},
+		{"file in the image", `{"Type":"volume","Source":"v8","Target":"/data"}`, errdefs.KindInvalid},
+		{"malformed", `{"Type":`, errdefs.KindInvalid},
+	} {
+		if _, err := mk(tc.mount); errdefs.KindOf(err) != tc.kind {
+			t.Errorf("%s: kind %v err %v", tc.name, errdefs.KindOf(err), err)
+		}
+	}
+	// Refused creates leave no volume behind that a traversal name could name.
+	for _, v := range f.e.Volumes.List() {
+		if strings.ContainsAny(v.Name, "/.") && v.Name != "viaMount" && len(v.Name) != 64 {
+			t.Errorf("unexpected volume %q", v.Name)
+		}
+	}
+	// Duplicate targets and the old -v syntax.
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("d1:/same", "d2:/same")}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("duplicate mount point: %v", err)
+	}
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("../x:/m")}, "", ""); errdefs.KindOf(err) != errdefs.KindForbidden && errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("-v ../x: %v", err)
+	}
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("onlyone")}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("bad spec: %v", err)
+	}
+}
+
+func freePort(t *testing.T) int {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// serveHTTPish runs a tiny server on the "container's" network (the device's).
+func serveGreeting(cp int) func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+	return func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(cp)))
+		if err != nil {
+			return 1
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Write([]byte("hello from the container\n"))
+				c.Close()
+			}
+		}()
+		<-ctx.Done()
+		ln.Close()
+		return 0
+	}
+}
+
+func dialGreeting(addr string) (string, error) {
+	c, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	b, err := io.ReadAll(c)
+	return string(b), err
+}
+
+func TestPublishedPortLifecycle(t *testing.T) {
+	f := newFixture(t)
+	cp := freePort(t)
+	f.rt.Program("/bin/sh", serveGreeting(cp))
+	key := strconv.Itoa(cp) + "/tcp"
+	id, warnings, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{key: {{HostPort: ""}}}}}, "web1", "")
+	if err != nil || len(warnings) > 1 {
+		t.Fatalf("%v %v", warnings, err)
+	}
+	// Nothing listens before start.
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := f.e.Lookup(id)
+	ports := c.Snapshot().Ports
+	if len(ports) != 1 || ports[0].HostIP != "127.0.0.1" || ports[0].ContainerPort != cp || ports[0].HostPort == 0 || ports[0].HostPort == cp {
+		t.Fatalf("assignments %+v", ports)
+	}
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(ports[0].HostPort))
+	var got string
+	for i := 0; i < 50; i++ { // the server inside needs a moment to listen
+		if got, err = dialGreeting(addr); err == nil && got != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got != "hello from the container\n" {
+		t.Fatalf("through the published port: %q %v", got, err)
+	}
+	// Stop: the listener is gone and the port is free again.
+	zero := 0
+	f.e.Stop(id, &zero)
+	waitFor(t, f.e, id, "")
+	if _, err := dialGreeting(addr); err == nil {
+		t.Fatal("listener survived the container")
+	}
+	if p := c.Snapshot().Ports; len(p) != 0 {
+		t.Fatalf("assignments kept after exit: %+v", p)
+	}
+	// Start again: published again (a new ephemeral port is fine).
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	p2 := c.Snapshot().Ports
+	if len(p2) != 1 {
+		t.Fatalf("%+v", p2)
+	}
+	addr2 := net.JoinHostPort("127.0.0.1", strconv.Itoa(p2[0].HostPort))
+	// Remove (force): no listener, no process.
+	if err := f.e.Remove(id, true); err != nil {
+		t.Fatal(err)
+	}
+	if conn, err := net.DialTimeout("tcp", addr2, 500*time.Millisecond); err == nil {
+		conn.Close()
+		t.Fatal("orphan listener after remove")
+	}
+}
+
+func TestPublishedPortCollisionAndPolicy(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	// A host port something else owns: start fails cleanly, container stays created.
+	busy, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer busy.Close()
+	bp := strconv.Itoa(busy.Addr().(*net.TCPAddr).Port)
+	cp := freePort(t)
+	id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{strconv.Itoa(cp) + "/tcp": {{HostPort: bp}}}}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.e.Start(id)
+	if errdefs.KindOf(err) != errdefs.KindConflict || !strings.Contains(err.Error(), "port is already allocated") {
+		t.Fatalf("collision: %v", err)
+	}
+	if r := f.e.List()[0]; r.State.Status != StatusCreated || r.State.Pid != 0 {
+		t.Fatalf("%+v", r.State)
+	}
+	// Two mappings, the second collides: the first listener is released again.
+	free := freePort(t)
+	id2, _, _ := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{
+			"7001/tcp": {{HostPort: strconv.Itoa(free)}}, "7002/tcp": {{HostPort: bp}}}}}, "", "")
+	if err := f.e.Start(id2); err == nil {
+		t.Fatal("started despite a collision")
+	}
+	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(free)))
+	if err != nil {
+		t.Fatalf("a failed start leaked a listener: %v", err)
+	}
+	l.Close()
+
+	mk := func(hc HostConfig) error {
+		_, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &hc}, "", "")
+		return err
+	}
+	pb := func(k, ip, port string) HostConfig {
+		return HostConfig{PortBindings: map[string][]PortBinding{k: {{HostIP: ip, HostPort: port}}}}
+	}
+	for name, tc := range map[string]struct {
+		hc   HostConfig
+		kind errdefs.Kind
+	}{
+		"udp":              {pb("53/udp", "", "5353"), errdefs.KindUnsupported},
+		"sctp":             {pb("80/sctp", "", "8080"), errdefs.KindUnsupported},
+		"all interfaces":   {pb("80/tcp", "0.0.0.0", "8080"), errdefs.KindForbidden},
+		"lan address":      {pb("80/tcp", "192.168.1.5", "8080"), errdefs.KindForbidden},
+		"bad ip":           {pb("80/tcp", "not-an-ip", "8080"), errdefs.KindInvalid},
+		"host port zero":   {pb("80/tcp", "", "0"), errdefs.KindInvalid},
+		"host port huge":   {pb("80/tcp", "", "70000"), errdefs.KindInvalid},
+		"host port text":   {pb("80/tcp", "", "http"), errdefs.KindInvalid},
+		"container port 0": {pb("0/tcp", "", "8080"), errdefs.KindInvalid},
+		"container text":   {pb("web/tcp", "", "8080"), errdefs.KindInvalid},
+		"host range":       {pb("80/tcp", "", "8000-8010"), errdefs.KindInvalid},
+	} {
+		if err := mk(tc.hc); errdefs.KindOf(err) != tc.kind {
+			t.Errorf("%s: kind %v err %v", name, errdefs.KindOf(err), err)
+		}
+	}
+	// Loopback spellings are accepted; the same host port twice is not.
+	if err := mk(pb("80/tcp", "127.0.0.1", "18080")); err != nil {
+		t.Errorf("loopback: %v", err)
+	}
+	if err := mk(HostConfig{PortBindings: map[string][]PortBinding{"80/tcp": {{HostPort: "18081"}}, "81/tcp": {{HostPort: "18081"}}}}); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Errorf("duplicate host port: %v", err)
+	}
+	// The operator may allow non-loopback publishing explicitly.
+	f.cfg.AllowNonLoopbackPublish = true
+	f.open()
+	if err := mk(pb("80/tcp", "0.0.0.0", "8080")); err != nil {
+		t.Errorf("explicitly allowed non-loopback: %v", err)
+	}
+}
+
+func TestPublishAllAndPassthroughWarning(t *testing.T) {
+	f := newFixture(t)
+	cp := freePort(t)
+	f.rt.Program("/bin/sh", serveGreeting(cp))
+	id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image, ExposedPorts: map[string]struct{}{strconv.Itoa(cp) + "/tcp": {}, "53/udp": {}}},
+		HostConfig: &HostConfig{PublishAllPorts: true}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := f.e.Lookup(id)
+	p := c.Snapshot().Ports
+	if len(p) != 1 || p[0].ContainerPort != cp || p[0].HostIP != "127.0.0.1" {
+		t.Fatalf("-P published %+v", p)
+	}
+	f.e.Remove(id, true)
+	// host == container port: no forwarder, and the user is told.
+	_, w, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{"8080/tcp": {{HostPort: "8080"}}}}}, "", "")
+	if err != nil || len(w) == 0 || !strings.Contains(strings.Join(w, " "), "equals container port") {
+		t.Fatalf("%v %v", w, err)
 	}
 }

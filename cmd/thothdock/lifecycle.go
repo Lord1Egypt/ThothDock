@@ -10,16 +10,21 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/store"
 )
 
 func pidFile(l platform.Layout) string { return filepath.Join(l.Run(), "thothdock.pid") }
 
-// writePidFile records the daemon's pid (under the root lock) so a
-// supervisor that lost track of it -- an Android app restarted by the
-// system -- can find and stop it.
+// writePidFile records "<pid> <start time>" (under the root lock) so a
+// supervisor that lost track of the daemon -- an Android app restarted by
+// the system -- can find and stop it. The start time makes the record name
+// one process: a reused pid has a different start time, and a supervisor
+// must never signal a pid whose start time does not match.
 func writePidFile(l platform.Layout) error {
-	return store.WriteFileAtomic(pidFile(l), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
+	self := os.Getpid()
+	rec := strconv.Itoa(self) + " " + strconv.FormatUint(procid.StartTime(self), 10) + "\n"
+	return store.WriteFileAtomic(pidFile(l), []byte(rec), 0o600)
 }
 
 // exitWhenParentDies asks the kernel for SIGTERM when the parent goes away,

@@ -378,13 +378,14 @@ func exitOf(cmd *exec.Cmd, err error, sigSeen chan int) Exit {
 		// proot itself was killed (Kill, or the OOM killer).
 		return Exit{Code: 128 + int(ws.Signal()), Signal: ws.Signal()}
 	}
-	code := ws.ExitStatus()
-	if code == 255 {
-		select {
-		case n := <-sigSeen:
-			return Exit{Code: 128 + n, Signal: syscall.Signal(n)}
-		default:
-		}
+	// PRoot only refreshes its exit status when a tracee exits normally, so
+	// a workload killed by a signal leaves 255 (nothing exited) or the stale
+	// status of an earlier child (a shell loop whose last "sleep" returned 0).
+	// The vpid 1 line is authoritative either way.
+	select {
+	case n := <-sigSeen:
+		return Exit{Code: 128 + n, Signal: syscall.Signal(n)}
+	default:
 	}
-	return Exit{Code: code}
+	return Exit{Code: ws.ExitStatus()}
 }

@@ -20,6 +20,7 @@ func (l Layout) Blobs() string      { return filepath.Join(l.Root, "blobs", "sha
 func (l Layout) Images() string     { return filepath.Join(l.Root, "images") }
 func (l Layout) Containers() string { return filepath.Join(l.Root, "containers") }
 func (l Layout) Tmp() string        { return filepath.Join(l.Root, "tmp") }
+func (l Layout) Volumes() string    { return filepath.Join(l.Root, "volumes") }
 
 // Ensure creates the layout with owner-only permissions and tightens the
 // root if it already existed with wider ones.
@@ -27,7 +28,7 @@ func (l Layout) Ensure() error {
 	if !filepath.IsAbs(l.Root) {
 		return fmt.Errorf("data root %q is not an absolute path", l.Root)
 	}
-	for _, d := range []string{l.Root, l.Run(), l.Blobs(), l.Images(), l.Containers(), l.Tmp()} {
+	for _, d := range []string{l.Root, l.Run(), l.Blobs(), l.Images(), l.Containers(), l.Tmp(), l.Volumes()} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}

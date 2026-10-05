@@ -63,6 +63,21 @@ func (f *frameWriter) write(stream string, p []byte) error {
 	return nil
 }
 
+// stream adapts one named stream of f to an io.Writer.
+func (f *frameWriter) stream(name string) io.Writer { return streamAdapter{f, name} }
+
+type streamAdapter struct {
+	f    *frameWriter
+	name string
+}
+
+func (a streamAdapter) Write(p []byte) (int, error) {
+	if err := a.f.write(a.name, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func wanted(stream string, stdout, stderr bool) bool {
 	return stream == "stdout" && stdout || stream == "stderr" && stderr
 }
@@ -107,14 +122,12 @@ func (s *Server) attachContainer(w http.ResponseWriter, r *http.Request) {
 	}
 	out := &frameWriter{w: conn, tty: streams.Tty}
 	if replay {
-		entries, _, err := logger.Read(logs.ReadOptions{Tail: -1})
-		if err == nil {
-			for _, e := range entries {
-				if wanted(e.Stream, wantOut, wantErr) {
-					out.write(e.Stream, []byte(e.Log))
-				}
+		logger.Scan(logs.ReadOptions{Tail: -1}, func(e logs.Entry) error {
+			if wanted(e.Stream, wantOut, wantErr) {
+				return out.write(e.Stream, []byte(e.Log))
 			}
-		}
+			return nil
+		})
 	}
 	if !stream {
 		return
@@ -220,17 +233,8 @@ func (s *Server) containerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	rec := c.Snapshot()
 	follow := boolParam(r, "follow") && engine.IsRunning(rec.State.Status) && until.IsZero()
-	entries, live, err := c.Logger().Read(logs.ReadOptions{Since: since, Until: until, Tail: tail, Follow: follow})
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if live != nil {
-		defer c.Logger().UnsubscribeEntries(live)
-	}
 	timestamps := boolParam(r, "timestamps")
 	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-	w.WriteHeader(http.StatusOK)
 	bw := bufio.NewWriter(w)
 	out := &frameWriter{w: bw, tty: rec.Config.Tty}
 	emit := func(e logs.Entry) error {
@@ -243,11 +247,27 @@ func (s *Server) containerLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		return out.write(e.Stream, []byte(line))
 	}
-	for _, e := range entries {
-		if emit(e) != nil {
-			return
+	started := false
+	start := func() {
+		if !started {
+			started = true
+			w.WriteHeader(http.StatusOK)
 		}
 	}
+	live, err := c.Logger().Scan(logs.ReadOptions{Since: since, Until: until, Tail: tail, Follow: follow}, func(e logs.Entry) error {
+		start()
+		return emit(e)
+	})
+	if err != nil {
+		if !started {
+			writeError(w, err)
+		}
+		return
+	}
+	if live != nil {
+		defer c.Logger().UnsubscribeEntries(live)
+	}
+	start()
 	bw.Flush()
 	flush(w)
 	if live == nil {

@@ -1,0 +1,257 @@
+######## Final build (ThothDock af221db): full lifecycle run
+--- baseline (13:15:09)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 6 seconds;ui-web=Up 6 seconds;
+ui-ticker=Up 6 seconds
+ui-web=Up 6 seconds
+=== background 45 s
+--- during-background (13:15:55)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 52 seconds;ui-web=Up 52 seconds;
+--- after-resume (13:16:00)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 57 seconds;ui-web=Up 57 seconds;
+=== daemon SIGKILL
+--- after-kill (13:16:07)
+daemon pids: 11623
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 11623 88823749 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-ticker=Exited (137) 5 seconds ago;ui-web=Exited (137) 5 seconds ago;
+ui-ticker=Exited (137) 5 seconds ago
+ui-web=Exited (137) 5 seconds ago
+=== force-stop
+--- after-force-stop (13:16:13)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: thothdock.sock 
+pidfile: 11623 88823749 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+--- after-relaunch (13:16:28)
+daemon pids: 11888
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 11888 88825047 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-ticker=Exited (137) 13 seconds ago;ui-web=Exited (137) 13 seconds ago;
+ui-ticker=Exited (137) 13 seconds ago
+ui-web=Exited (137) 13 seconds ago
+=== close last window
+--- after-close-window (13:16:47)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+=== Exit
+--- after-exit (13:17:20)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+
+######## Earlier build (ThothDock 04a3e80): first full lifecycle run, incl. uninstall/reinstall
+--- baseline (11:24:53)
+daemon pids: 7862
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 7862 88117010 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up About a minute;ui-ticker=Up 3 minutes;
+=== A: background 45 s with running containers and a published port
+--- during-background (11:25:45)
+daemon pids: 7862
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 7862 88117010 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up 2 minutes;ui-ticker=Up 4 minutes;
+
+Exception occurred while executing 'start':
+java.lang.SecurityException: Permission Denial: starting Intent { flg=0x10000000 xflg=0x4 cmp=com.thothterm.debian.rc.thothdock/com.thothterm.TermActivity } from null (pid=19537, uid=2000) not exported from uid 10755
+	at com.android.server.wm.ActivityTaskSupervisor.checkStartAnyActivityPermission(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:648)
+	at com.android.server.wm.ActivityStarter.executeRequest(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:1191)
+	at com.android.server.wm.ActivityStarter.execute(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:1751)
+	at com.android.server.wm.ActivityTaskManagerService.startActivityAsUser(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:95)
+	at com.android.server.am.ActivityManagerService.startActivityAsUserWithFeature(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:27)
+	at com.android.server.am.ActivityManagerShellCommand.runStartActivity(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:591)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:1059)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:164)
+	at android.os.Binder.shellCommand(Binder.java:1219)
+	at android.os.Binder.onTransact(Binder.java:987)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:6050)
+	at com.android.server.am.ActivityManagerService.onTransact(qb/113849129 df26f81a3f9fa1a64c71810d1dcca94a0b0bc1061e55ecf5891492f5ff76364f:426)
+	at android.os.Binder.execTransactInternal(Binder.java:1514)
+	at android.os.Binder.execTransact(Binder.java:1454)
+      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Launcher t1191}
+--- after-resume (11:25:49)
+daemon pids: 7862
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 7862 88117010 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up 2 minutes;ui-ticker=Up 4 minutes;
+
+=== B: daemon SIGKILL with running containers
+kill -9 7862
+--- after-daemon-kill (11:25:56)
+daemon pids: 19588
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 19588 88162601 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-web=Exited (137) 5 seconds ago;ui-ticker=Exited (137) 5 seconds ago;
+0.1.0-rc.1
+--- before-force-stop (11:26:06)
+daemon pids: 19588
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 19588 88162601 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up 3 seconds;ui-ticker=Up 3 seconds;
+
+=== C: Android force-stop, then relaunch
+--- after-force-stop (11:26:10)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: thothdock.sock 
+pidfile: 19588 88162601 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: Cannot connect to the Docker daemon at unix:///data/data/com.thothterm.debian.rc.thothdock/files/thothdock/sock/thothdock.sock. Is the docker daemon running?;
+    topResumedActivity=ActivityRecord{234183368 u0 com.thothterm.debian.rc.thothdock/com.thothterm.TermActivity t2129}
+--- after-relaunch (11:26:23)
+daemon pids: 20065
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-web=Exited (137) 10 seconds ago;ui-ticker=Exited (137) 10 seconds ago;
+0.1.0-rc.1
+
+=== D: close the last terminal window (menu, confirmed), then reopen
+NOTFOUND More options
+NOTFOUND Close window
+text="Settings"|text="Automatic, Landscape, Portrait, or System."|text="Size calculation"|text="Compatibility mode for old devices or soft keyboards."|
+NOTFOUND OK
+--- after-close-window (11:26:59)
+daemon pids: 20065
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up 29 seconds;ui-ticker=Up 29 seconds;
+    topResumedActivity=ActivityRecord{234183368 u0 com.thothterm.debian.rc.thothdock/com.thothterm.TermActivity t2129}
+--- after-reopen (11:27:12)
+daemon pids: 20065
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up 42 seconds;ui-ticker=Up 42 seconds;
+
+=== D (redo): close the last terminal window via the menu, confirmed
+--- before-close (11:27:49)
+daemon pids: 20065
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up About a minute;ui-ticker=Up About a minute;
+text="Close this window?"|text="إلغاء"|text="حسنًا"|
+NOTFOUND حسنا
+--- after-close-window (11:28:08)
+daemon pids: 20065
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up About a minute;ui-ticker=Up About a minute;
+    topResumedActivity=ActivityRecord{123906976 u0 com.thothterm.debian.rc.thothdock/com.thothterm.TermActivity t2130}
+--- after-reopen (11:28:20)
+daemon pids: 20065
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 20065 88164753 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-web=Up About a minute;ui-ticker=Up About a minute;
+text="Close this window?"|text="إلغاء"|text="حسنًا"|
+      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Launcher t1191}
+--- after-close-window-confirmed (11:28:35)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: failed to connect to the docker API at unix:///data/data/com.thothterm.debian.rc.thothdock/files/thothdock/sock/thothdock.sock; check if the path is correct and if the daemon is running: dial unix /data/data/com.thothterm.debian.rc.thothdock/files/thothdock/sock/thothdock.sock: connect: no such file or directory;
+--- reopened-after-close (11:28:47)
+daemon pids: 22144
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 22144 88179701 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-web=Exited (137) 5 seconds ago;ui-ticker=Exited (137) 5 seconds ago;
+
+=== E: Exit from the menu, confirmed
+text="Exit ThothTerm?"|text="This will close all terminal sessions and stop running commands."|text="إلغاء"|text="EXIT"|
+      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Launcher t1191}
+--- after-exit (11:29:08)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: failed to connect to the docker API at unix:///data/data/com.thothterm.debian.rc.thothdock/files/thothdock/sock/thothdock.sock; check if the path is correct and if the daemon is running: dial unix /data/data/com.thothterm.debian.rc.thothdock/files/thothdock/sock/thothdock.sock: connect: no such file or directory;
+
+=== F: uninstall, then reinstall (minified release RC)
+--- before-uninstall (11:31:58)
+daemon pids: 22953
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+Success
+package present: 0
+data dir: ls: /data/data/com.thothterm.debian.rc.thothdock: No such file or directory
+daemon pids: 
+RC proot workers: 0
+listener 18090: /proc/net/tcp:0 /proc/net/tcp6:0 
+Success
+1
+daemon after reinstall: 25542
