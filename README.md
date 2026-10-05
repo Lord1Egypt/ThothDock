@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/branding/thothdock-icon.png" width="160" alt="ThothDock icon"></p>
+<p align="center"><img src="docs/branding/thothdock-icon-master.png" width="160" alt="ThothDock icon"></p>
 
 # ThothDock
 
@@ -72,11 +72,20 @@ the daemon is stopped.
 
 ## On Android
 
-The engine runs on Android today with Garden's PRoot, as shown above. Packaging
-it inside a ThothTerm edition is the next milestone, so that the app starts the
-daemon and the terminal's guest sees the socket.
-[docs/GARDEN_RUNTIME_NOTES.md](docs/GARDEN_RUNTIME_NOTES.md) records the
-measured constraints that integration must respect.
+ThothDock runs inside a ThothTerm app. In the isolated QA build
+`com.thothterm.debian.qa.thothdock` (AndroidThothTerm branch
+`qa/thothdock-integration`), you open the terminal and type `docker …`:
+
+```
+ThothTerm terminal ─ Docker CLI ─ unix:///run/thothdock/thothdock.sock
+        Android app context ─ ThothDock daemon ─ Garden PRoot ─ container rootfs
+```
+
+The stock Docker CLI (29.8.1) is bundled unmodified; `dockerd`, `containerd` and
+`runc` are not. See [docs/GARDEN_RUNTIME_NOTES.md](docs/GARDEN_RUNTIME_NOTES.md)
+for the architecture, the measured lifecycle behaviour and the limits, and
+[docs/branding/VISUAL_IDENTITY.md](docs/branding/VISUAL_IDENTITY.md) for the
+look. Nothing is merged into any ThothTerm production edition yet.
 
 ## Development
 

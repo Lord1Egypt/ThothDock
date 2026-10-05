@@ -49,4 +49,5 @@ host with the Docker CLI, **P** is the Android phone with the Docker CLI,
 | `docker compose` | PLANNED | Should work naturally once networks, volumes, ports and events exist | — | After single-container lifecycle is complete |
 | `docker events`, `system df` | PLANNED | | — | Later |
 | Swarm, plugins, `docker push`, `import` | UNSUPPORTED / PLANNED | | — | — |
+| Docker CLI inside the ThothTerm terminal (QA build) | SUPPORTED | Stock CLI 29.8.1 bundled as `libdocker.so`, `DOCKER_HOST=unix:///run/thothdock/thothdock.sock` set automatically | QA integration branch only; not in any released edition | Device-verified 2026-10-05 |
 | Daemon restart while containers run | PARTIAL | Containers end with the daemon; on restart, stale "running" state becomes `exited (137)` with an explanatory `State.Error`, and leftovers are killed | No live restore | T |

@@ -144,27 +144,57 @@ in three independent ways:
 Garden's PRoot, and is never nested.** Every successful phone result above
 used that shape: ThothDock spawning Garden's `libproot.so` directly.
 
-## 7. Integration plan for a Garden edition (UNVERIFIED until built)
+## 7. Garden integration — MEASURED (2026-10-05)
 
-1. **Ship ThothDock as `libthothdock.so` in `nativeLibraryDir`**, like
-   `libproot.so`. Android 10+ forbids apps targeting API 29+ from executing
-   files in their writable data directory. That is documented Android policy
-   and was not measured here, because no app context was available.
-2. The app starts it as a foreground-service child:
-   `libthothdock.so serve --root files/thothdock --proot <nativeLibraryDir>/libproot.so
-   --proot-loader <nativeLibraryDir>/libproot_loader.so --proot-lib-dir
-   files/linux/runtime/lib --resolv-conf <Garden's private resolv.conf>`.
-   The socket is `files/thothdock/run/thothdock.sock` (about 70 bytes, mode
-   0600, in `app_data_file`, where apps may create sockets).
-3. `GardenRuntime` adds `--bind=files/thothdock/run:/run/thothdock`, and the
-   guest's profile exports
-   `DOCKER_HOST=unix:///run/thothdock/thothdock.sock`. PRoot translates the
-   path, and the guest runs as the same uid, so the 0600 socket admits it and
-   no other app.
-4. The Docker CLI is the guest distribution's own package (`docker-cli` /
-   `docker.io` client), or the static binary, run inside the guest.
-5. Kill handling uses SIGKILL, never `destroyForcibly()` alone, and resets
-   SIGHUP (§3).
+The plan in the previous revision of this file was built and proven on the
+SM-A165F with an isolated debuggable QA app, `com.thothterm.debian.qa.thothdock`
+(AndroidThothTerm branch `qa/thothdock-integration`). No adb shell runs the
+acceptance commands: they are typed into the app's own terminal.
 
-Items 1–5 need a debuggable or QA build of an edition, which is the next
-milestone's first step.
+```
+Android app context (u0_aNNN, one uid)
+ ├─ ThothTerm service ── supervises ──▶ libthothdock.so serve   (outside the guest)
+ │                                        │  Unix socket  files/thothdock/sock/thothdock.sock  (srw-------)
+ │                                        └─ spawns Garden PRoot ─▶ container rootfs
+ └─ terminal session: libproot.so … --bind=<files/thothdock/sock>:/run/thothdock
+                                     --bind=<nativeLibraryDir>/libdocker.so:/usr/local/bin/docker
+        └─ Debian guest: DOCKER_HOST=unix:///run/thothdock/thothdock.sock ── docker CLI ─┘
+```
+
+- **Packaging.** `libthothdock.so` (built from the pinned ThothDock commit with
+  `git archive`, `-trimpath`, empty build id; two builds were byte-identical)
+  and `libdocker.so` (the stock Docker 29.8.1 static `docker` binary, extracted
+  alone from the official tarball and checked against two SHA-256 pins; no
+  `dockerd`, `containerd` or `runc`) sit in `nativeLibraryDir` beside
+  `libproot.so`. They are staged only for builds with a QA application id and
+  an explicit ThothDock source property.
+- **Unix sockets work in the app context.** The app's `app_data_file` domain may
+  create sockets (the `shell` domain could not, §6). The socket path is about
+  100 bytes (limit 107). The guest reaches it through one bind-mounted
+  directory that holds only the socket.
+- **Supervision** (`com.thothterm.dock.ThothDock`): single-flight start on a
+  supervisor thread (never the UI thread), readiness by `/_ping`, restart with
+  backoff, stop = SIGTERM then SIGKILL, pid file for a daemon left by a
+  restarted app, `--exit-with-parent` (PR_SET_PDEATHSIG). The terminal never
+  waits for it; the notification shows `ThothDock: running/unavailable`.
+- **Branding** is an overlay enabled only for ThothDock QA builds
+  (docs/branding/VISUAL_IDENTITY.md); the banner shows `Engine ThothDock` or
+  `Engine Offline` from the live socket, with nothing run at startup.
+
+### Lifecycle results (SM-A165F, evidence in docs/evidence/garden-integration/)
+
+| Scenario | Result |
+|---|---|
+| App start → daemon start → terminal | daemon ready in well under a second; `docker version` from the terminal reports `Server: ThothDock … d5d3d04` |
+| Background 20 s, foreground | daemon and shell stayed up; `docker ps` worked |
+| Shell `exit` (closes the app) and reopen | daemon stopped gracefully and the socket was removed; reopen started a new daemon |
+| Daemon SIGKILL while a container runs | the container process died with it (PDEATHSIG, no orphan); a new daemon and a fresh socket in about 1 s; the container is recorded `exited 137`, not "running" |
+| `am force-stop` (Android process kill) with a container | every process died, no orphan. **A stale socket file and pid file remain until the next launch**, when they are replaced; nothing can connect to them meanwhile |
+| Menu → Exit with a running container | graceful: the container got SIGTERM (exit 143), daemon logged `stopped`, socket and pid file removed, no QA-uid process left |
+| Uninstall the QA app | no `libthothdock`/`libdocker` process, package gone |
+| Update-in-place over a running app | the old daemon ended, the new APK started a fresh one; existing containers and images persisted |
+| Production apps | five installed packages (devel, ubuntu, debian, arch, PocketClaw) have identical APK SHA-256 and timestamps before and after |
+
+Not covered: a daemon crash loop in the field (the restart policy gives up after
+3 failures a minute and shows `unavailable`), Android's low-memory killer, and
+Doze with the screen off for long periods.

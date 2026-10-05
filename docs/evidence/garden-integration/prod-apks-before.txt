@@ -1,0 +1,5 @@
+com.thothterm.devel 70426ed5a75e3d0e38a96b01429cd5ffa22ef36e1ca0f46ea60ebf7d00cc2a80  /data/app/~~g7FzLSiaztrccP8yw8vY1g==/com.thothterm.devel-FACwDqZkxue84NtqI7wU9A==/base.apk 2026-09-27 19:34:22.912349009 +0300 
+com.thothterm.ubuntu fbddb517f0f121cb31b2cdfaca6bf65b5db5d7a9cab4ff7cdd46f0536efbda3a  /data/app/~~nqo-P5lyWLb7YjUF88_Hvw==/com.thothterm.ubuntu-swLcNW7Dj17h9AyXpc5kpA==/base.apk 2026-09-30 18:03:32.433666831 +0300 
+com.thothterm.debian 9c57f9436254ba73a34861b342efe188cac14293b1b9325eecfb1e6a316e0ed3  /data/app/~~cF8jb1LiO-LKxIguPfU1BA==/com.thothterm.debian-eQCxPihcVQzcAKambrMSLQ==/base.apk 2026-10-03 15:45:06.589631642 +0300 
+com.thothterm.arch 34e840cf3fea8f1f7af6d60de73307a68b61987262fc9503bf0d0310a1d77a8a  /data/app/~~i17PvsMRS9ZahkCnZvwR1Q==/com.thothterm.arch-5S5bBJrV6YKs7gusVdIhvg==/base.apk 2026-10-03 15:45:27.537631643 +0300 
+com.lord1egypt.pocketclaw 778882828e2f818aac31ed1f58dd3b2e8530828970b535ce72564f5ed2857599  /data/app/~~PlqJejr43VUPzwaVOYwaog==/com.lord1egypt.pocketclaw-_jMhVZ75yTZVhygbScXcrA==/base.apk 2026-09-25 18:27:37.106466819 +0300 

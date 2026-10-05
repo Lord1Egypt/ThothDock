@@ -1,0 +1,186 @@
+$ docker version
+Server: ThothDock 0.1.0-dev (Docker Engine API 1.41 compatible; not affiliated with Docker, Inc.)
+ Engine:
+  Version:          0.1.0-dev
+  API version:      1.41 (minimum version 1.24)
+  Go version:       go1.27.1
+  Git commit:       d5d3d04
+  Built:            
+  OS/Arch:          linux/arm64
+  Experimental:     false
+ proot:
+  Version:          PRoot 5.1.0
+  Path:             /data/app/~~Ii2QVovIt35Ku3NfYneOoQ==/com.thothterm.debian.qa.thothdock-DfXxY3jwmcOsvpfO6nb86Q==/lib/arm64/libproot.so
+[exit 0]
+PASS: docker version (ThothDock server)
+$ docker info
+ Total Memory: 7.484GiB
+ Name: localhost
+ ID: 43518661-71ef-8296-7489-02dea712e9ec
+ Docker Root Dir: /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+ Debug Mode: false
+ Experimental: false
+ Live Restore Enabled: false
+
+WARNING: ThothDock runs containers under PRoot (ptrace) in user space: there are no kernel namespaces, cgroups, capabilities or seccomp profiles, so containers are not a security boundary
+WARNING: No memory, CPU or PID limit support (no cgroups)
+WARNING: Containers share the device network and process table (no network or PID namespace)
+WARNING: Root inside a container is emulated by PRoot and grants no host privilege
+[exit 0]
+PASS: docker info
+$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+[exit 0]
+PASS: docker ps
+$ docker images
+IMAGE   ID             DISK USAGE   CONTENT SIZE   EXTRA
+[exit 0]
+PASS: docker images
+$ docker pull alpine
+Using default tag: latest
+latest: Pulling from library/alpine
+a9986cd6f37d: Pulling fs layer
+a9986cd6f37d: Verifying Checksum
+a9986cd6f37d: Download complete
+a9986cd6f37d: Extracting
+a9986cd6f37d: Pull complete
+Digest: sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+Status: Downloaded newer image for alpine:latest
+docker.io/library/alpine:latest
+[exit 0]
+PASS: docker pull alpine
+$ docker pull debian
+Using default tag: latest
+latest: Pulling from library/debian
+ccd9dba13ae3: Pulling fs layer
+ccd9dba13ae3: Verifying Checksum
+ccd9dba13ae3: Download complete
+ccd9dba13ae3: Extracting
+ccd9dba13ae3: Pull complete
+Digest: sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c
+Status: Downloaded newer image for debian:latest
+docker.io/library/debian:latest
+[exit 0]
+PASS: docker pull debian
+$ docker run --rm alpine echo hello from ThothDock
+hello from ThothDock
+[exit 0]
+PASS: run --rm alpine echo
+$ docker run --rm alpine uname -m
+aarch64
+[exit 0]
+PASS: run --rm alpine uname -m
+$ docker run --rm alpine sh -c apk add --no-cache curl >/dev/null && curl -I https://example.com
+  0      0   0      0   0      0      0      0                              0  0      0   0      0   0      0      0      0                              0  0      0   0      0   0      0      0      0                              0  0      0   0      0   0      0      0      0                              0
+date: Sun, 04 Oct 2026 20:17:11 GMT
+content-type: text/html; charset=utf-8
+server: cloudflare
+last-modified: Fri, 02 Oct 2026 16:11:02 GMT
+allow: GET, HEAD
+accept-ranges: bytes
+age: 320
+cf-cache-status: HIT
+cf-ray: a456de5fdfa406c2-AMS
+alt-svc: h3=":443"; ma=86400
+
+[exit 0]
+PASS: alpine apk + curl -I https
+$ docker run --rm debian sh -c apt-get update >/dev/null && apt-get install -y curl >/dev/null && curl -I https://example.com
+HTTP/2 200 
+date: Sun, 04 Oct 2026 20:18:19 GMT
+content-type: text/html; charset=utf-8
+server: cloudflare
+last-modified: Fri, 02 Oct 2026 16:11:02 GMT
+allow: GET, HEAD
+accept-ranges: bytes
+age: 388
+cf-cache-status: HIT
+cf-ray: a456e00a59d20b5c-AMS
+alt-svc: h3=":443"; ma=86400
+
+[exit 0]
+PASS: debian apt + curl -I https
+$ docker run --rm alpine sh -c exit 42
+
+[exit 42]
+PASS: exit code propagation
+$ docker run --rm alpine nosuchcmd
+docker: Error response from daemon: exec: "nosuchcmd": executable file not found in $PATH
+
+Run 'docker run --help' for more information
+[exit 127]
+PASS: missing command -> 127
+$ sh -c echo piped | docker run --rm -i alpine tr a-z A-Z
+PIPED
+[exit 0]
+PASS: stdin
+$ docker start -a ca
+ca-wrote
+[exit 0]
+PASS: two containers: ca writes
+$ docker start -a cb
+Welcome to Alpine!
+
+The Alpine Wiki contains a large amount of how-to guides and general
+information about administrating Alpine systems.
+See <https://wiki.alpinelinux.org/>.
+
+You can setup the system with the command: setup-alpine
+
+You may change this message by editing /etc/motd.
+[exit 0]
+PASS: two containers: cb unaffected
+$ docker logs ticker
+tick 0
+tick 1
+tick 2
+tick 3
+[exit 0]
+PASS: logs
+$ docker inspect -f {{.State.Status}} ticker
+running
+[exit 0]
+PASS: inspect running
+$ docker stop ticker
+ticker
+[exit 0]
+PASS: stop (graceful)
+$ docker logs ticker
+tick 0
+tick 1
+tick 2
+tick 3
+got-TERM
+[exit 0]
+PASS: logs show TERM handled
+$ sh -c docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' ticker
+exited 0
+[exit 0]
+PASS: inspect exited 0
+$ docker start ticker
+ticker
+[exit 0]
+PASS: start again
+$ docker kill ticker
+ticker
+[exit 0]
+PASS: kill
+$ docker wait ticker
+137
+[exit 0]
+PASS: wait -> 137
+$ docker rm ticker
+ticker
+[exit 0]
+PASS: rm
+$ docker rm ticker
+Error response from daemon: No such container: ticker
+[exit 1]
+PASS: rm of missing -> error
+$ docker run --rm --memory 64m alpine true
+docker: Error response from daemon: ThothDock does not support memory limits: containers run under PRoot without cgroups, so the limit would not be enforced (see docs/COMPATIBILITY.md)
+
+Run 'docker run --help' for more information
+[exit 125]
+PASS: memory limit refused
+RESULT pass=26 fail=0

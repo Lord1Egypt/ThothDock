@@ -1,0 +1,30 @@
+##### A: background 20 s, then foreground
+--- backgrounded
+16762 u0_a751      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+16792 u0_a751      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:0 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+##### B: close window (menu), reopen
+    topResumedActivity=ActivityRecord{57136471 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivity t2108}
+--- after Close window
+16762 u0_a751      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+16792 u0_a751      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:0 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+    topResumedActivity=ActivityRecord{57136471 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivity t2108}
+##### C: daemon crash with a running container
+container 'sleep 600' procs: 1
+old daemon pid=16762
+1 s after SIGKILL: 'sleep 600' procs=0
+new daemon pid=18206
+--- after supervisor restart
+16792 u0_a751      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+18206 u0_a751      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:0 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 5

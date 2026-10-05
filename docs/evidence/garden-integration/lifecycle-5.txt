@@ -1,0 +1,39 @@
+##### F: Exit (menu) with a running container
+before: sleep procs=1
+    topResumedActivity=ActivityRecord{35273348 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivity
+--- after Exit
+18693 u0_a751      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+18756 u0_a751      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+18925 u0_a751      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:0 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 5
+app processes of the QA uid: u0_a751      com.thothterm.debian.qa.thothdock
+u0_a751      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.t
+u0_a751      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/f
+u0_a751      su -m -s /bin/bash thoth
+u0_a751      bash
+u0_a751      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock
+u0_a751      sleep 600
+##### G: uninstall the QA app
+ls: /data/data: Permission denied
+Success
+thothdock/docker procs: 2
+0
+coreutils-hash.sh
+coreutils-links.txt
+coreutils-paths.txt
+dalvik-cache
+gh-patched
+guest.sh
+l.xml
+libandroid-shmem.so
+libtalloc.so.2
+loader
+offline.sh
+proot
+reg011.sh
+thoth-title-test.sh
+thothdock
+listeners: /proc/net/tcp:0 /proc/net/tcp6:7 

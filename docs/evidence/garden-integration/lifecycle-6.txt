@@ -1,0 +1,10 @@
+before Exit: daemon=20437 container-sleep=1 sock=thothdock.sock
+after Exit: front=      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Lau
+QA-uid processes:
+shell        21378 sh -c ps -A -o USER,PID,ARGS | grep u0_a0 | cut -c1-80
+shell        21382 grep u0_a0
+daemons=0 sleep600=0 sock-dir=[] pid=[thothdock.lock]
+time=2026-10-05T02:44:06.944Z level=INFO msg="shutting down"
+time=2026-10-05T02:44:06.947Z level=INFO msg="stopping container for shutdown" id=27f2259b4736
+time=2026-10-05T02:44:07.004Z level=INFO msg=stopped
+time=2026-10-05T02:44:07.004Z level=INFO msg="container exited" id=27f2259b4736 code=143
