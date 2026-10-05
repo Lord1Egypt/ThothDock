@@ -3,8 +3,11 @@
 Device: Samsung SM-A165F, Android 16, unrooted, adb `install --no-incremental`.
 App: ThothTerm Trixie 0.3.0-rc.1 (versionCode 299) in the isolated package
 `com.thothterm.debian.rc.thothdock`, debug-signed test builds of the production
-source configuration. ThothDock `04a3e80` + stock Docker CLI 29.8.1 built from
-the `docker/cli` source tag, both inside the APK; Go 1.26.8.
+source configuration. Final build: ThothDock `2171add` + stock Docker CLI 29.8.1
+built from the `docker/cli` source tag, both inside the APK; Go 1.26.8. An earlier
+build (ThothDock `04a3e80`) passed the same matrix; the Engine Guard packages
+were then made uncompressed (see below) and the matrix, hostile checks, lifecycle
+and release smoke were repeated on the final build.
 
 | File | What it shows |
 |---|---|
@@ -25,6 +28,9 @@ installed over it with `adb install -r` and smoke-tested (`docker version`,
 
 ## Corrections made on the way
 
+- The Engine Guard `.deb` placeholders were gzip-compressed; a trixie buildserver and an
+  Ubuntu host produced data members one byte apart, so the F-Droid dry-run APK was not
+  byte-identical to ours. They are now built uncompressed (`dpkg-deb -Znone`).
 - First-run welcome, consent and About text said "ThothTerm Trixie"; the overlay
   now names ThothDock everywhere, with a unit test that fails if a new base
   string is not overridden.

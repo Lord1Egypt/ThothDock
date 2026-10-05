@@ -2,13 +2,13 @@
 ######## CLI
 $ docker version
   Go version:       go1.26.8
-  Git commit:       04a3e80
+  Git commit:       2171add
   Built:            
   OS/Arch:          linux/arm64
   Experimental:     false
  proot:
   Version:          PRoot 5.1.0
-  Path:             /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libproot.so
+  Path:             /data/app/~~o2N_QeWB9ZMyGyyUm7CmuQ==/com.thothterm.debian.rc.thothdock-o373-FJCxjm23LsZUHaLmg==/lib/arm64/libproot.so
 [exit 0]
 PASS: docker version (ThothDock server)
 $ docker info
@@ -68,7 +68,7 @@ hello
 PASS: exec echo
 $ docker exec golden-exec sh -c pwd; id
 /
-uid=0(root) gid=0(root) groups=3003,9997,20755,50755
+uid=0(root) gid=0(root) groups=3003,9997,20757,50757
 [exit 0]
 PASS: exec sh -c 'pwd; id'
 $ docker exec golden-exec sh -c exit 42
@@ -127,7 +127,7 @@ local /data/user/0/com.thothterm.debian.rc.thothdock/files/thothdock/volumes/gol
 [exit 0]
 PASS: volume inspect
 $ docker volume rm goldenvol
-Error response from daemon: remove goldenvol: volume is in use - [23a4b4d8e393a0a84e9e97be479aae462c8e765bb7f19f113d6a261d25940f49]
+Error response from daemon: remove goldenvol: volume is in use - [221708dfed1ecbcf688f2b0e6f783d8e6b6cf484f37c57f795a93d421554901f]
 [exit 1]
 PASS: volume rm refused while in use
 $ sh -c docker volume prune -f >/dev/null; docker volume ls -q | grep -x goldenvol
@@ -165,7 +165,7 @@ hello-from-thothdock-web
 [exit 0]
 PASS: curl 127.0.0.1:18080
 $ docker run -d --name golden-web2 -p 18080:8080 alpine sleep 5
-8b8a86090ff03c7c3c038d7365b4b82ffed07ad3567a74858f0266fd42e41356
+f0b181f4fd32e2f08d17c35fce59e5c7c4f7203d171d1ae6f5fdf3959a041f97
 docker: Error response from daemon: driver failed programming external connectivity on endpoint golden-web2: Bind for 127.0.0.1:18080 failed: port is already allocated
 
 Run 'docker run --help' for more information
@@ -205,7 +205,7 @@ Get:6 http://deb.debian.org/debian trixie-updates/main arm64 Packages [4424 B]
 Get:7 http://deb.debian.org/debian trixie-updates/main Translation-en [2496 B]
 Get:8 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [265 kB]
 Get:9 http://deb.debian.org/debian-security trixie-security/main Translation-en [162 kB]
-Fetched 16.8 MB in 4s (4092 kB/s)
+Fetched 16.8 MB in 5s (3657 kB/s)
 Reading package lists...
 [exit 0]
 PASS: apt update
@@ -237,7 +237,7 @@ E: Refusing to install the stock Docker Engine: docker-ce(none) docker.io(none) 
 E: Docker Engine is provided by ThothDock. Stock dockerd/containerd/runc
 E: are intentionally disabled (they need kernel namespaces and cgroups).
 E: The Docker CLI is unaffected; update ThothDock through its app.
-Fetched 65.2 MB in 10s (6476 kB/s)
+Fetched 65.2 MB in 10s (6655 kB/s)
 E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
 E: Failure running script /usr/lib/thothdock/engine-guard-hook
 [exit 100]
@@ -248,13 +248,13 @@ absent
 PASS: dockerd absent
 $ docker version
   Go version:       go1.26.8
-  Git commit:       04a3e80
+  Git commit:       2171add
   Built:            
   OS/Arch:          linux/arm64
   Experimental:     false
  proot:
   Version:          PRoot 5.1.0
-  Path:             /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libproot.so
+  Path:             /data/app/~~o2N_QeWB9ZMyGyyUm7CmuQ==/com.thothterm.debian.rc.thothdock-o373-FJCxjm23LsZUHaLmg==/lib/arm64/libproot.so
 [exit 0]
 PASS: docker CLI still works after full-upgrade
 $ docker run --rm alpine echo still-works
@@ -286,9 +286,9 @@ $ docker run --rm alpine sh -c apk add --no-cache curl >/dev/null && curl -I htt
 last-modified: Sun, 04 Oct 2026 20:44:03 GMT
 allow: GET, HEAD
 accept-ranges: bytes
-age: 466
+age: 5323
 cf-cache-status: HIT
-cf-ray: a45b00a5d81433d0-AMS
+cf-ray: a45b77384dd0de50-AMS
 alt-svc: h3=":443"; ma=86400
 
 [exit 0]
@@ -297,9 +297,9 @@ $ docker run --rm debian sh -c apt-get update >/dev/null && apt-get install -y c
 last-modified: Sun, 04 Oct 2026 20:44:03 GMT
 allow: GET, HEAD
 accept-ranges: bytes
-age: 528
+age: 5396
 cf-cache-status: HIT
-cf-ray: a45b022afe04b5ad-AMS
+cf-ray: a45b7902ed430ea9-AMS
 alt-svc: h3=":443"; ma=86400
 
 [exit 0]
@@ -328,7 +328,7 @@ rc-ins
 PASS: stop
 $ docker container prune -f
 Deleted Containers:
-d4a0d3143be9a3537b3e54610d9c31591e4e18990d0074e7cf6d8dc98b92b203
+d04c0aaac4d452c0a2fba449b4c3a9b26c0295a786d4bc987d4019eb9811bc6f
 
 Total reclaimed space: 0B
 [exit 0]
@@ -382,6 +382,7 @@ $ docker logs ticker
 tick 0
 tick 1
 tick 2
+tick 3
 [exit 0]
 PASS: logs
 $ docker stop ticker
