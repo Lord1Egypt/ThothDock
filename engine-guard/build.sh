@@ -17,7 +17,7 @@
 # The Docker CLI is NOT guarded: docker-cli / docker-ce-cli contain no daemon
 # (verified against the Debian trixie packages) and may be updated freely.
 #
-# Output is reproducible: fixed timestamps, owner root:root, fixed compression.
+# Output is reproducible: fixed timestamps, owner root:root, uncompressed (the placeholders are ~100 bytes; a compressor is a host-dependent byte source).
 set -eu
 OUT="${1:?usage: build.sh OUT_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -33,7 +33,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 build() { # dir -> deb
     ( cd "$1" && find . -exec touch -h -d "@$EPOCH" {} + )
-    dpkg-deb --root-owner-group -Zgzip -z9 --build "$1" "$OUT/$2" >/dev/null
+    dpkg-deb --root-owner-group -Znone --build "$1" "$OUT/$2" >/dev/null
 }
 
 for p in $PROTECTED; do
