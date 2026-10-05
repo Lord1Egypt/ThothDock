@@ -1,0 +1,415 @@
+
+######## CLI
+$ docker version
+  Go version:       go1.26.8
+  Git commit:       04a3e80
+  Built:            
+  OS/Arch:          linux/arm64
+  Experimental:     false
+ proot:
+  Version:          PRoot 5.1.0
+  Path:             /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libproot.so
+[exit 0]
+PASS: docker version (ThothDock server)
+$ docker info
+ Debug Mode: false
+ Experimental: false
+ Live Restore Enabled: false
+
+WARNING: ThothDock runs containers under PRoot (ptrace) in user space: there are no kernel namespaces, cgroups, capabilities or seccomp profiles, so containers are not a security boundary
+WARNING: No memory, CPU or PID limit support (no cgroups)
+WARNING: Containers share the device network and process table (no network or PID namespace)
+WARNING: Root inside a container is emulated by PRoot and grants no host privilege
+[exit 0]
+PASS: docker info
+$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+[exit 0]
+PASS: docker ps
+$ docker images
+IMAGE   ID             DISK USAGE   CONTENT SIZE   EXTRA
+[exit 0]
+PASS: docker images
+$ docker pull alpine
+a9986cd6f37d: Pulling fs layer
+a9986cd6f37d: Verifying Checksum
+a9986cd6f37d: Download complete
+a9986cd6f37d: Extracting
+a9986cd6f37d: Pull complete
+Digest: sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+Status: Downloaded newer image for alpine:latest
+docker.io/library/alpine:latest
+[exit 0]
+PASS: docker pull alpine
+$ docker pull debian
+ccd9dba13ae3: Pulling fs layer
+ccd9dba13ae3: Verifying Checksum
+ccd9dba13ae3: Download complete
+ccd9dba13ae3: Extracting
+ccd9dba13ae3: Pull complete
+Digest: sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c
+Status: Downloaded newer image for debian:latest
+docker.io/library/debian:latest
+[exit 0]
+PASS: docker pull debian
+$ docker run --rm alpine echo hello
+hello
+[exit 0]
+PASS: run --rm alpine echo
+$ docker run --rm alpine uname -m
+aarch64
+[exit 0]
+PASS: run --rm alpine uname -m
+
+######## EXEC
+$ docker exec golden-exec echo hello
+hello
+[exit 0]
+PASS: exec echo
+$ docker exec golden-exec sh -c pwd; id
+/
+uid=0(root) gid=0(root) groups=3003,9997,20755,50755
+[exit 0]
+PASS: exec sh -c 'pwd; id'
+$ docker exec golden-exec sh -c exit 42
+
+[exit 42]
+PASS: exec exit code
+$ docker exec -e FOO=bar -w /etc -u nobody golden-exec sh -c echo $FOO $PWD $(id -u)
+bar /etc 65534
+[exit 0]
+PASS: exec env/workdir/user
+$ sh -c echo piped | docker exec -i golden-exec tr a-z A-Z
+PIPED
+[exit 0]
+PASS: exec -i stdin
+$ sh -c docker exec golden-exec sh -c "echo to-err >&2" 2>&1 >/dev/null
+to-err
+[exit 0]
+PASS: exec stderr
+$ sh -c docker exec golden-exec sh -c "echo shared > /tmp/s"; docker exec golden-exec cat /tmp/s
+shared
+[exit 0]
+PASS: exec shares the container filesystem
+$ docker exec golden-exec nosuchcmd
+ThothDock exec failed: exec: "nosuchcmd": executable file not found in $PATH
+[exit 126]
+PASS: exec missing command -> 126
+$ docker exec golden-exec echo hi
+Error response from daemon: No such container: golden-exec
+[exit 1]
+PASS: exec in stopped container refused
+
+######## VOLUMES
+$ docker volume create goldenvol
+goldenvol
+[exit 0]
+PASS: volume create
+$ docker run --rm -v goldenvol:/data alpine sh -c echo persistent > /data/test.txt
+
+[exit 0]
+PASS: volume write
+$ docker run --rm -v goldenvol:/data alpine cat /data/test.txt
+persistent
+[exit 0]
+PASS: volume read from a new container
+$ docker run --rm --mount type=volume,src=goldenvol,dst=/other alpine cat /other/test.txt
+persistent
+[exit 0]
+PASS: volume via --mount
+$ docker volume ls
+DRIVER    VOLUME NAME
+local     goldenvol
+[exit 0]
+PASS: volume ls
+$ docker volume inspect goldenvol --format {{.Driver}} {{.Mountpoint}}
+local /data/user/0/com.thothterm.debian.rc.thothdock/files/thothdock/volumes/goldenvol/_data
+[exit 0]
+PASS: volume inspect
+$ docker volume rm goldenvol
+Error response from daemon: remove goldenvol: volume is in use - [23a4b4d8e393a0a84e9e97be479aae462c8e765bb7f19f113d6a261d25940f49]
+[exit 1]
+PASS: volume rm refused while in use
+$ sh -c docker volume prune -f >/dev/null; docker volume ls -q | grep -x goldenvol
+goldenvol
+[exit 0]
+PASS: volume prune keeps the in-use one
+$ docker volume create ../escape
+Error response from daemon: "../escape" includes invalid characters for a local volume name, only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed
+[exit 1]
+PASS: traversal volume name refused
+$ docker run --rm -v goldenvol:/data alpine cat /data/test.txt
+persistent
+[exit 0]
+PASS: volume survives container removal
+$ docker volume rm goldenvol
+goldenvol
+[exit 0]
+PASS: volume rm when unused
+
+######## PORTS
+$ docker ps --format {{.Ports}}
+127.0.0.1:18080->8080/tcp
+[exit 0]
+PASS: docker ps shows the mapping
+$ docker port golden-web
+8080/tcp -> 127.0.0.1:18080
+[exit 0]
+PASS: docker port
+$ docker inspect golden-web --format {{json .NetworkSettings.Ports}}
+{"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"18080"}]}
+[exit 0]
+PASS: inspect Ports
+$ curl -s --max-time 5 http://127.0.0.1:18080/
+hello-from-thothdock-web
+[exit 0]
+PASS: curl 127.0.0.1:18080
+$ docker run -d --name golden-web2 -p 18080:8080 alpine sleep 5
+8b8a86090ff03c7c3c038d7365b4b82ffed07ad3567a74858f0266fd42e41356
+docker: Error response from daemon: driver failed programming external connectivity on endpoint golden-web2: Bind for 127.0.0.1:18080 failed: port is already allocated
+
+Run 'docker run --help' for more information
+[exit 125]
+PASS: port collision refused
+$ docker run --rm -p 5353:53/udp alpine true
+docker: Error response from daemon: ThothDock does not support UDP port publishing: only TCP is implemented; 53/udp was refused rather than silently ignored (see docs/COMPATIBILITY.md)
+
+Run 'docker run --help' for more information
+[exit 125]
+PASS: UDP refused
+$ docker run --rm -p 0.0.0.0:19000:9000 alpine true
+docker: Error response from daemon: publishing to 0.0.0.0 is disabled: ports are published on 127.0.0.1 only unless the daemon is started with --allow-publish-nonlocal
+
+Run 'docker run --help' for more information
+[exit 125]
+PASS: LAN publish refused
+$ sh -c awk "NR>1 && \$4==\"0A\" && \$2 ~ /:46A0\$/" /proc/net/tcp | grep -q . && echo STILL-LISTENING || echo gone
+awk: cannot open "/proc/net/tcp" (Permission denied)
+gone
+[exit 0]
+PASS: listener gone after stop
+
+######## ENGINE GUARD
+$ sh -c thothdock doctor --guard | grep -m1 "docker.io"
+  PASS  docker.io                  protected (9999:1.0+thothdock.1)
+[exit 0]
+PASS: guard placeholders installed
+$ sh -c thothdock doctor --guard | grep -E "WARN|FAIL" || echo no problems
+no problems
+[exit 0]
+PASS: doctor --guard: no WARN/FAIL
+$ sudo -n apt-get update -q
+Get:4 http://deb.debian.org/debian trixie/main arm64 Packages [9614 kB]
+Get:5 http://deb.debian.org/debian trixie/main Translation-en [6486 kB]
+Get:6 http://deb.debian.org/debian trixie-updates/main arm64 Packages [4424 B]
+Get:7 http://deb.debian.org/debian trixie-updates/main Translation-en [2496 B]
+Get:8 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [265 kB]
+Get:9 http://deb.debian.org/debian-security trixie-security/main Translation-en [162 kB]
+Fetched 16.8 MB in 4s (4092 kB/s)
+Reading package lists...
+[exit 0]
+PASS: apt update
+$ sudo -n apt-get -y full-upgrade
+Preparing to unpack .../libssl3t64_3.5.7-1~deb13u3_arm64.deb ...
+Unpacking libssl3t64:arm64 (3.5.7-1~deb13u3) over (3.5.7-1~deb13u2) ...
+Setting up libssl3t64:arm64 (3.5.7-1~deb13u3) ...
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 
+Preparing to unpack .../openssl_3.5.7-1~deb13u3_arm64.deb ...
+Unpacking openssl (3.5.7-1~deb13u3) over (3.5.7-1~deb13u2) ...
+Setting up openssl (3.5.7-1~deb13u3) ...
+Processing triggers for libc-bin (2.41-12+deb13u4) ...
+[exit 0]
+PASS: apt full-upgrade
+$ sudo -n apt-get install -y docker.io containerd runc docker-ce moby-engine
+Building dependency tree...
+Reading state information...
+docker.io is already the newest version (9999:1.0+thothdock.1).
+containerd is already the newest version (9999:1.0+thothdock.1).
+runc is already the newest version (9999:1.0+thothdock.1).
+docker-ce is already the newest version (9999:1.0+thothdock.1).
+moby-engine is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install engine packages is a no-op
+$ sudo -n apt-get install -y --allow-downgrades docker.io=26.1.5+dfsg1-9+deb13u1
+Preconfiguring packages ...
+E: Refusing to install the stock Docker Engine: docker-ce(none) docker.io(none) docker.io(none)
+E: Docker Engine is provided by ThothDock. Stock dockerd/containerd/runc
+E: are intentionally disabled (they need kernel namespaces and cgroups).
+E: The Docker CLI is unaffected; update ThothDock through its app.
+Fetched 65.2 MB in 10s (6476 kB/s)
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: forced downgrade to the real engine refused
+$ sh -c command -v dockerd containerd runc >/dev/null && echo PRESENT || echo absent
+absent
+[exit 0]
+PASS: dockerd absent
+$ docker version
+  Go version:       go1.26.8
+  Git commit:       04a3e80
+  Built:            
+  OS/Arch:          linux/arm64
+  Experimental:     false
+ proot:
+  Version:          PRoot 5.1.0
+  Path:             /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libproot.so
+[exit 0]
+PASS: docker CLI still works after full-upgrade
+$ docker run --rm alpine echo still-works
+still-works
+[exit 0]
+PASS: ThothDock still runs containers
+$ sudo -n apt-get install -y docker-cli
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 
+Preparing to unpack .../docker-buildx_0.13.1+ds1-3_arm64.deb ...
+Unpacking docker-buildx (0.13.1+ds1-3) ...
+Selecting previously unselected package docker-cli.
+Preparing to unpack .../docker-cli_26.1.5+dfsg1-9+deb13u1_arm64.deb ...
+Unpacking docker-cli (26.1.5+dfsg1-9+deb13u1) ...
+Setting up docker-cli (26.1.5+dfsg1-9+deb13u1) ...
+Setting up docker-buildx (0.13.1+ds1-3) ...
+[exit 0]
+PASS: docker-cli package (CLI only) is allowed
+$ sh -c command -v docker
+/usr/local/bin/docker
+[exit 0]
+PASS: bundled CLI still first in PATH
+$ sh -c thothdock doctor --guard | grep -m1 PASS
+  PASS  docker.io                  protected (9999:1.0+thothdock.1)
+[exit 0]
+PASS: doctor --guard after CLI install
+
+######## PACKAGE MANAGERS IN CONTAINERS
+$ docker run --rm alpine sh -c apk add --no-cache curl >/dev/null && curl -I https://example.com
+last-modified: Sun, 04 Oct 2026 20:44:03 GMT
+allow: GET, HEAD
+accept-ranges: bytes
+age: 466
+cf-cache-status: HIT
+cf-ray: a45b00a5d81433d0-AMS
+alt-svc: h3=":443"; ma=86400
+
+[exit 0]
+PASS: alpine apk + curl -I https
+$ docker run --rm debian sh -c apt-get update >/dev/null && apt-get install -y curl >/dev/null && curl -I https://example.com
+last-modified: Sun, 04 Oct 2026 20:44:03 GMT
+allow: GET, HEAD
+accept-ranges: bytes
+age: 528
+cf-cache-status: HIT
+cf-ray: a45b022afe04b5ad-AMS
+alt-svc: h3=":443"; ma=86400
+
+[exit 0]
+PASS: debian apt + curl -I https
+
+######## INSPECT, RESTART, PRUNE, TTY
+$ sh -c echo $(docker inspect rc-ins --format "{{.State.Status}}") $(docker inspect rc-ins --format "{{range .Config.Env}}{{println .}}{{end}}" | grep FOO)
+running FOO=bar
+[exit 0]
+PASS: inspect state and env
+$ docker stats --no-stream rc-ins
+Error response from daemon: ThothDock does not implement container stats (there are no cgroups to read; planned from /proc)
+[exit 1]
+PASS: docker stats is refused, never faked
+$ docker restart -t 1 rc-ins
+rc-ins
+[exit 0]
+PASS: restart
+$ docker inspect rc-ins --format {{.RestartCount}}
+1
+[exit 0]
+PASS: restart count
+$ docker stop -t 1 rc-ins
+rc-ins
+[exit 0]
+PASS: stop
+$ docker container prune -f
+Deleted Containers:
+d4a0d3143be9a3537b3e54610d9c31591e4e18990d0074e7cf6d8dc98b92b203
+
+Total reclaimed space: 0B
+[exit 0]
+PASS: container prune removes the stopped one
+$ docker run --rm -it alpine sh -c tty >/dev/null && echo interactive-ok
+interactive-ok
+[exit 0]
+PASS: interactive TTY
+$ docker inspect loop --format {{.State.ExitCode}}
+143
+[exit 0]
+PASS: SIGTERM'd shell loop exits 143, not 0
+
+######## CONTAINER BASICS
+$ docker start -a ca
+ca-wrote
+[exit 0]
+PASS: two containers: ca writes
+$ docker start -a cb
+
+The Alpine Wiki contains a large amount of how-to guides and general
+information about administrating Alpine systems.
+See <https://wiki.alpinelinux.org/>.
+
+You can setup the system with the command: setup-alpine
+
+You may change this message by editing /etc/motd.
+[exit 0]
+PASS: two containers: cb unaffected
+$ docker run --rm alpine sh -c exit 42
+
+[exit 42]
+PASS: exit code propagation
+$ docker run --rm alpine nosuchcmd
+docker: Error response from daemon: exec: "nosuchcmd": executable file not found in $PATH
+
+Run 'docker run --help' for more information
+[exit 127]
+PASS: missing command -> 127
+$ sh -c echo piped | docker run --rm -i alpine tr a-z A-Z
+PIPED
+[exit 0]
+PASS: stdin
+$ docker run --rm --memory 64m alpine true
+docker: Error response from daemon: ThothDock does not support memory limits: containers run under PRoot without cgroups, so the limit would not be enforced (see docs/COMPATIBILITY.md)
+
+Run 'docker run --help' for more information
+[exit 125]
+PASS: memory limit refused
+$ docker logs ticker
+tick 0
+tick 1
+tick 2
+[exit 0]
+PASS: logs
+$ docker stop ticker
+ticker
+[exit 0]
+PASS: stop (graceful)
+$ docker logs ticker
+tick 0
+tick 1
+tick 2
+tick 3
+got-TERM
+[exit 0]
+PASS: logs show TERM handled
+$ docker start ticker
+ticker
+[exit 0]
+PASS: start again
+$ docker kill ticker
+ticker
+[exit 0]
+PASS: kill
+$ docker wait ticker
+137
+[exit 0]
+PASS: wait -> 137
+$ docker rm ticker
+ticker
+[exit 0]
+PASS: rm
+RESULT pass=71 fail=0

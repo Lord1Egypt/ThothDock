@@ -1,0 +1,17 @@
+go test -race -count=1 ./...  (THOTHDOCK_TEST_PROOT set, real PRoot) -- exit 0, Go 1.27.1 (go.mod toolchain)
+tests/subtests: pass=100 fail=0 skip=0
+  cmd/thothdock                pass=4 fail=0 skip=0
+  internal/api                 pass=5 fail=0 skip=0
+  internal/engine              pass=22 fail=0 skip=0
+  internal/guard               pass=3 fail=0 skip=0
+  internal/image               pass=8 fail=0 skip=0
+  internal/layer               pass=21 fail=0 skip=0
+  internal/logs                pass=7 fail=0 skip=0
+  internal/oci                 pass=5 fail=0 skip=0
+  internal/portmap             pass=5 fail=0 skip=0
+  internal/procid              pass=1 fail=0 skip=0
+  internal/registry            pass=2 fail=0 skip=0
+  internal/runtime             pass=9 fail=0 skip=0
+  internal/securefs            pass=2 fail=0 skip=0
+  internal/store               pass=2 fail=0 skip=0
+  internal/volume              pass=4 fail=0 skip=0
