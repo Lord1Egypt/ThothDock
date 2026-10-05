@@ -92,6 +92,35 @@ func TestPRootSignalExitCodes(t *testing.T) {
 	}
 }
 
+// A shell loop killed by SIGTERM reported 0 in the golden build: PRoot's exit
+// status was the stale 0 of the last "sleep" child.
+func TestPRootSignalledShellLoopExits143(t *testing.T) {
+	r := testPRoot(t)
+	for i := 0; i < 3; i++ {
+		var out, errb syncBuf
+		p, err := r.Start(Spec{Rootfs: "/", Args: []string{"/bin/sh", "-c", "while true; do sleep 1; done"}, Stdout: &out, Stderr: &errb})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(1500 * time.Millisecond)
+		p.Signal(syscall.SIGTERM)
+		if ex := p.Wait(); ex.Code != 143 || strings.Contains(errb.String(), "proot info") {
+			t.Fatalf("exit=%+v stderr=%q", ex, errb.String())
+		}
+	}
+	// A workload that traps TERM and exits 0 on its own still reports 0.
+	var out, errb syncBuf
+	p, err := r.Start(Spec{Rootfs: "/", Args: []string{"/bin/sh", "-c", "trap 'exit 0' TERM; while true; do sleep 1; done"}, Stdout: &out, Stderr: &errb})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	p.Signal(syscall.SIGTERM)
+	if ex := p.Wait(); ex.Code != 0 {
+		t.Fatalf("trapped exit=%+v", ex)
+	}
+}
+
 func TestPRootKillTakesTheWholeTree(t *testing.T) {
 	r := testPRoot(t)
 	dir := t.TempDir()

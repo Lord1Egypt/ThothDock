@@ -11,6 +11,15 @@ Containers run through a userspace runtime instead: the PRoot that the
 [ThothTerm Garden](https://github.com/Lord1Egypt/AndroidThothTerm) editions
 already ship on Android.
 
+> **Security boundary warning.** Containers are userspace environments, not a
+> kernel security boundary (no namespaces, cgroups, capabilities or seccomp).
+> A published port (`-p`) is a **device-wide loopback listener**: on Android any
+> installed app can connect to `127.0.0.1:<port>`. `-p` does not control which
+> address the workload itself binds. UDP publishing is refused. A `docker exec`
+> process is not a member of any PID namespace. There are no CPU or memory
+> metrics because there are no cgroups to read. See
+> [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+
 ```
 Docker CLI ──Docker Engine API 1.41──▶ thothdock serve
                                          ├─ OCI registry client, digest-verified blob store
@@ -75,20 +84,21 @@ the daemon is stopped.
 
 ## On Android
 
-ThothDock runs inside a ThothTerm app. In the isolated QA build
-`com.thothterm.debian.qa.thothdock` (AndroidThothTerm branch
-`feature/thothdock-golden`), you open the terminal and type `docker …`:
+ThothDock runs inside the ThothTerm Trixie app (`com.thothterm.debian`): you
+open the terminal and type `docker …`. Release candidates are tested in an
+isolated package (`com.thothterm.debian.rc.thothdock`); the frozen QA baseline
+is tag `thothdock-golden-20261005`.
 
 ```
 ThothTerm terminal ─ Docker CLI ─ unix:///run/thothdock/thothdock.sock
         Android app context ─ ThothDock daemon ─ Garden PRoot ─ container rootfs
 ```
 
-The stock Docker CLI (29.8.1) is bundled unmodified; `dockerd`, `containerd` and
+The Docker CLI is built from the upstream `docker/cli` source and bundled unmodified; `dockerd`, `containerd` and
 `runc` are not. See [docs/GARDEN_RUNTIME_NOTES.md](docs/GARDEN_RUNTIME_NOTES.md)
 for the architecture, the measured lifecycle behaviour and the limits, and
 [docs/branding/VISUAL_IDENTITY.md](docs/branding/VISUAL_IDENTITY.md) for the
-look. Nothing is merged into any ThothTerm production edition yet.
+look.
 
 In Debian and Ubuntu guests **Engine Guard** keeps `apt` from installing a real
 `dockerd`/`containerd`/`runc` over ThothDock (placeholder packages at epoch
