@@ -1,4 +1,78 @@
-######## First full lifecycle run (build with ThothDock 04a3e80)
+######## Final build (ThothDock af221db): full lifecycle run
+--- baseline (13:15:09)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 6 seconds;ui-web=Up 6 seconds;
+ui-ticker=Up 6 seconds
+ui-web=Up 6 seconds
+=== background 45 s
+--- during-background (13:15:55)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 52 seconds;ui-web=Up 52 seconds;
+--- after-resume (13:16:00)
+daemon pids: 1856
+proot workers of RC app: 4
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 1856 88800349 
+listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
+containers: ui-ticker=Up 57 seconds;ui-web=Up 57 seconds;
+=== daemon SIGKILL
+--- after-kill (13:16:07)
+daemon pids: 11623
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 11623 88823749 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-ticker=Exited (137) 5 seconds ago;ui-web=Exited (137) 5 seconds ago;
+ui-ticker=Exited (137) 5 seconds ago
+ui-web=Exited (137) 5 seconds ago
+=== force-stop
+--- after-force-stop (13:16:13)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: thothdock.sock 
+pidfile: 11623 88823749 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+--- after-relaunch (13:16:28)
+daemon pids: 11888
+proot workers of RC app: 2
+app procs: com.thothterm.debian.rc.thothdock 
+socket: thothdock.sock 
+pidfile: 11888 88825047 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+containers: ui-ticker=Exited (137) 13 seconds ago;ui-web=Exited (137) 13 seconds ago;
+ui-ticker=Exited (137) 13 seconds ago
+ui-web=Exited (137) 13 seconds ago
+=== close last window
+--- after-close-window (13:16:47)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+=== Exit
+--- after-exit (13:17:20)
+daemon pids: 
+proot workers of RC app: 0
+app procs: 
+socket: 
+pidfile: 
+listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
+
+######## Earlier build (ThothDock 04a3e80): first full lifecycle run, incl. uninstall/reinstall
 --- baseline (11:24:53)
 daemon pids: 7862
 proot workers of RC app: 4
@@ -181,53 +255,3 @@ listener 18090: /proc/net/tcp:0 /proc/net/tcp6:0
 Success
 1
 daemon after reinstall: 25542
-
-######## Repeat on the final build (ThothDock 2171add, uncompressed Engine Guard packages)
---- baseline (12:42:43)
-daemon pids: 16546
-proot workers of RC app: 4
-app procs: com.thothterm.debian.rc.thothdock 
-socket: thothdock.sock 
-pidfile: 16546 88571725 
-listener 18090 (0x46AA): /proc/net/tcp:1 /proc/net/tcp6:0 
-containers: run-as: exec failed for /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libdocker.so: No such file or directory;
-=== daemon SIGKILL
---- after-kill (12:42:49)
-daemon pids: 25011
-proot workers of RC app: 2
-app procs: com.thothterm.debian.rc.thothdock 
-socket: thothdock.sock 
-pidfile: 25011 88623996 
-listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
-containers: run-as: exec failed for /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libdocker.so: No such file or directory;
-run-as: exec failed for /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libdocker.so: No such file or directory
-=== force-stop
---- after-force-stop (12:42:55)
-daemon pids: 
-proot workers of RC app: 0
-app procs: 
-socket: thothdock.sock 
-pidfile: 25011 88623996 
-listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
---- after-relaunch (12:43:10)
-daemon pids: 25264
-proot workers of RC app: 2
-app procs: com.thothterm.debian.rc.thothdock 
-socket: thothdock.sock 
-pidfile: 25264 88625245 
-listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
-containers: run-as: exec failed for /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libdocker.so: No such file or directory;
-run-as: exec failed for /data/app/~~LgUw2dngW4M6N6wfEYf3tw==/com.thothterm.debian.rc.thothdock-jO_OfJ8IwYHl007DTTBJ-g==/lib/arm64/libdocker.so: No such file or directory
-=== Exit
---- after-exit (12:43:29)
-daemon pids: 
-proot workers of RC app: 0
-app procs: 
-socket: 
-pidfile: 
-listener 18090 (0x46AA): /proc/net/tcp:0 /proc/net/tcp6:0 
-
-=== container state across the lifecycle (cli.sh fixed)
-ui-ticker=Exited (137) About a minute ago;ui-web=Exited (137) About a minute ago;
-running: ui-ticker=Up 2 seconds;ui-web=Up 2 seconds;
-after daemon kill -9: ui-ticker=Exited (137) 4 seconds ago;ui-web=Exited (137) 4 seconds ago; listener18090=0

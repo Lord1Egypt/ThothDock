@@ -3,20 +3,20 @@
 Device: Samsung SM-A165F, Android 16, unrooted, adb `install --no-incremental`.
 App: ThothTerm Trixie 0.3.0-rc.1 (versionCode 299) in the isolated package
 `com.thothterm.debian.rc.thothdock`, debug-signed test builds of the production
-source configuration. Final build: ThothDock `2171add` + stock Docker CLI 29.8.1
-built from the `docker/cli` source tag, both inside the APK; Go 1.26.8. An earlier
-build (ThothDock `04a3e80`) passed the same matrix; the Engine Guard packages
-were then made uncompressed (see below) and the matrix, hostile checks, lifecycle
-and release smoke were repeated on the final build.
+source configuration. Final build: ThothDock `af221db` + stock Docker CLI 29.8.1
+built from the `docker/cli` source tag, both inside the APK; Go 1.26.8. Earlier
+builds (ThothDock `04a3e80`, `2171add`) passed the same matrix; the Engine Guard
+packages were then made byte-reproducible (see below) and the matrix, hostile
+checks, lifecycle and release smoke were repeated on the final build.
 
 | File | What it shows |
 |---|---|
 | `go-test-summary.txt` | `go test -race` with a real PRoot, 100 tests, 0 failed, 0 skipped |
 | `device-acceptance.log` | `tests/device/accept.sh` typed into the ThothTerm terminal: **71 pass, 0 fail** (version/info/ps/images, pull alpine and debian, run, `uname -m` = aarch64, exec, volumes, `-p`, Engine Guard through `apt update` / `upgrade` / `full-upgrade` and forced engine install, apk and apt inside containers, logs/stop/kill/wait, inspect/restart/prune, interactive TTY, exit codes, missing command, stdin, **SIGTERM'd shell loop exits 143**) |
 | `device-hostile-api.log` | `tests/device/hostile.sh`: **20 pass, 0 fail** (malformed and truncated JSON, 2 MB body, traversal / absolute / NUL / oversized volume names, bind paths, privileged and UDP refusal, health after abuse) |
-| `device-lifecycle.log` | background 45 s, daemon `kill -9`, Android force-stop and relaunch, closing the last window, Exit, uninstall and reinstall; process, socket, pid-file and listener state around each |
+| `device-lifecycle.log` | final build: background 45 s, daemon `kill -9`, Android force-stop and relaunch, closing the last window, Exit; earlier build: the same plus uninstall and reinstall; process, socket, pid-file and listener state around each |
 | `protected-apks-before.txt`, `protected-apks-after.txt` | identical (SHA-256, path, mtime) for the installed production ThothTerm apps and PocketClaw |
-| `screenshots/` | terminal banner with `docker ps`, and the Containers screen (store listing images; status bar removed) |
+| `screenshots/` | terminal banner with `docker ps`, the Containers screen (store listing images), and the minified-release smoke test on the final build; status bars removed |
 
 Containers screen (debug build, driven by element text through `uiautomator`):
 Start, Stop, Restart, Logs, Shell and Delete (with confirmation) were each
@@ -28,9 +28,11 @@ installed over it with `adb install -r` and smoke-tested (`docker version`,
 
 ## Corrections made on the way
 
-- The Engine Guard `.deb` placeholders were gzip-compressed; a trixie buildserver and an
-  Ubuntu host produced data members one byte apart, so the F-Droid dry-run APK was not
-  byte-identical to ours. They are now built uncompressed (`dpkg-deb -Znone`).
+- The F-Droid dry-run APK was not byte-identical to ours because the Engine Guard
+  `.deb` placeholders depended on the build host: a gzip one byte apart, then the build
+  user's umask in directory modes. They are now built uncompressed under a fixed umask
+  (CI diffs builds under umask 022 and 002). After that the F-Droid buildserver APK,
+  GitHub Actions and a local build are byte-identical.
 - First-run welcome, consent and About text said "ThothTerm Trixie"; the overlay
   now names ThothDock everywhere, with a unit test that fails if a new base
   string is not overridden.
