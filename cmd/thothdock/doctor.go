@@ -21,8 +21,13 @@ func doctor(args []string) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	var o options
 	o.register(fs)
+	guardOnly := fs.Bool("guard", false, "only the Engine Guard report (runs inside a guest)")
+	guestRoot := fs.String("guest-root", "/", "root filesystem to inspect for the Engine Guard")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *guardOnly {
+		return doctorGuard(*guestRoot, true)
 	}
 	failed := false
 	report := func(status, what, detail string) {
@@ -107,6 +112,11 @@ func doctor(args []string) error {
 	}
 	if _, err := exec.LookPath("dockerd"); err == nil {
 		report("INFO", "dockerd", "present on PATH but unused by ThothDock")
+	}
+	if *guestRoot != "/" {
+		if err := doctorGuard(*guestRoot, false); err != nil {
+			failed = true
+		}
 	}
 	if failed {
 		return fmt.Errorf("some checks failed")

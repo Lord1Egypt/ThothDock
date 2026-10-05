@@ -1,0 +1,18 @@
+Docker Engine is provided by ThothDock
+======================================
+
+This system runs inside ThothTerm. The container engine is ThothDock, a
+userspace Docker Engine API implementation running beside the guest, reachable
+at unix:///run/thothdock/thothdock.sock. The Docker CLI talks to it.
+
+The stock engine packages (docker.io, docker-ce, docker-engine, moby-engine,
+containerd, containerd.io, runc) are replaced by empty placeholders versioned
+9999:1.0+thothdock.N, pinned at priority 1001, so "apt upgrade" and
+"apt full-upgrade" leave them alone and "apt install docker.io" reports them
+as already installed. Installing a real one at another version is refused by
+/usr/lib/thothdock/engine-guard-hook.
+
+The Docker CLI (docker-cli, docker-ce-cli) is not restricted. ThothDock itself
+is updated by the ThothTerm app, not by apt.
+
+Check the guard with:   thothdock doctor --guard
