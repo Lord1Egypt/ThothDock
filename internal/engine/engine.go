@@ -29,6 +29,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 	"github.com/Lord1Egypt/ThothDock/internal/store"
+	"github.com/Lord1Egypt/ThothDock/internal/volume"
 )
 
 // Config is the engine's policy.
@@ -48,6 +49,7 @@ type Engine struct {
 	Images  *image.Store
 	Puller  *image.Puller
 	Runtime runtime.Runtime
+	Volumes *volume.Store
 	cfg     Config
 	log     *slog.Logger
 
@@ -88,7 +90,11 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 	if cfg.LogMaxSize == 0 {
 		cfg.LogMaxSize = 10 << 20
 	}
-	e := &Engine{Layout: layout, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
+	vols, err := volume.Open(layout.Volumes(), log)
+	if err != nil {
+		return nil, err
+	}
+	e := &Engine{Layout: layout, Volumes: vols, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
 		containers: map[string]*Container{}, names: map[string]string{}}
 	entries, err := os.ReadDir(layout.Containers())
 	if err != nil {

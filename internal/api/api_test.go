@@ -290,3 +290,67 @@ func TestExecOverHTTP(t *testing.T) {
 	expect(t, resp, body, 400, "invalid terminal size")
 	f.do(t, "DELETE", "/v1.41/containers/xx?force=1", "")
 }
+
+func TestVolumesOverHTTP(t *testing.T) {
+	f := newAPI(t)
+	resp, body := f.do(t, "GET", "/v1.41/volumes", "")
+	expect(t, resp, body, 200, `"Volumes":[]`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"goldenvol","Labels":{"team":"x"}}`)
+	expect(t, resp, body, 201, `"Name":"goldenvol"`)
+	expect(t, resp, body, 201, `"Driver":"local"`)
+	expect(t, resp, body, 201, `"Scope":"local"`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"goldenvol"}`)
+	expect(t, resp, body, 201, `"team":"x"`) // idempotent: the existing volume
+	resp, body = f.do(t, "GET", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 200, `/volumes/goldenvol/_data`)
+	resp, body = f.do(t, "GET", "/v1.41/volumes/nope1", "")
+	expect(t, resp, body, 404, "no such volume")
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"label":["team=x"]}`, "")
+	expect(t, resp, body, 200, `goldenvol`)
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"label":["team=y"]}`, "")
+	expect(t, resp, body, 200, `"Volumes":[]`)
+	resp, body = f.do(t, "GET", `/v1.41/volumes?filters={"bogus":["x"]}`, "")
+	expect(t, resp, body, 400, "invalid filter")
+
+	// Hostile names never reach the file system.
+	for _, name := range []string{"../escape", "a/b", "..", "x\\u0000y", "-lead", "a b", strings.Repeat("a", 300)} {
+		resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"`+name+`"}`)
+		if resp.StatusCode != 400 {
+			t.Errorf("name %q: %d %s", name, resp.StatusCode, body)
+		}
+	}
+	for _, p := range []string{"/v1.41/volumes/..%2f..%2fetc", "/v1.41/volumes/a%2fb", "/v1.41/volumes/%2e%2e"} {
+		resp, _ = f.do(t, "DELETE", p, "")
+		if resp.StatusCode < 400 {
+			t.Errorf("DELETE %s: %d", p, resp.StatusCode)
+		}
+	}
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"nfsvol","Driver":"nfs"}`)
+	expect(t, resp, body, 400, "not available")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":"optvol","DriverOpts":{"type":"tmpfs"}}`)
+	expect(t, resp, body, 501, "driver options")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/create", `{"Name":`)
+	expect(t, resp, body, 400, "invalid JSON")
+
+	// In use by a container -> 409; removed after the container is gone.
+	host := strings.TrimSuffix(f.image, ":1")
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+host+"&tag=1", "")
+	resp, body = f.do(t, "POST", "/v1.41/containers/create?name=holder", `{"Image":"`+f.image+`","HostConfig":{"Binds":["goldenvol:/v"]}}`)
+	expect(t, resp, body, 201, "Id")
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 409, "volume is in use")
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol?force=1", "")
+	expect(t, resp, body, 409, "volume is in use")
+	resp, body = f.do(t, "GET", "/v1.41/containers/holder/json", "")
+	expect(t, resp, body, 200, `"Type":"volume"`)
+	expect(t, resp, body, 200, `"Name":"goldenvol"`)
+	resp, body = f.do(t, "POST", "/v1.41/volumes/prune", "")
+	expect(t, resp, body, 200, `"VolumesDeleted":[]`)
+	f.do(t, "DELETE", "/v1.41/containers/holder", "")
+	resp, body = f.do(t, "POST", "/v1.41/volumes/prune", "")
+	expect(t, resp, body, 200, `goldenvol`)
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol?force=1", "")
+	expect(t, resp, body, 204, "") // force on a missing volume succeeds, as in Docker
+	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol", "")
+	expect(t, resp, body, 404, "no such volume")
+}

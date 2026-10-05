@@ -61,6 +61,12 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /exec/{id}/resize", s.execResize)
 	m.HandleFunc("GET /exec/{id}/json", s.execInspect)
 
+	m.HandleFunc("GET /volumes", s.listVolumes)
+	m.HandleFunc("POST /volumes/create", s.createVolume)
+	m.HandleFunc("POST /volumes/prune", s.pruneVolumes)
+	m.HandleFunc("GET /volumes/{name}", s.inspectVolume)
+	m.HandleFunc("DELETE /volumes/{name}", s.removeVolume)
+
 	m.HandleFunc("GET /images/json", s.listImages)
 	m.HandleFunc("POST /images/create", s.pullImage)
 	m.HandleFunc("GET /images/{rest...}", s.imageGet)
@@ -80,7 +86,6 @@ func (s *Server) Handler() http.Handler {
 		{"/build", "docker build (planned)"},
 		{"/commit", "docker commit (planned)"},
 		{"/networks", "networks (no network namespaces; containers share the device network)"},
-		{"/volumes", "named volumes (planned for the volumes phase)"},
 		{"/events", "the event stream (planned)"},
 		{"/system/df", "disk usage reporting (planned)"},
 		{"/swarm", "swarm mode"},

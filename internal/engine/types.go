@@ -184,4 +184,7 @@ type Record struct {
 type BindRecord struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
+	// Volume is set for a named volume; Source is then its data directory
+	// when the container was created, and is recomputed at every start.
+	Volume string `json:"volume,omitempty"`
 }

@@ -44,6 +44,10 @@ func command(r engine.Record) string {
 func mounts(r engine.Record) []map[string]any {
 	out := []map[string]any{}
 	for _, b := range r.Binds {
+		if b.Volume != "" {
+			out = append(out, map[string]any{"Type": "volume", "Name": b.Volume, "Source": b.Source, "Destination": b.Target, "Driver": "local", "Mode": "z", "RW": true, "Propagation": ""})
+			continue
+		}
 		out = append(out, map[string]any{"Type": "bind", "Source": b.Source, "Destination": b.Target, "Mode": "", "RW": true, "Propagation": "rprivate"})
 	}
 	return out

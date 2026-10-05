@@ -3,6 +3,7 @@ package engine
 import (
 	"archive/tar"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -295,7 +296,7 @@ func TestUnsupportedFeaturesAreRefused(t *testing.T) {
 		"privileged": {Privileged: true}, "memory": {Memory: 1 << 20}, "cpus": {NanoCpus: 1e9},
 		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "ports": {PortBindings: map[string][]PortBinding{"80/tcp": {{HostPort: "8080"}}}},
 		"restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
-		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume": {Binds: []string{"data:/data"}},
+		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume-ro": {Binds: []string{"data1:/vol:ro"}},
 		"ro-bind": {Binds: []string{"/tmp:/x:ro"}},
 	}
 	for name, hc := range cases {
@@ -568,3 +569,132 @@ func TestExecStdin(t *testing.T) {
 }
 
 func hasKV(env []string, kv string) bool { return contains(env, kv) }
+
+func volumeHC(binds ...string) *HostConfig { return &HostConfig{Binds: binds} }
+
+func TestNamedVolumePersistsAcrossContainers(t *testing.T) {
+	f := newFixture(t)
+	writer := func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		for _, b := range s.Binds {
+			if b.Target == "/vol" {
+				os.WriteFile(filepath.Join(b.Source, "test.txt"), []byte("persistent"), 0o644)
+			}
+		}
+		return 0
+	}
+	reader := func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		for _, b := range s.Binds {
+			if b.Target == "/vol" {
+				d, _ := os.ReadFile(filepath.Join(b.Source, "test.txt"))
+				s.Stdout.Write(d)
+			}
+		}
+		return 0
+	}
+	f.rt.Program("/bin/sh", writer)
+	a, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("goldenvol:/vol")}, "writer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.e.Volumes.Has("goldenvol") {
+		t.Fatal("volume not created on first use")
+	}
+	f.e.Start(a)
+	waitFor(t, f.e, a, "")
+	// The mount point exists inside the container's own rootfs.
+	if fi, err := os.Stat(filepath.Join(f.layout.Containers(), a, "rootfs/vol")); err != nil || !fi.IsDir() {
+		t.Fatal("mount point not created in the container filesystem")
+	}
+	// In use while the (stopped) container exists.
+	if err := f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("volume removed while referenced: %v", err)
+	}
+	// Remove the container and the image's data stays; a new container sees it.
+	if err := f.e.Remove(a, false); err != nil {
+		t.Fatal(err)
+	}
+	f.rt.Program("/bin/sh", reader)
+	b, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("goldenvol:/vol")}, "reader", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.e.Start(b)
+	waitFor(t, f.e, b, "")
+	c, _ := f.e.Lookup(b)
+	es, _, _ := c.Logger().Read(logsAll())
+	if len(es) != 1 || es[0].Log != "persistent" {
+		t.Fatalf("recreated container does not see the data: %+v", es)
+	}
+	// Auto-removed containers keep named volumes too.
+	f.e.Remove(b, false)
+	d, _, _ := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &HostConfig{Binds: []string{"goldenvol:/vol"}, AutoRemove: true}}, "", "")
+	f.e.Start(d)
+	waitFor(t, f.e, d, "removed")
+	if !f.e.Volumes.Has("goldenvol") {
+		t.Fatal("--rm deleted a named volume")
+	}
+	if err := f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); err != nil {
+		t.Fatalf("unused volume not removable: %v", err)
+	}
+	// An image removal never touches volumes (they are not image data).
+	if _, err := os.Stat(f.e.Volumes.DataPath("goldenvol")); !os.IsNotExist(err) {
+		t.Fatal("volume data left after removal")
+	}
+}
+
+func TestMountsAPIAndHostileMounts(t *testing.T) {
+	f := newFixture(t)
+	mk := func(m string) (string, error) {
+		id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &HostConfig{Mounts: []json.RawMessage{json.RawMessage(m)}}}, "", "")
+		return id, err
+	}
+	if _, err := mk(`{"Type":"volume","Source":"viaMount","Target":"/m"}`); err != nil {
+		t.Fatal(err)
+	}
+	if !f.e.Volumes.Has("viaMount") {
+		t.Fatal("--mount type=volume did not create the volume")
+	}
+	if _, err := mk(`{"Type":"volume","Source":"","Target":"/anon"}`); err != nil {
+		t.Fatalf("anonymous volume: %v", err)
+	}
+	for _, tc := range []struct {
+		name, mount string
+		kind        errdefs.Kind
+	}{
+		{"read-only", `{"Type":"volume","Source":"v1","Target":"/m","ReadOnly":true}`, errdefs.KindUnsupported},
+		{"tmpfs", `{"Type":"tmpfs","Target":"/m"}`, errdefs.KindUnsupported},
+		{"unknown type", `{"Type":"npipe","Source":"x","Target":"/m"}`, errdefs.KindInvalid},
+		{"traversal name", `{"Type":"volume","Source":"../../etc","Target":"/m"}`, errdefs.KindInvalid},
+		{"slash name", `{"Type":"volume","Source":"a/b","Target":"/m"}`, errdefs.KindInvalid},
+		{"driver", `{"Type":"volume","Source":"v2","Target":"/m","VolumeOptions":{"DriverConfig":{"Name":"nfs"}}}`, errdefs.KindInvalid},
+		{"driver opts", `{"Type":"volume","Source":"v3","Target":"/m","VolumeOptions":{"DriverConfig":{"Options":{"type":"tmpfs"}}}}`, errdefs.KindUnsupported},
+		{"relative target", `{"Type":"volume","Source":"v4","Target":"m"}`, errdefs.KindInvalid},
+		{"root target", `{"Type":"volume","Source":"v5","Target":"/"}`, errdefs.KindInvalid},
+		{"proc target", `{"Type":"volume","Source":"v6","Target":"/proc/self"}`, errdefs.KindInvalid},
+		{"managed file", `{"Type":"volume","Source":"v7","Target":"/etc/hosts"}`, errdefs.KindInvalid},
+		{"relative bind", `{"Type":"bind","Source":"rel/path","Target":"/m"}`, errdefs.KindInvalid},
+		{"host bind outside policy", `{"Type":"bind","Source":"/tmp","Target":"/m"}`, errdefs.KindForbidden},
+		{"file in the image", `{"Type":"volume","Source":"v8","Target":"/data"}`, errdefs.KindInvalid},
+		{"malformed", `{"Type":`, errdefs.KindInvalid},
+	} {
+		if _, err := mk(tc.mount); errdefs.KindOf(err) != tc.kind {
+			t.Errorf("%s: kind %v err %v", tc.name, errdefs.KindOf(err), err)
+		}
+	}
+	// Refused creates leave no volume behind that a traversal name could name.
+	for _, v := range f.e.Volumes.List() {
+		if strings.ContainsAny(v.Name, "/.") && v.Name != "viaMount" && len(v.Name) != 64 {
+			t.Errorf("unexpected volume %q", v.Name)
+		}
+	}
+	// Duplicate targets and the old -v syntax.
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("d1:/same", "d2:/same")}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("duplicate mount point: %v", err)
+	}
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("../x:/m")}, "", ""); errdefs.KindOf(err) != errdefs.KindForbidden && errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("-v ../x: %v", err)
+	}
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("onlyone")}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("bad spec: %v", err)
+	}
+}
