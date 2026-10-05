@@ -40,11 +40,20 @@ func (e *Engine) Start(ref string) error {
 	if err := e.persist(c); err != nil {
 		return err
 	}
-	proc, err := e.Runtime.Start(spec)
+	fws, assigns, err := e.openPorts(c)
 	if err != nil {
 		e.startFailed(c, err)
 		return err
 	}
+	proc, err := e.Runtime.Start(spec)
+	if err != nil {
+		for _, f := range fws {
+			f.Close()
+		}
+		e.startFailed(c, err)
+		return err
+	}
+	c.forwarders, c.ports = fws, assigns
 	st := &c.rec.State
 	st.Status = StatusRunning
 	st.Pid = proc.Pid()
@@ -194,6 +203,7 @@ func (e *Engine) monitor(c *Container, proc runtime.Process, done chan struct{})
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
 	c.proc = nil
+	c.closePortsLocked()
 	c.killExecsLocked()
 	c.stdin.end()
 	c.stdin = newStdinBroker()

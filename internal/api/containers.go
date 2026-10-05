@@ -87,7 +87,7 @@ func (s *Server) listContainers(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, map[string]any{
 			"Id": c.ID, "Names": []string{"/" + c.Name}, "Image": c.ImageRef, "ImageID": string(c.Image),
-			"Command": command(c), "Created": c.Created.Unix(), "Ports": []any{}, "Labels": nonNilMap(c.Config.Labels),
+			"Command": command(c), "Created": c.Created.Unix(), "Ports": portsList(c), "Labels": nonNilMap(c.Config.Labels),
 			"State": apiStatus(c.State), "Status": statusText(c.State),
 			"HostConfig":      map[string]string{"NetworkMode": "host"},
 			"NetworkSettings": map[string]any{"Networks": map[string]any{"host": map[string]any{}}},
@@ -180,7 +180,7 @@ func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
 		"GraphDriver": map[string]any{"Name": "thothdock-copy", "Data": map[string]string{"RootDir": filepath.Join(dir, "rootfs")}},
 		"Mounts":      mounts(rec), "Config": cfg,
 		"NetworkSettings": map[string]any{
-			"Bridge": "", "SandboxID": "", "HairpinMode": false, "Ports": map[string]any{},
+			"Bridge": "", "SandboxID": "", "HairpinMode": false, "Ports": portsMap(rec),
 			"SandboxKey": "", "Networks": map[string]any{"host": map[string]any{"NetworkID": "host"}},
 		},
 	})
@@ -309,4 +309,40 @@ func (s *Server) pruneContainers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ContainersDeleted": deleted, "SpaceReclaimed": 0})
+}
+
+// portsList is the "Ports" array of GET /containers/json. A passthrough
+// mapping (host port == container port, no forwarder) is listed as exposed
+// only, because ThothDock does not control where that service listens.
+func portsList(r engine.Record) []map[string]any {
+	out := []map[string]any{}
+	for _, p := range r.Ports {
+		if p.Passthrough {
+			out = append(out, map[string]any{"PrivatePort": p.ContainerPort, "Type": "tcp"})
+			continue
+		}
+		out = append(out, map[string]any{"IP": p.HostIP, "PrivatePort": p.ContainerPort, "PublicPort": p.HostPort, "Type": "tcp"})
+	}
+	return out
+}
+
+// portsMap is NetworkSettings.Ports: published ports map to their host
+// bindings, exposed-but-unpublished ones to null, as Docker reports them.
+func portsMap(r engine.Record) map[string]any {
+	out := map[string]any{}
+	for k := range r.Config.ExposedPorts {
+		out[k] = nil
+	}
+	for _, p := range r.Ports {
+		k := strconv.Itoa(p.ContainerPort) + "/tcp"
+		if p.Passthrough {
+			if _, ok := out[k]; !ok {
+				out[k] = nil
+			}
+			continue
+		}
+		list, _ := out[k].([]map[string]string)
+		out[k] = append(list, map[string]string{"HostIp": p.HostIP, "HostPort": strconv.Itoa(p.HostPort)})
+	}
+	return out
 }

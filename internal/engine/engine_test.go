@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -294,8 +296,7 @@ func TestUnsupportedFeaturesAreRefused(t *testing.T) {
 	tr := true
 	cases := map[string]HostConfig{
 		"privileged": {Privileged: true}, "memory": {Memory: 1 << 20}, "cpus": {NanoCpus: 1e9},
-		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "ports": {PortBindings: map[string][]PortBinding{"80/tcp": {{HostPort: "8080"}}}},
-		"restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
+		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
 		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume-ro": {Binds: []string{"data1:/vol:ro"}},
 		"ro-bind": {Binds: []string{"/tmp:/x:ro"}},
 	}
@@ -696,5 +697,209 @@ func TestMountsAPIAndHostileMounts(t *testing.T) {
 	}
 	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("onlyone")}, "", ""); errdefs.KindOf(err) != errdefs.KindInvalid {
 		t.Fatalf("bad spec: %v", err)
+	}
+}
+
+func freePort(t *testing.T) int {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// serveHTTPish runs a tiny server on the "container's" network (the device's).
+func serveGreeting(cp int) func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+	return func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(cp)))
+		if err != nil {
+			return 1
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Write([]byte("hello from the container\n"))
+				c.Close()
+			}
+		}()
+		<-ctx.Done()
+		ln.Close()
+		return 0
+	}
+}
+
+func dialGreeting(addr string) (string, error) {
+	c, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	b, err := io.ReadAll(c)
+	return string(b), err
+}
+
+func TestPublishedPortLifecycle(t *testing.T) {
+	f := newFixture(t)
+	cp := freePort(t)
+	f.rt.Program("/bin/sh", serveGreeting(cp))
+	key := strconv.Itoa(cp) + "/tcp"
+	id, warnings, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{key: {{HostPort: ""}}}}}, "web1", "")
+	if err != nil || len(warnings) > 1 {
+		t.Fatalf("%v %v", warnings, err)
+	}
+	// Nothing listens before start.
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := f.e.Lookup(id)
+	ports := c.Snapshot().Ports
+	if len(ports) != 1 || ports[0].HostIP != "127.0.0.1" || ports[0].ContainerPort != cp || ports[0].HostPort == 0 || ports[0].HostPort == cp {
+		t.Fatalf("assignments %+v", ports)
+	}
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(ports[0].HostPort))
+	var got string
+	for i := 0; i < 50; i++ { // the server inside needs a moment to listen
+		if got, err = dialGreeting(addr); err == nil && got != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got != "hello from the container\n" {
+		t.Fatalf("through the published port: %q %v", got, err)
+	}
+	// Stop: the listener is gone and the port is free again.
+	zero := 0
+	f.e.Stop(id, &zero)
+	waitFor(t, f.e, id, "")
+	if _, err := dialGreeting(addr); err == nil {
+		t.Fatal("listener survived the container")
+	}
+	if p := c.Snapshot().Ports; len(p) != 0 {
+		t.Fatalf("assignments kept after exit: %+v", p)
+	}
+	// Start again: published again (a new ephemeral port is fine).
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	p2 := c.Snapshot().Ports
+	if len(p2) != 1 {
+		t.Fatalf("%+v", p2)
+	}
+	addr2 := net.JoinHostPort("127.0.0.1", strconv.Itoa(p2[0].HostPort))
+	// Remove (force): no listener, no process.
+	if err := f.e.Remove(id, true); err != nil {
+		t.Fatal(err)
+	}
+	if conn, err := net.DialTimeout("tcp", addr2, 500*time.Millisecond); err == nil {
+		conn.Close()
+		t.Fatal("orphan listener after remove")
+	}
+}
+
+func TestPublishedPortCollisionAndPolicy(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	// A host port something else owns: start fails cleanly, container stays created.
+	busy, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer busy.Close()
+	bp := strconv.Itoa(busy.Addr().(*net.TCPAddr).Port)
+	cp := freePort(t)
+	id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{strconv.Itoa(cp) + "/tcp": {{HostPort: bp}}}}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.e.Start(id)
+	if errdefs.KindOf(err) != errdefs.KindConflict || !strings.Contains(err.Error(), "port is already allocated") {
+		t.Fatalf("collision: %v", err)
+	}
+	if r := f.e.List()[0]; r.State.Status != StatusCreated || r.State.Pid != 0 {
+		t.Fatalf("%+v", r.State)
+	}
+	// Two mappings, the second collides: the first listener is released again.
+	free := freePort(t)
+	id2, _, _ := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{
+			"7001/tcp": {{HostPort: strconv.Itoa(free)}}, "7002/tcp": {{HostPort: bp}}}}}, "", "")
+	if err := f.e.Start(id2); err == nil {
+		t.Fatal("started despite a collision")
+	}
+	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(free)))
+	if err != nil {
+		t.Fatalf("a failed start leaked a listener: %v", err)
+	}
+	l.Close()
+
+	mk := func(hc HostConfig) error {
+		_, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &hc}, "", "")
+		return err
+	}
+	pb := func(k, ip, port string) HostConfig {
+		return HostConfig{PortBindings: map[string][]PortBinding{k: {{HostIP: ip, HostPort: port}}}}
+	}
+	for name, tc := range map[string]struct {
+		hc   HostConfig
+		kind errdefs.Kind
+	}{
+		"udp":              {pb("53/udp", "", "5353"), errdefs.KindUnsupported},
+		"sctp":             {pb("80/sctp", "", "8080"), errdefs.KindUnsupported},
+		"all interfaces":   {pb("80/tcp", "0.0.0.0", "8080"), errdefs.KindForbidden},
+		"lan address":      {pb("80/tcp", "192.168.1.5", "8080"), errdefs.KindForbidden},
+		"bad ip":           {pb("80/tcp", "not-an-ip", "8080"), errdefs.KindInvalid},
+		"host port zero":   {pb("80/tcp", "", "0"), errdefs.KindInvalid},
+		"host port huge":   {pb("80/tcp", "", "70000"), errdefs.KindInvalid},
+		"host port text":   {pb("80/tcp", "", "http"), errdefs.KindInvalid},
+		"container port 0": {pb("0/tcp", "", "8080"), errdefs.KindInvalid},
+		"container text":   {pb("web/tcp", "", "8080"), errdefs.KindInvalid},
+		"host range":       {pb("80/tcp", "", "8000-8010"), errdefs.KindInvalid},
+	} {
+		if err := mk(tc.hc); errdefs.KindOf(err) != tc.kind {
+			t.Errorf("%s: kind %v err %v", name, errdefs.KindOf(err), err)
+		}
+	}
+	// Loopback spellings are accepted; the same host port twice is not.
+	if err := mk(pb("80/tcp", "127.0.0.1", "18080")); err != nil {
+		t.Errorf("loopback: %v", err)
+	}
+	if err := mk(HostConfig{PortBindings: map[string][]PortBinding{"80/tcp": {{HostPort: "18081"}}, "81/tcp": {{HostPort: "18081"}}}}); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Errorf("duplicate host port: %v", err)
+	}
+	// The operator may allow non-loopback publishing explicitly.
+	f.cfg.AllowNonLoopbackPublish = true
+	f.open()
+	if err := mk(pb("80/tcp", "0.0.0.0", "8080")); err != nil {
+		t.Errorf("explicitly allowed non-loopback: %v", err)
+	}
+}
+
+func TestPublishAllAndPassthroughWarning(t *testing.T) {
+	f := newFixture(t)
+	cp := freePort(t)
+	f.rt.Program("/bin/sh", serveGreeting(cp))
+	id, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image, ExposedPorts: map[string]struct{}{strconv.Itoa(cp) + "/tcp": {}, "53/udp": {}}},
+		HostConfig: &HostConfig{PublishAllPorts: true}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := f.e.Lookup(id)
+	p := c.Snapshot().Ports
+	if len(p) != 1 || p[0].ContainerPort != cp || p[0].HostIP != "127.0.0.1" {
+		t.Fatalf("-P published %+v", p)
+	}
+	f.e.Remove(id, true)
+	// host == container port: no forwarder, and the user is told.
+	_, w, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image},
+		HostConfig: &HostConfig{PortBindings: map[string][]PortBinding{"8080/tcp": {{HostPort: "8080"}}}}}, "", "")
+	if err != nil || len(w) == 0 || !strings.Contains(strings.Join(w, " "), "equals container port") {
+		t.Fatalf("%v %v", w, err)
 	}
 }

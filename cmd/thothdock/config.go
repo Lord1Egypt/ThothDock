@@ -35,6 +35,7 @@ type options struct {
 	kernelRelease string
 	resolvConf    string
 	allowBind     multiFlag
+	allowPublish  bool
 	devTCP        string
 	debug         bool
 }
@@ -50,6 +51,7 @@ func (o *options) register(fs *flag.FlagSet) {
 	fs.StringVar(&o.kernelRelease, "kernel-release", "", "kernel release reported inside containers (default: the real one)")
 	fs.StringVar(&o.resolvConf, "resolv-conf", "/etc/resolv.conf", "resolver configuration for the daemon and containers")
 	fs.Var(&o.allowBind, "allow-bind", "host directory containers may bind-mount from (repeatable; default none)")
+	fs.BoolVar(&o.allowPublish, "allow-publish-nonlocal", false, "let -p name a host address other than loopback (default: published ports are reachable from this device only)")
 	fs.StringVar(&o.devTCP, "dev-tcp", "", "DEVELOPMENT ONLY: also listen on this loopback TCP address (127.0.0.1:PORT), unauthenticated")
 	fs.BoolVar(&o.debug, "debug", false, "log every request")
 }

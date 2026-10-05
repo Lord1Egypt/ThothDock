@@ -48,8 +48,6 @@ func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 		return nil, unsupported("--volumes-from", "not implemented yet")
 	case len(hc.Links) > 0:
 		return nil, unsupported("container links", "there is no container network")
-	case len(hc.PortBindings) > 0 || hc.PublishAllPorts:
-		return nil, unsupported("port publishing", "planned; containers already share the device network, so a service listening on port N is reachable at 127.0.0.1:N")
 	case hc.ReadonlyRootfs:
 		return nil, unsupported("read-only root filesystems", "PRoot cannot enforce read-only mounts")
 	case len(hc.Tmpfs) > 0:
@@ -148,6 +146,15 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if err != nil {
 		return "", nil, err
 	}
+	exposed := req.ExposedPorts
+	if exposed == nil {
+		exposed = img.Config.Config.ExposedPorts
+	}
+	_, portWarnings, err := e.planPorts(hc, exposed)
+	if err != nil {
+		return "", nil, err
+	}
+	warnings = append(warnings, portWarnings...)
 
 	cfg := req.ContainerConfig
 	ic := img.Config.Config

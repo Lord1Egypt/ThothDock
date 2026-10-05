@@ -178,6 +178,8 @@ type Record struct {
 	Binds        []BindRecord    `json:"binds"`
 	State        State           `json:"state"`
 	RestartCount int             `json:"restartCount"`
+	// Ports are the ports published while the container runs; never persisted.
+	Ports []PortAssign `json:"-"`
 }
 
 // BindRecord is an approved bind mount.

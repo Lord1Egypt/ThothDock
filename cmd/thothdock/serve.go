@@ -112,7 +112,7 @@ func build(o *options, log *slog.Logger) (*stack, error) {
 		}
 		roots = append(roots, c)
 	}
-	eng, err := engine.New(l, images, puller, rt, engine.Config{AllowedBindRoots: roots, ResolvConf: o.resolvConf}, log)
+	eng, err := engine.New(l, images, puller, rt, engine.Config{AllowedBindRoots: roots, ResolvConf: o.resolvConf, AllowNonLoopbackPublish: o.allowPublish}, log)
 	if err != nil {
 		return nil, err
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/logs"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/portmap"
 	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
@@ -41,6 +42,9 @@ type Config struct {
 	ResolvConf string
 	// LogMaxSize is the rotation size of each container log.
 	LogMaxSize int64
+	// AllowNonLoopbackPublish lets -p name a host address other than
+	// loopback. Off by default: published ports are not exposed to the LAN.
+	AllowNonLoopbackPublish bool
 }
 
 // Engine manages containers.
@@ -71,7 +75,10 @@ type Container struct {
 	stdin   *stdinBroker
 	waiters []*waiter
 	execs   map[string]*Exec
-	gone    bool // removed
+	// forwarders and ports are the published ports of the current run.
+	forwarders []*portmap.Forwarder
+	ports      []PortAssign
+	gone       bool // removed
 }
 
 type waiter struct {
@@ -232,7 +239,9 @@ func (e *Engine) lookupLocked(ref string) (*Container, error) {
 func (c *Container) Snapshot() Record {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.rec
+	r := c.rec
+	r.Ports = append([]PortAssign(nil), c.ports...)
+	return r
 }
 
 // Dir is the container's directory.
