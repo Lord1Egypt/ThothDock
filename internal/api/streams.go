@@ -63,6 +63,21 @@ func (f *frameWriter) write(stream string, p []byte) error {
 	return nil
 }
 
+// stream adapts one named stream of f to an io.Writer.
+func (f *frameWriter) stream(name string) io.Writer { return streamAdapter{f, name} }
+
+type streamAdapter struct {
+	f    *frameWriter
+	name string
+}
+
+func (a streamAdapter) Write(p []byte) (int, error) {
+	if err := a.f.write(a.name, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func wanted(stream string, stdout, stderr bool) bool {
 	return stream == "stdout" && stdout || stream == "stderr" && stderr
 }

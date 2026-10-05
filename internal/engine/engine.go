@@ -54,6 +54,7 @@ type Engine struct {
 	mu         sync.Mutex
 	containers map[string]*Container
 	names      map[string]string // name -> ID
+	execs      map[string]*Exec
 }
 
 // Container is a live container object.
@@ -67,6 +68,7 @@ type Container struct {
 	runDone chan struct{} // closed when the current run has ended
 	stdin   *stdinBroker
 	waiters []*waiter
+	execs   map[string]*Exec
 	gone    bool // removed
 }
 

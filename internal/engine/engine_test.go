@@ -42,7 +42,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f.reg.Image(t, "library/tiny", "1", oci.HostPlatform(), oci.ContainerConfig{Cmd: []string{"sh"}, Env: []string{"PATH=/bin"}}, true,
 		[]registrytest.File{
-			{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/noexec", Body: "x", Mode: 0o644},
+			{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/noexec", Body: "x", Mode: 0o644}, {Name: "bin/echo", Body: "#!", Mode: 0o755},
 			{Name: "etc/", Type: tar.TypeDir}, {Name: "etc/passwd", Body: "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n"},
 			{Name: "data", Body: "original"},
 		})
@@ -460,3 +460,111 @@ func TestHostsResolvAndHostnameFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestExecRunsInTheContainerRootfsAndEnvironment(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		fmt.Fprintf(s.Stdout, "args=%s cwd=%s uid=%d env=%v\n", strings.Join(s.Args[1:], ","), s.Cwd, s.UID, hasKV(s.Env, "X=1"))
+		fmt.Fprint(s.Stderr, "e\n")
+		return 7
+	})
+	id := f.create("sh")
+	// Not running: refused.
+	if _, err := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}}); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("exec in a stopped container: %v", err)
+	}
+	f.e.Start(id)
+	defer f.e.Remove(id, true)
+	if _, err := f.e.ExecCreate(id, ExecConfig{}); errdefs.KindOf(err) != errdefs.KindInvalid {
+		t.Fatalf("no command: %v", err)
+	}
+	if _, err := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}, Privileged: true}); errdefs.KindOf(err) != errdefs.KindUnsupported {
+		t.Fatalf("privileged: %v", err)
+	}
+	xid, err := f.e.ExecCreate(id[:12], ExecConfig{Cmd: StrSlice{"echo", "a", "b"}, Env: []string{"X=1"}, WorkingDir: "/etc", User: "nobody", AttachStdout: true, AttachStderr: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, _ := f.e.ExecGet(xid)
+	var out, errb strings.Builder
+	if err := f.e.ExecStart(x, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	<-x.Done()
+	st := x.Snapshot()
+	if out.String() != "args=a,b cwd=/etc uid=65534 env=true\n" || errb.String() != "e\n" || st.ExitCode == nil || *st.ExitCode != 7 || st.Running {
+		t.Fatalf("out=%q err=%q state=%+v", out.String(), errb.String(), st)
+	}
+	if err := f.e.ExecStart(x, &out, &errb); errdefs.KindOf(err) != errdefs.KindConflict {
+		t.Fatalf("second start: %v", err)
+	}
+	if _, err := f.e.ExecGet("nope"); errdefs.KindOf(err) != errdefs.KindNotFound {
+		t.Fatal(err)
+	}
+	// A command that does not exist is a start failure with Docker's text.
+	bad, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"nosuchcmd"}})
+	bx, _ := f.e.ExecGet(bad)
+	if err := f.e.ExecStart(bx, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "executable file not found") {
+		t.Fatalf("%v", err)
+	}
+	if st := bx.Snapshot(); st.ExitCode == nil || *st.ExitCode != 126 {
+		t.Fatalf("%+v", st)
+	}
+}
+
+func TestExecIsKilledWhenTheContainerStopsAndForgottenOnRemove(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int { <-ctx.Done(); return 0 })
+	id := f.create("sh")
+	f.e.Start(id)
+	xid, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}})
+	x, _ := f.e.ExecGet(xid)
+	if err := f.e.ExecStart(x, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if !x.Snapshot().Running {
+		t.Fatal("exec not running")
+	}
+	zero := 0
+	f.e.Stop(id, &zero)
+	select {
+	case <-x.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("exec outlived its container")
+	}
+	if st := x.Snapshot(); st.Running || st.ExitCode == nil || *st.ExitCode != 137 {
+		t.Fatalf("%+v", st)
+	}
+	f.e.Remove(id, false)
+	if _, err := f.e.ExecGet(xid); errdefs.KindOf(err) != errdefs.KindNotFound {
+		t.Fatalf("exec record kept after the container was removed: %v", err)
+	}
+}
+
+func TestExecStdin(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		b, _ := io.ReadAll(in)
+		s.Stdout.Write(b)
+		return 0
+	})
+	id := f.create("sh")
+	f.e.Start(id)
+	defer f.e.Remove(id, true)
+	xid, _ := f.e.ExecCreate(id, ExecConfig{Cmd: StrSlice{"echo"}, AttachStdin: true, AttachStdout: true})
+	x, _ := f.e.ExecGet(xid)
+	var out strings.Builder
+	f.e.ExecStart(x, &out, io.Discard)
+	in := x.Stdin()
+	io.WriteString(in, "typed")
+	in.Close()
+	<-x.Done()
+	if out.String() != "typed" {
+		t.Fatalf("%q", out.String())
+	}
+}
+
+func hasKV(env []string, kv string) bool { return contains(env, kv) }

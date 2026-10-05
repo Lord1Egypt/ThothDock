@@ -56,6 +56,11 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /containers/{id}/logs", s.containerLogs)
 	m.HandleFunc("DELETE /containers/{id}", s.removeContainer)
 
+	m.HandleFunc("POST /containers/{id}/exec", s.execCreate)
+	m.HandleFunc("POST /exec/{id}/start", s.execStart)
+	m.HandleFunc("POST /exec/{id}/resize", s.execResize)
+	m.HandleFunc("GET /exec/{id}/json", s.execInspect)
+
 	m.HandleFunc("GET /images/json", s.listImages)
 	m.HandleFunc("POST /images/create", s.pullImage)
 	m.HandleFunc("GET /images/{rest...}", s.imageGet)
@@ -63,8 +68,6 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("DELETE /images/{rest...}", s.deleteImage)
 
 	for _, p := range []struct{ prefix, what string }{
-		{"/containers/{id}/exec", "docker exec (planned for the next milestone)"},
-		{"/exec/", "docker exec (planned for the next milestone)"},
 		{"/containers/{id}/pause", "pause/unpause (PRoot has no freezer cgroup)"},
 		{"/containers/{id}/unpause", "pause/unpause (PRoot has no freezer cgroup)"},
 		{"/containers/{id}/update", "resource updates (there are no cgroups)"},

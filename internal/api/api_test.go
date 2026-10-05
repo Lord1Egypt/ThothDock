@@ -39,7 +39,7 @@ func newAPI(t *testing.T) *apiFixture {
 	l.Ensure()
 	reg := registrytest.New(t)
 	reg.Image(t, "library/tiny", "1", oci.HostPlatform(), oci.ContainerConfig{Cmd: []string{"/bin/sh"}}, true,
-		[]registrytest.File{{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}})
+		[]registrytest.File{{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}, {Name: "bin/echo", Body: "#!", Mode: 0o755}})
 	blobs := store.NewBlobs(l.Blobs(), l.Tmp())
 	is, err := image.Open(l.Images(), filepath.Join(l.Root, "refs.json"), l.Tmp(), blobs, quiet)
 	if err != nil {
@@ -118,8 +118,10 @@ func TestRoutesVersionsAndErrors(t *testing.T) {
 	expect(t, resp, body, 404, "No such image: ghost:1")
 	resp, body = f.do(t, "POST", "/networks/create", `{}`)
 	expect(t, resp, body, 501, "networks")
-	resp, body = f.do(t, "POST", "/containers/abc/exec", `{}`)
-	expect(t, resp, body, 501, "docker exec")
+	resp, body = f.do(t, "POST", "/containers/abc/exec", `{"Cmd":["ls"]}`)
+	expect(t, resp, body, 404, "No such container")
+	resp, body = f.do(t, "POST", "/exec/deadbeef/start", `{}`)
+	expect(t, resp, body, 404, "No such exec instance")
 	resp, body = f.do(t, "GET", "/nowhere", "")
 	expect(t, resp, body, 404, "page not found")
 	resp, body = f.do(t, "POST", "/containers/x/kill?signal=NOPE", "")
@@ -220,4 +222,71 @@ func TestRunFlowOverHTTP(t *testing.T) {
 	expect(t, resp, body, 204, "")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 404, "No such container")
+}
+
+func TestExecOverHTTP(t *testing.T) {
+	f := newAPI(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	f.rt.Program("/bin/echo", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		fmt.Fprint(s.Stdout, "out-data")
+		fmt.Fprint(s.Stderr, "err-data")
+		return 9
+	})
+	host := strings.TrimSuffix(f.image, ":1")
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+host+"&tag=1", "")
+	resp, body := f.do(t, "POST", "/v1.41/containers/create?name=xx", `{"Image":"`+f.image+`","Cmd":["/bin/sh"]}`)
+	expect(t, resp, body, 201, "Id")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true}`)
+	expect(t, resp, body, 409, "is not running")
+	f.do(t, "POST", "/v1.41/containers/xx/start", "")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true,"AttachStderr":true,"Privileged":true}`)
+	expect(t, resp, body, 501, "privileged")
+	resp, body = f.do(t, "POST", "/v1.41/containers/xx/exec", `{"Cmd":["echo"],"AttachStdout":true,"AttachStderr":true}`)
+	expect(t, resp, body, 201, "Id")
+	var created struct{ Id string }
+	json.Unmarshal([]byte(body), &created)
+	resp, body = f.do(t, "GET", "/v1.41/exec/"+created.Id+"/json", "")
+	expect(t, resp, body, 200, `"ExitCode":null`)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(f.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	payload := `{"Detach":false,"Tty":false}`
+	fmt.Fprintf(conn, "POST /v1.41/exec/%s/start HTTP/1.1\r\nHost: x\r\nUpgrade: tcp\r\nConnection: Upgrade\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s", created.Id, len(payload), payload)
+	br := bufio.NewReader(conn)
+	status, _ := br.ReadString('\n')
+	if !strings.HasPrefix(status, "HTTP/1.1 101") {
+		t.Fatalf("status %q", status)
+	}
+	for {
+		l, _ := br.ReadString('\n')
+		if l == "\r\n" {
+			break
+		}
+	}
+	got := map[byte]string{}
+	for {
+		var hdr [8]byte
+		if _, err := io.ReadFull(br, hdr[:]); err != nil {
+			break
+		}
+		n := binary.BigEndian.Uint32(hdr[4:])
+		p := make([]byte, n)
+		io.ReadFull(br, p)
+		got[hdr[0]] += string(p)
+	}
+	if got[1] != "out-data" || got[2] != "err-data" {
+		t.Fatalf("frames %q", got)
+	}
+	// The exit code is ready the moment the stream ends.
+	resp, body = f.do(t, "GET", "/v1.41/exec/"+created.Id+"/json", "")
+	expect(t, resp, body, 200, `"ExitCode":9`)
+	expect(t, resp, body, 200, `"Running":false`)
+	resp, body = f.do(t, "POST", "/v1.41/exec/"+created.Id+"/start", `{"Detach":true}`)
+	expect(t, resp, body, 409, "already been started")
+	resp, body = f.do(t, "POST", "/v1.41/exec/"+created.Id+"/resize?h=0&w=5", "")
+	expect(t, resp, body, 400, "invalid terminal size")
+	f.do(t, "DELETE", "/v1.41/containers/xx?force=1", "")
 }
