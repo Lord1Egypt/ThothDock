@@ -19,6 +19,9 @@
 #
 # Output is reproducible: fixed timestamps, owner root:root, uncompressed (the placeholders are ~100 bytes; a compressor is a host-dependent byte source).
 set -eu
+# File and directory modes end up in the packages: do not inherit the caller's umask (a 002 build user
+# makes drwxrwxr-x directories and a different package).
+umask 022
 OUT="${1:?usage: build.sh OUT_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VERSION='9999:1.0+thothdock.1'
@@ -32,6 +35,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 build() { # dir -> deb
+    chmod -R go-w "$1"
     ( cd "$1" && find . -exec touch -h -d "@$EPOCH" {} + )
     dpkg-deb --root-owner-group -Znone --build "$1" "$OUT/$2" >/dev/null
 }

@@ -21,6 +21,11 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: Engine Guard packages do not depend on the caller's umask
+        run: |
+          (umask 022; sh engine-guard/build.sh "$RUNNER_TEMP/eg022" >/dev/null)
+          (umask 002; sh engine-guard/build.sh "$RUNNER_TEMP/eg002" >/dev/null)
+          diff -r "$RUNNER_TEMP/eg022" "$RUNNER_TEMP/eg002"
       - name: vendor directory is in sync with go.mod
         run: |
           go mod vendor
