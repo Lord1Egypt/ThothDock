@@ -24,7 +24,7 @@ ThothDock is an independent project. It is **not affiliated with Docker, Inc.**
 
 ## What works (verified)
 
-Verified on 2026-10-04 with Docker CLI 29.8.1. The phone was a Samsung SM-A165F
+Verified on 2026-10-04 (engine) and 2026-10-05 (exec, volumes, ports, Engine Guard, Containers screen) with Docker CLI 29.8.1. The phone was a Samsung SM-A165F
 running Android 16, unrooted, with the PRoot from ThothTerm Trixie 0.2.1. The PC
 was x86_64 Linux. See [docs/evidence/PHASE1.md](docs/evidence/PHASE1.md) for the
 transcripts.
@@ -34,6 +34,9 @@ transcripts.
 - `docker run` and `docker run --rm`, with exit codes and the error messages the CLI maps to exit codes 125, 126 and 127.
 - Piped stdin with `docker run -i`, and interactive TTY sessions with `docker run -it alpine sh` or `docker run -it debian bash`, including window resizing.
 - `docker run -d`, `logs` (`-f`, `-t`, `--tail`), `stop` (stop signal, then SIGKILL), `start`, `restart`, `kill`, `wait`, `inspect`, `rm`, `container prune`, `rmi`, `tag`, `history`.
+- `docker exec` (`-i`, `-t`, `-it`, `--user`, `--workdir`, `--env`) with exit codes.
+- Named volumes (`docker volume create/ls/inspect/rm/prune`, `-v NAME:/path`) that persist across containers.
+- `-p` TCP port publishing, bound to `127.0.0.1` by default; collisions are reported and listeners are closed on stop, removal and daemon exit.
 - `apk add` inside Alpine and `apt-get update && apt-get install` inside Debian, on the phone.
 
 ## What does not work, and why
@@ -50,8 +53,8 @@ docker: Error response from daemon: ThothDock does not support memory limits:
 containers run under PRoot without cgroups, so the limit would not be enforced
 ```
 
-Containers share the device network and process table. `docker exec`, named
-volumes, port publishing, networks, build, and Compose are planned.
+Containers share the device network and process table. Networks, `docker build`
+and Compose are not implemented. UDP port publishing is refused.
 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) has the full table, and
 [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) has the threat model.
 
@@ -74,7 +77,7 @@ the daemon is stopped.
 
 ThothDock runs inside a ThothTerm app. In the isolated QA build
 `com.thothterm.debian.qa.thothdock` (AndroidThothTerm branch
-`qa/thothdock-integration`), you open the terminal and type `docker …`:
+`feature/thothdock-golden`), you open the terminal and type `docker …`:
 
 ```
 ThothTerm terminal ─ Docker CLI ─ unix:///run/thothdock/thothdock.sock
@@ -86,6 +89,14 @@ The stock Docker CLI (29.8.1) is bundled unmodified; `dockerd`, `containerd` and
 for the architecture, the measured lifecycle behaviour and the limits, and
 [docs/branding/VISUAL_IDENTITY.md](docs/branding/VISUAL_IDENTITY.md) for the
 look. Nothing is merged into any ThothTerm production edition yet.
+
+In Debian and Ubuntu guests **Engine Guard** keeps `apt` from installing a real
+`dockerd`/`containerd`/`runc` over ThothDock (placeholder packages at epoch
+9999, an apt pin and a dpkg hook); `thothdock doctor` reports its state, and the
+Docker CLI itself stays updatable. The Android **Containers** screen
+(Settings → Containers) is a client of the same API: list, Start, Stop,
+Restart, Logs, Delete and Shell. It shows no CPU or memory figures because the
+engine has no cgroups to read.
 
 ## Development
 

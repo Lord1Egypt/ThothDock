@@ -32,7 +32,11 @@ is the real boundary.
 | **A** | Malicious OCI image content (registry, manifest, layers) | **Defended** | HTTPS only, redirects only to HTTPS; manifests and blobs size-bounded and sha256-checked before they enter the store; the platform manifest checked against the index's size; layers re-hashed before use and checked against the config's diff IDs while applied; unsafe layer entries (`..`, absolute paths, NUL, hard links outside the root or to directories, invalid whiteouts, unknown types) fail the whole pull; staging directories are discarded on any error; setuid, setgid and sticky bits are dropped; device nodes and FIFOs are skipped |
 | **B** | Accidental interference between containers | **Partial** | Each container has a private copy of the image rootfs (two containers never share files; tested). They do share the device network, process table, `/dev`, `/proc` and `/sys` |
 | **C** | Hostile local Android apps | **Defended where Android allows** | The data root is owner-only (0700) in app-private storage; the API socket is mode 0600 in an owner-only directory; nothing listens on TCP unless `--dev-tcp` is given, and that only accepts a loopback address and prints a warning (any app on the device can reach loopback, so it is for development only) |
-| **D** | Hostile network clients | **Defended** | No network listener by default; `-p` publishing is not implemented; when it is, it will bind 127.0.0.1 unless LAN exposure is explicitly requested |
+| **D** | Hostile network clients | **Defended by default** | No network listener unless the user publishes a port; `-p` binds 127.0.0.1 unless `serve --allow-publish-nonlocal` is given; the Docker API is never exposed on TCP (`--dev-tcp` accepts loopback only and warns); UDP publishing is refused |
+| **F** | Other apps on the same device reaching a published port | **Not defended** | Loopback is device-wide on Android: any app (and `adb shell`) can connect to `127.0.0.1:<hostport>`. Publish only services you would expose to every app on the phone. The API socket, unlike a published port, is owner-only: the `shell` uid and other apps get `EACCES` (device-verified) |
+| **G** | A container being reachable more widely than its `-p` mapping says | **Documented gap** | ThothDock forwards to `127.0.0.1:<container port>` but cannot control which address the workload itself binds. A service listening on `0.0.0.0` is reachable on the device's LAN address whether or not it is published |
+| **H** | Apt or a user replacing ThothDock with a real engine in the Debian/Ubuntu guest | **Defended (Engine Guard)** | Placeholder packages at epoch 9999, an apt pin of priority 1001, and a dpkg pre-install hook that refuses real `docker.io`/`docker-ce`/`containerd`/`runc` builds. Guard is a safety rail for the user's own mistakes, not a defence against a hostile root in the guest |
+| **I** | Volume names or mounts used to escape the data root | **Defended** | Names follow Docker's pattern; data lives in `volumes/<name>/_data`; removal never follows symlinks; binds still need `--allow-bind` and canonicalisation; volumes in use cannot be removed |
 | **E** | A compromised container process | **Not defended** | It runs as the app's uid under ptrace translation and can reach everything the app can, including ThothDock's own data root through raw system calls. Do not run untrusted images with secrets in the same app |
 
 ## Extraction rules (threat A, in detail)
@@ -65,6 +69,7 @@ including mutation checks showing the tests fail when the rule is removed
   capabilities, devices, seccomp/AppArmor options, read-only rootfs, tmpfs,
   sysctls, `--network none`) return HTTP 501 with an explanation. They are
   never accepted and ignored.
+- `docker exec` runs in the container's own root filesystem with the container's environment; `--privileged` is refused, and the user/workdir/env of an exec are validated like a create.
 - Registry credentials from `X-Registry-Auth` are used for that pull only and
   are never logged or stored.
 

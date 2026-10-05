@@ -34,14 +34,15 @@ host with the Docker CLI, **P** is the Android phone with the Docker CLI,
 | `-e`, `--env`, `-w`, `--entrypoint`, `--name`, `--hostname`, `--label` | SUPPORTED | | `uname -n` / `hostname` show the device name (no UTS namespace); `/etc/hostname` and `$HOSTNAME` are the container's | H T (`--hostname` T only) |
 | `--dns`, `--dns-search`, `--dns-option`, `--add-host` | SUPPORTED | Per-container `resolv.conf` / `hosts`, bound in by PRoot | — | T |
 | `-v /host/dir:/path` | PARTIAL | Only below `serve --allow-bind` directories, canonicalised; never the data root | `:ro` refused (PRoot cannot enforce it) | T |
-| Named volumes, `--mount`, `--volumes-from`, anonymous `VOLUME`s | PLANNED | Anonymous image volumes stay inside the container's filesystem (with a warning) | — | Phase 2 |
-| `-p`, `-P` port publishing | PLANNED | Containers share the device network already | Will bind 127.0.0.1 by default | Phase 2 |
+| Named volumes: `docker volume create/ls/inspect/rm/prune`, `-v NAME:/path`, `--mount type=volume\|bind` | SUPPORTED | Directory `volumes/<name>/_data` in the data root; created on first use; survives container removal; `rm`/`prune` refuse volumes in use (`-f` does not override); removal never follows symlinks | `:ro` and `--mount type=tmpfs` refused; no copy-up of image content into a new volume; anonymous volumes only for an empty `-v /path`, not from an image's `VOLUME`; `--volumes-from` PLANNED; no volume drivers | H P T |
+| `-p [127.0.0.1:]host:container[/tcp]` TCP publishing | PARTIAL | A user-space forwarder listens on the host side and connects to `127.0.0.1:<container port>` (containers share the device network). Binds before the process starts; a collision fails `run` with a clear error; listeners close on stop, rm, daemon exit and crash. `ps` and `inspect` report the mapping | Default bind is **127.0.0.1**; other addresses need `serve --allow-publish-nonlocal`; **UDP refused**; `-P` refused; the workload's own bind address is not controlled, so a service that listens on `0.0.0.0` inside is reachable on the device network regardless of `-p` | H P T |
 | `--network host` / default | PARTIAL | Every container behaves as `--network host` | No isolation | H P |
 | `--network none`, user networks, `docker network *`, links | UNSUPPORTED | Needs network namespaces | — | — |
-| `docker exec` | PLANNED | Same rootfs, environment and binds via a second PRoot tracee | Will not share a PID namespace | Next milestone |
+| `docker exec` (`-i`, `-t`, `-it`, `--user`, `--workdir`, `--env`, `-d`) | SUPPORTED | A second PRoot tracee on the container's root filesystem, environment and binds; exit code propagated, start failures give 126/127 like dockerd; `exec inspect` and resize work | No shared PID view: the exec process is not listed in the container's process table; `--privileged` refused | H P T |
 | `--memory`, `--cpus`, `--cpu-shares`, `--pids-limit`, blkio, ulimits | UNSUPPORTED | Needs cgroups; refused, never silently ignored | — | — |
 | `--privileged`, `--cap-add/--cap-drop`, `--device`, `--gpus`, `--security-opt`, `--sysctl`, `--read-only`, `--tmpfs`, `--shm-size` | UNSUPPORTED | Needs kernel privileges or mounts | — | — |
 | `--restart` policies | PLANNED | | Only `no` accepted | Later |
+| Android Containers screen (QA build) | SUPPORTED | A client of this API only: list, Start, Stop, Restart, Logs, Delete (confirmed), Shell. Keeps no state of its own, so it always agrees with `docker ps -a` | No CPU/RAM graphs (the engine has no cgroups to read); no Compose | P |
 | `--init`, health checks | PLANNED | | Refused | Later |
 | `pause` / `unpause`, `stats`, `top`, `update` | UNSUPPORTED / PLANNED | No freezer cgroup; stats and top can come from `/proc` | — | Later |
 | `docker cp`, `export`, `diff`, `rename`, `commit` | PLANNED | | — | Later |
@@ -49,5 +50,6 @@ host with the Docker CLI, **P** is the Android phone with the Docker CLI,
 | `docker compose` | PLANNED | Should work naturally once networks, volumes, ports and events exist | — | After single-container lifecycle is complete |
 | `docker events`, `system df` | PLANNED | | — | Later |
 | Swarm, plugins, `docker push`, `import` | UNSUPPORTED / PLANNED | | — | — |
+| Engine Guard (QA build) | SUPPORTED | `docker.io`, `docker-ce`, `docker-engine`, `moby-engine`, `containerd`, `containerd.io`, `runc` are placeholder packages at epoch 9999 that apt pins and a dpkg hook protects, so `apt full-upgrade` and `apt install docker.io` cannot replace ThothDock with a real engine. `docker-cli`, `docker-compose` and `docker-buildx` stay installable and updatable | Podman/crun are not guarded | H P T |
 | Docker CLI inside the ThothTerm terminal (QA build) | SUPPORTED | Stock CLI 29.8.1 bundled as `libdocker.so`, `DOCKER_HOST=unix:///run/thothdock/thothdock.sock` set automatically | QA integration branch only; not in any released edition | Device-verified 2026-10-05 |
 | Daemon restart while containers run | PARTIAL | Containers end with the daemon; on restart, stale "running" state becomes `exited (137)` with an explanatory `State.Error`, and leftovers are killed | No live restore | T |

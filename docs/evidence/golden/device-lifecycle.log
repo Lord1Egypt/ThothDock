@@ -1,0 +1,232 @@
+--- T0 baseline (ui-web running)
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+21639 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+21712 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+22104 u0_a752      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+=== force-stop
+--- T1 after force-stop
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=0 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+=== relaunch
+    topResumedActivity=ActivityRecord{11403347 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivity t2120}
+--- T2 after relaunch
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+22764 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+22792 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+=== crash test
+--- C0 ui-web running
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+22764 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+22792 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+22955 u0_a752      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+killing daemon pid 22764 (SIGKILL via run-as)
+--- C1 2s after SIGKILL
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+22792 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+23012 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+--- C2 14s after SIGKILL (supervisor)
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+22792 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+23012 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+=== Exit
+--- E0 before Exit
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+22792 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+23012 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+23578 u0_a752      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+--- E1 6s after Exit
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=0 sock=
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+service-records: 0
+Error type 3
+Error: Activity class {com.thothterm.debian.qa.thothdock/com.thothterm.debian.GardenSetupActivity} does not exist.
+      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Launcher t1191}
+GUARD: com.thothterm.debian.qa.thothdock not in front; refusing input
+=== background (HOME) 40s
+--- B1 backgrounded 40s
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=0 sock=
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+    topResumedActivity=ActivityRecord{241342797 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivit
+=== background/foreground (redo)
+--- B0 app front, fresh daemon
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+24129 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+24154 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 4
+--- B0b container running
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+24129 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+24154 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 5
+--- B1 backgrounded 45s
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+24129 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+24154 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 5
+    topResumedActivity=ActivityRecord{241342797 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivit
+=== background/foreground (ui-web, third attempt valid)
+--- B0 ui-web running
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+24129 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+24154 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+24624 u0_a752      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+--- B1 backgrounded 45s
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+24129 u0_a752      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+24154 u0_a752      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+24624 u0_a752      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 4
+    topResumedActivity=ActivityRecord{241342797 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivit
+adb-shell-curl-18090: HTTP/1.0 200 OK
+adb-shell-curl-18090: 
+adb-shell-curl-18090: ui-web
+=== socket access from shell uid
+ls: /data/data/com.thothterm.debian.qa.thothdock/files/thothdock/sock/: Permission denied
+nc: connect: Permission denied
+uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),1078(ext_data_rw),1079(ext_obb_rw),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid),3012(readtracefs) context=u:r:shell:s0
+=== uninstall QA app
+Success
+thothdock-or-docker-processes: 0
+data-dir-or-pkg: ls: /data/data/com.thothterm.debian.qa.thothdock: No such file or directory
+data-dir-or-pkg: 0
+tcp listeners (all) after uninstall:
+/proc/net/tcp:1 /proc/net/tcp6:6 
+=== reinstall golden APK
+Performing Streamed Install
+Success
+    topResumedActivity=ActivityRecord{47945918 u0 com.google.android.permissioncontroller/com.android.permissioncontroll
+--- R1 after reinstall
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+26590 u0_a753      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+26611 u0_a753      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 0
+=== shell close/reopen
+    topResumedActivity=ActivityRecord{94976664 u0 com.thothterm.debian.qa.thothdock/com.thothterm.Te
+--- S0 before close
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+26590 u0_a753      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+26611 u0_a753      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+27488 u0_a753      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 1
+after Close window:
+    topResumedActivity=ActivityRecord{94976664 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivity
+--- S1 after Close window
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+26590 u0_a753      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+26611 u0_a753      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+27488 u0_a753      libproot.so --rootfs=/data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock/contain
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:2 /proc/net/tcp6:7 
+tmp-entries: 1
+containers-on-disk: 1
+after confirm:
+      topResumedActivity=ActivityRecord{218550339 u0 com.microsoft.launcher/.Launcher t1191}
+--- S2 window closed
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+daemons=0 sock=
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 1
+after reopen:
+    topResumedActivity=ActivityRecord{155221793 u0 com.thothterm.debian.qa.thothdock/com.thothterm.TermActivit
+--- S3 reopened
+17565 u0_a713      libproot.so --rootfs=/data/data/com.thothterm.ubuntu/files/linux/ubuntu-26.04/rootfs --root
+23792 u0_a247      libproot.so --rootfs=/data/data/com.thothterm.debian/files/linux/debian-trixie/rootfs --roo
+23985 u0_a702      libproot.so --rootfs=/data/data/com.thothterm.arch/files/linux/arch-aarch64/rootfs --root-i
+27879 u0_a753      libthothdock.so serve --root /data/user/0/com.thothterm.debian.qa.thothdock/files/thothdock
+27904 u0_a753      libproot.so --rootfs=/data/data/com.thothterm.debian.qa.thothdock/files/linux/debian-trixie
+daemons=1 sock=thothdock.sock 
+tcp-listeners-owned-by-app: /proc/net/tcp:1 /proc/net/tcp6:6 
+tmp-entries: 1
+containers-on-disk: 1

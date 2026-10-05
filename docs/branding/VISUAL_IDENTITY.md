@@ -14,8 +14,9 @@ Original artwork only. No Docker logo, whale, or trade dress.
 | `thothdock-icon-master.png` | The approved icon, 1254 × 1254 RGB, byte for byte as delivered. Canonical source for everything below | `159f499f34c3403504a1b763294ca794b6e486a6380b8a0e0b3aa2f08555a4f2` |
 | `thothdock-mark.png` | In-app brand mark: the icon cropped to its tile, edges feathered to transparent so it sits on the dark UI without a hard square, 736 × 736 RGBA | `5652b6509372da4d83d27169cb25cb32b8051badce899616be17de1149f5cebd` |
 
-No wordmark file exists yet. The name is set in the UI font beside the mark
-(see Typography). Create one only when a surface needs it.
+| `thothdock-wordmark.png` | Wordmark for the Containers header: "THOTH" in `thothdock_silver`, "DOCK" in `thothdock_primary`, over a `thothdock_secondary` rule; set in bold DejaVu Sans on a transparent background, 1707 × 238 RGBA. Plain type, original, no Docker trade dress | see `git log` |
+
+The name elsewhere is set in the UI font beside the mark (see Typography).
 
 ## Palette (canonical)
 
@@ -30,7 +31,8 @@ No wordmark file exists yet. The name is set in the UI font beside the mark
 | `thothdock_primary_highlight` | `#6CF4FF` | banner title, focus |
 | `thothdock_secondary` | `#147DFF` | secondary accents, ports |
 | `thothdock_silver` | `#C7D3DC` | icons, image names |
-| `thothdock_selection` | `#12407A` | selected text (reserved) |
+| `thothdock_selection` | `#12407A` | terminal text selection (background; text keeps its colour) |
+| `thothdock_ansi_blue` | `#4D8DFF` | ANSI blue in the terminal, lifted for 4.5:1 contrast on `#090D12` |
 | `thothdock_text_primary` | `#E7F2F8` | UI text |
 | `thothdock_text_secondary` | `#9BAEBB` | secondary UI text |
 | `thothdock_terminal_text` | `#DCE8EE` | default terminal text |
@@ -62,6 +64,13 @@ Prompt and banner colours reach the guest as the nearest xterm-256 colour.
 Programs' own ANSI colours are never remapped, and the Docker CLI's output is
 never recoloured: the unmodified CLI is the compatibility proof. Errors use
 `#FF6B7A`, success `#54E6A4` when ThothDock itself draws them.
+
+## Popups and dialogs
+
+Menus, dialogs and the Containers confirmations use graphite surfaces
+(`thothdock_surface` / a neutral dark grey popup) with `thothdock_text_primary`
+text and cyan actions. There are no white dialogs anywhere in the QA build
+(device-checked: overflow menu, Exit, Delete container).
 
 ## Launcher icon
 
@@ -103,7 +112,7 @@ never as a large splash over terminal content, and no splash delay is added.
   ordinary controls.
 - Claiming isolation the engine does not provide (see SECURITY_MODEL.md).
 
-## Future Containers page — design tokens and layout
+## Containers page — design tokens and layout (implemented in the golden QA build)
 
 Location: **Settings → … → Containers → About**. The page is a *client of the
 ThothDock API*, exactly like the Docker CLI:
