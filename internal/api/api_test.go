@@ -354,3 +354,57 @@ func TestVolumesOverHTTP(t *testing.T) {
 	resp, body = f.do(t, "DELETE", "/v1.41/volumes/goldenvol", "")
 	expect(t, resp, body, 404, "no such volume")
 }
+
+func TestHostileRequestBodies(t *testing.T) {
+	f := newAPI(t)
+	addr := strings.TrimPrefix(f.srv.URL, "http://")
+	old := bodyReadTimeout.Load()
+	bodyReadTimeout.Store(int64(400 * time.Millisecond))
+	defer bodyReadTimeout.Store(old)
+	read := func(c net.Conn) string {
+		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		b, _ := io.ReadAll(c)
+		return string(b)
+	}
+	// Content-Length promises more than is sent, then the client stalls.
+	c, _ := net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /containers/create HTTP/1.1\r\nHost: x\r\nContent-Length: 500\r\nConnection: close\r\n\r\n{\"Image\":")
+	if r := read(c); !strings.Contains(r, "400") || !strings.Contains(r, "timed out reading the request body") {
+		t.Fatalf("stalled body: %q", r)
+	}
+	c.Close()
+	// Chunked body larger than the limit is refused, not buffered.
+	c, _ = net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /volumes/create HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+	chunk := strings.Repeat("a", 64*1024)
+	chunkConn := c
+	go func() {
+		for i := 0; i < 40; i++ { // 2.5 MB > 1 MiB
+			if _, err := fmt.Fprintf(chunkConn, "%x\r\n%s\r\n", len(chunk), chunk); err != nil {
+				return
+			}
+		}
+		fmt.Fprint(chunkConn, "0\r\n\r\n")
+	}()
+	if r := read(c); !strings.Contains(r, "400") {
+		t.Fatalf("oversized chunked body: %q", r[:min(len(r), 200)])
+	}
+	c.Close()
+	// Content-Length larger than the limit is refused up front.
+	c, _ = net.Dial("tcp", addr)
+	fmt.Fprintf(c, "POST /containers/create HTTP/1.1\r\nHost: x\r\nContent-Length: 99999999\r\nConnection: close\r\n\r\n{}")
+	if r := read(c); !strings.Contains(r, "400") {
+		t.Fatalf("huge content length: %q", r[:min(len(r), 200)])
+	}
+	c.Close()
+	// Garbage and truncated JSON, wrong types.
+	for _, body := range []string{"\x00\x01", `{"Image": 5}`, `{"Image":"a","HostConfig":{"Binds":"notalist"}}`, `[1,2`, `{"Cmd": {"a":1}}`, strings.Repeat("[", 5000)} {
+		resp, b := f.do(t, "POST", "/containers/create", body)
+		if resp.StatusCode != 400 {
+			t.Errorf("body %.30q: %d %s", body, resp.StatusCode, b)
+		}
+	}
+	// The daemon still answers.
+	resp, body := f.do(t, "GET", "/_ping", "")
+	expect(t, resp, body, 200, "OK")
+}

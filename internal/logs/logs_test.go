@@ -85,3 +85,74 @@ func TestSinceFilter(t *testing.T) {
 		t.Fatalf("%+v", es)
 	}
 }
+
+func TestScanTailIsBoundedAndHandoffIsExact(t *testing.T) {
+	l, _ := Open(filepath.Join(t.TempDir(), "c.log"), 0)
+	w := l.Writer("stdout")
+	for i := 0; i < 1000; i++ {
+		fmt.Fprintf(w, "line %04d\n", i)
+	}
+	var got []string
+	live, err := l.Scan(ReadOptions{Tail: 3, Follow: true}, func(e Entry) error { got = append(got, strings.TrimSpace(e.Log)); return nil })
+	if err != nil || strings.Join(got, ",") != "line 0997,line 0998,line 0999" {
+		t.Fatalf("%v %v", got, err)
+	}
+	fmt.Fprint(w, "after scan\n")
+	l.EndRun()
+	var followed []string
+	for e := range live {
+		followed = append(followed, strings.TrimSpace(e.Log))
+	}
+	if strings.Join(followed, ",") != "after scan" {
+		t.Fatalf("follow must start exactly where the scan ended, got %v", followed)
+	}
+	// Tail 0 and "all".
+	n := 0
+	l.Scan(ReadOptions{Tail: 0}, func(Entry) error { n++; return nil })
+	if n != 0 {
+		t.Fatal("tail 0 emitted entries")
+	}
+	l.Scan(ReadOptions{Tail: -1}, func(Entry) error { n++; return nil })
+	if n != 1001 {
+		t.Fatalf("all: %d", n)
+	}
+}
+
+func TestScanMemoryBoundForHugeTail(t *testing.T) {
+	l, _ := Open(filepath.Join(t.TempDir(), "c.log"), 0)
+	w := l.Writer("stdout")
+	big := strings.Repeat("x", 15000) + "\n"
+	for i := 0; i < 2000; i++ { // ~30 MB of text
+		fmt.Fprint(w, big)
+	}
+	l.EndRun()
+	n := 0
+	l.Scan(ReadOptions{Tail: 1 << 30}, func(e Entry) error { n++; return nil })
+	if n*15000 > maxTailBytes+2*15000 || n == 0 {
+		t.Fatalf("a tail request kept %d entries (%d bytes), cap %d", n, n*15000, maxTailBytes)
+	}
+}
+
+func TestScanSlowConsumerDoesNotBlockWriters(t *testing.T) {
+	l, _ := Open(filepath.Join(t.TempDir(), "c.log"), 0)
+	w := l.Writer("stdout")
+	for i := 0; i < 50; i++ {
+		fmt.Fprintf(w, "l%d\n", i)
+	}
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		l.Scan(ReadOptions{Tail: -1}, func(Entry) error { <-release; return nil })
+		close(done)
+	}()
+	time.Sleep(100 * time.Millisecond) // the consumer is now stuck in emit
+	wrote := make(chan struct{})
+	go func() { fmt.Fprint(w, "must not block\n"); close(wrote) }()
+	select {
+	case <-wrote:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a stalled reader blocked the container's output")
+	}
+	close(release)
+	<-done
+}

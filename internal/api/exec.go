@@ -11,7 +11,7 @@ import (
 
 func (s *Server) execCreate(w http.ResponseWriter, r *http.Request) {
 	var cfg engine.ExecConfig
-	if err := decodeBody(r, &cfg); err != nil {
+	if err := decodeBody(w, r, &cfg); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -78,7 +78,7 @@ func (s *Server) execStart(w http.ResponseWriter, r *http.Request) {
 		Detach bool `json:"Detach"`
 		Tty    bool `json:"Tty"`
 	}
-	if err := decodeBody(r, &body); err != nil {
+	if err := decodeBody(w, r, &body); err != nil {
 		writeError(w, err)
 		return
 	}

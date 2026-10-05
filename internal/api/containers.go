@@ -142,7 +142,7 @@ func allLabels(labels map[string]string, want []string) bool {
 
 func (s *Server) createContainer(w http.ResponseWriter, r *http.Request) {
 	var req engine.CreateRequest
-	if err := decodeBody(r, &req); err != nil {
+	if err := decodeBody(w, r, &req); err != nil {
 		writeError(w, err)
 		return
 	}

@@ -75,7 +75,7 @@ func (s *Server) createVolume(w http.ResponseWriter, r *http.Request) {
 		DriverOpts map[string]string
 		Labels     map[string]string
 	}
-	if err := decodeBody(r, &req); err != nil {
+	if err := decodeBody(w, r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
