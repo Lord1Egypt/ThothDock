@@ -73,6 +73,7 @@ jobs:
       - name: Docker CLI against ThothDock (no dockerd involved)
         env:
           SMOKE_PULL: "1"
+          SMOKE_GUARD: "1"
         run: |
           docker --version
           tests/smoke/docker-cli-smoke.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/proot/proot"
