@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 )
@@ -46,7 +47,7 @@ func (e *Engine) Start(ref string) error {
 	st := &c.rec.State
 	st.Status = StatusRunning
 	st.Pid = proc.Pid()
-	st.PidStart = processStart(proc.Pid())
+	st.PidStart = procid.StartTime(proc.Pid())
 	st.StartedAt = time.Now().UTC()
 	st.ExitCode = 0
 	c.proc = proc

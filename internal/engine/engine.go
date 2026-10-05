@@ -25,6 +25,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/logs"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 	"github.com/Lord1Egypt/ThothDock/internal/store"
@@ -133,7 +134,7 @@ func (e *Engine) reconcile(c *Container) error {
 	if st.Status != StatusRunning && st.Status != StatusStarting {
 		return nil
 	}
-	if st.Pid > 0 && processStart(st.Pid) == st.PidStart && st.PidStart != 0 {
+	if st.Pid > 0 && procid.Alive(st.Pid, st.PidStart) {
 		e.log.Warn("killing container process left by a previous daemon", "id", c.rec.ID, "pid", st.Pid)
 		syscall.Kill(-st.Pid, syscall.SIGKILL)
 		syscall.Kill(st.Pid, syscall.SIGKILL)
@@ -144,26 +145,6 @@ func (e *Engine) reconcile(c *Container) error {
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
 	return e.persist(c)
-}
-
-// processStart returns the start time (clock ticks after boot) of pid, or
-// 0 when it does not exist.
-func processStart(pid int) uint64 {
-	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return 0
-	}
-	s := string(b)
-	i := strings.LastIndexByte(s, ')')
-	if i < 0 {
-		return 0
-	}
-	f := strings.Fields(s[i+1:])
-	if len(f) < 20 {
-		return 0
-	}
-	v, _ := strconv.ParseUint(f[19], 10, 64)
-	return v
 }
 
 func (e *Engine) persist(c *Container) error {

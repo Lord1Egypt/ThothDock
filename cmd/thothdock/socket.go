@@ -6,15 +6,24 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 )
 
-// listenUnix creates the API socket, owner-only (0600). Its directory must
-// be a real directory owned by this user: it is created 0700 when missing,
-// tightened to 0700 when wider, and refused when it is a symlink or someone
-// else's. Whatever occupies the socket path -- a stale socket left by a
-// crash, a planted file or symlink -- is removed without being followed;
-// callers hold the data root's lock, so no live daemon owns it.
+// listenUnix creates the API socket, owner-only (0600).
+//
+//   - The socket's directory must be a real directory owned by this user. It
+//     is created 0700 when missing and tightened to 0700 when wider; a
+//     symlink or someone else's directory is refused.
+//   - A symlink at the socket path is refused (fail closed: nothing but an
+//     attacker or a bug leaves one there). A stale regular file or socket --
+//     what a crash leaves -- is replaced.
+//   - The socket is bound under a private temporary name with umask 0177 (so
+//     it is 0600 from the moment it exists) and renamed over the final name
+//     atomically: a client sees either no socket or the new, fully
+//     permissioned one, never a half-made one or a stale one.
+//
+// Callers hold the data root's lock, so no live daemon owns the path.
 func listenUnix(sock string) (net.Listener, os.FileInfo, error) {
 	if len(sock) > 107 {
 		return nil, nil, fmt.Errorf("socket path %s is %d bytes; Unix sockets allow 107: use a shorter --root or --socket", sock, len(sock))
@@ -38,12 +47,17 @@ func listenUnix(sock string) (net.Listener, os.FileInfo, error) {
 			return nil, nil, err
 		}
 	}
-	if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, fmt.Errorf("removing stale %s: %w", sock, err)
+	if old, err := os.Lstat(sock); err == nil {
+		if old.Mode()&os.ModeSymlink != 0 {
+			return nil, nil, fmt.Errorf("socket path %s is a symlink; refusing to use it", sock)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, err
 	}
-	// The umask makes the socket 0600 from the moment it exists.
+	tmp := sock + "." + strconv.Itoa(os.Getpid())
+	os.Remove(tmp)
 	old := syscall.Umask(0o177)
-	ln, err := net.Listen("unix", sock)
+	ln, err := net.Listen("unix", tmp)
 	syscall.Umask(old)
 	if err != nil {
 		return nil, nil, err
@@ -51,10 +65,21 @@ func listenUnix(sock string) (net.Listener, os.FileInfo, error) {
 	// Go would unlink the path on Close even if it were replaced meanwhile;
 	// removeOwnSocket does that only for our own inode.
 	ln.(*net.UnixListener).SetUnlinkOnClose(false)
-	sfi, err := os.Lstat(sock)
-	if err != nil || sfi.Mode().Type() != os.ModeSocket || sfi.Mode().Perm() != 0o600 {
+	fail := func(err error) (net.Listener, os.FileInfo, error) {
 		ln.Close()
-		return nil, nil, fmt.Errorf("socket %s was not created owner-only", sock)
+		os.Remove(tmp)
+		return nil, nil, err
+	}
+	sfi, err := os.Lstat(tmp)
+	if err != nil || sfi.Mode().Type() != os.ModeSocket || sfi.Mode().Perm() != 0o600 {
+		return fail(fmt.Errorf("socket %s was not created owner-only", tmp))
+	}
+	if err := os.Rename(tmp, sock); err != nil {
+		return fail(err)
+	}
+	sfi, err = os.Lstat(sock)
+	if err != nil {
+		return fail(err)
 	}
 	return ln, sfi, nil
 }
