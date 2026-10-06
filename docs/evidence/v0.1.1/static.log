@@ -1,0 +1,2 @@
+gofmt -l (excluding vendor): []
+go vet: ok

@@ -1,0 +1,260 @@
+=== RUN   TestListenUnixOwnerOnlyAndStaleReplaced
+--- PASS: TestListenUnixOwnerOnlyAndStaleReplaced (0.00s)
+=== RUN   TestListenUnixRefusesSymlinkDirAndSymlinkSocketPath
+--- PASS: TestListenUnixRefusesSymlinkDirAndSymlinkSocketPath (0.00s)
+=== RUN   TestRootLockAllowsOneDaemon
+--- PASS: TestRootLockAllowsOneDaemon (0.00s)
+=== RUN   TestPidFileRecordsIdentity
+--- PASS: TestPidFileRecordsIdentity (0.01s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/cmd/thothdock	1.042s
+=== RUN   TestRoutesVersionsAndErrors
+--- PASS: TestRoutesVersionsAndErrors (0.57s)
+=== RUN   TestRunFlowOverHTTP
+--- PASS: TestRunFlowOverHTTP (0.24s)
+=== RUN   TestExecOverHTTP
+--- PASS: TestExecOverHTTP (0.16s)
+=== RUN   TestVolumesOverHTTP
+--- PASS: TestVolumesOverHTTP (0.12s)
+=== RUN   TestHostileRequestBodies
+--- PASS: TestHostileRequestBodies (0.92s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/api	3.027s
+=== RUN   TestLifecycleCreateStartExitLogsRemove
+--- PASS: TestLifecycleCreateStartExitLogsRemove (0.14s)
+=== RUN   TestTwoContainersFromOneImageAreIndependent
+--- PASS: TestTwoContainersFromOneImageAreIndependent (0.12s)
+=== RUN   TestStopKillAndSignals
+--- PASS: TestStopKillAndSignals (0.14s)
+=== RUN   TestStartFailuresLikeDocker
+--- PASS: TestStartFailuresLikeDocker (0.14s)
+=== RUN   TestUserMapping
+--- PASS: TestUserMapping (0.10s)
+=== RUN   TestStaleRunningStateIsReconciled
+--- PASS: TestStaleRunningStateIsReconciled (0.12s)
+=== RUN   TestInterruptedCreateAndRemoveRecovered
+--- PASS: TestInterruptedCreateAndRemoveRecovered (0.09s)
+=== RUN   TestNamesAndLookup
+--- PASS: TestNamesAndLookup (0.07s)
+=== RUN   TestUnsupportedFeaturesAreRefused
+--- PASS: TestUnsupportedFeaturesAreRefused (0.06s)
+=== RUN   TestBindPolicy
+--- PASS: TestBindPolicy (0.11s)
+=== RUN   TestAutoRemove
+--- PASS: TestAutoRemove (0.08s)
+=== RUN   TestEntrypointCmdMerge
+--- PASS: TestEntrypointCmdMerge (0.08s)
+=== RUN   TestStdinReachesProcess
+--- PASS: TestStdinReachesProcess (0.08s)
+=== RUN   TestHostsResolvAndHostnameFiles
+--- PASS: TestHostsResolvAndHostnameFiles (0.08s)
+=== RUN   TestExecRunsInTheContainerRootfsAndEnvironment
+--- PASS: TestExecRunsInTheContainerRootfsAndEnvironment (0.09s)
+=== RUN   TestExecIsKilledWhenTheContainerStopsAndForgottenOnRemove
+--- PASS: TestExecIsKilledWhenTheContainerStopsAndForgottenOnRemove (0.08s)
+=== RUN   TestExecStdin
+--- PASS: TestExecStdin (0.08s)
+=== RUN   TestNamedVolumePersistsAcrossContainers
+--- PASS: TestNamedVolumePersistsAcrossContainers (0.16s)
+=== RUN   TestMountsAPIAndHostileMounts
+--- PASS: TestMountsAPIAndHostileMounts (0.12s)
+=== RUN   TestPublishedPortLifecycle
+--- PASS: TestPublishedPortLifecycle (0.10s)
+=== RUN   TestPublishedPortCollisionAndPolicy
+--- PASS: TestPublishedPortCollisionAndPolicy (0.13s)
+=== RUN   TestPublishAllAndPassthroughWarning
+--- PASS: TestPublishAllAndPassthroughWarning (0.10s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/engine	3.291s
+?   	github.com/Lord1Egypt/ThothDock/internal/errdefs	[no test files]
+=== RUN   TestProtectedState
+--- PASS: TestProtectedState (0.01s)
+=== RUN   TestRealEngineAndBinariesFail
+--- PASS: TestRealEngineAndBinariesFail (0.01s)
+=== RUN   TestNotApplicableWithoutDpkg
+--- PASS: TestNotApplicableWithoutDpkg (0.00s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/guard	1.040s
+=== RUN   TestPullIndexSelectsPlatformAndAssembles
+--- PASS: TestPullIndexSelectsPlatformAndAssembles (0.11s)
+=== RUN   TestPullRefusesCorruptLayer
+--- PASS: TestPullRefusesCorruptLayer (0.04s)
+=== RUN   TestPullRefusesWrongDiffID
+--- PASS: TestPullRefusesWrongDiffID (0.04s)
+=== RUN   TestPullRefusesMaliciousLayer
+--- PASS: TestPullRefusesMaliciousLayer (0.05s)
+=== RUN   TestPullWrongPlatformRefused
+--- PASS: TestPullWrongPlatformRefused (0.02s)
+=== RUN   TestSharedLayersDownloadedOnce
+--- PASS: TestSharedLayersDownloadedOnce (0.10s)
+=== RUN   TestDeleteUntagsThenRemoves
+--- PASS: TestDeleteUntagsThenRemoves (0.07s)
+=== RUN   TestInterruptedPullRemovedOnOpen
+--- PASS: TestInterruptedPullRemovedOnOpen (0.01s)
+=== RUN   TestLimitLayerCount
+--- PASS: TestLimitLayerCount (0.09s)
+=== RUN   TestLimitDecompressionBomb
+--- PASS: TestLimitDecompressionBomb (0.93s)
+=== RUN   TestLimitExtractedBytesAcrossLayers
+--- PASS: TestLimitExtractedBytesAcrossLayers (0.54s)
+=== RUN   TestLimitEntries
+--- PASS: TestLimitEntries (0.04s)
+=== RUN   TestLimitCompressedTotalFromManifest
+--- PASS: TestLimitCompressedTotalFromManifest (0.58s)
+=== RUN   TestFreeSpaceChecksBeforeDownload
+--- PASS: TestFreeSpaceChecksBeforeDownload (0.02s)
+=== RUN   TestFreeSpaceChecksWhileExtracting
+--- PASS: TestFreeSpaceChecksWhileExtracting (4.42s)
+=== RUN   TestFreeSpaceUnknownIsNotAnError
+--- PASS: TestFreeSpaceUnknownIsNotAnError (0.05s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/image	8.180s
+=== RUN   TestRejectsDotDotTraversal
+--- PASS: TestRejectsDotDotTraversal (0.00s)
+=== RUN   TestRejectsAbsolutePath
+--- PASS: TestRejectsAbsolutePath (0.00s)
+=== RUN   TestRejectsNUL
+--- PASS: TestRejectsNUL (0.00s)
+=== RUN   TestAbsoluteSymlinkParentStaysInRoot
+--- PASS: TestAbsoluteSymlinkParentStaysInRoot (0.01s)
+=== RUN   TestRelativeSymlinkParentCannotClimb
+--- PASS: TestRelativeSymlinkParentCannotClimb (0.00s)
+=== RUN   TestChainedSymlinksAndLoops
+--- PASS: TestChainedSymlinksAndLoops (0.01s)
+=== RUN   TestDanglingSymlinkIsReplacedNotFollowed
+--- PASS: TestDanglingSymlinkIsReplacedNotFollowed (0.00s)
+=== RUN   TestSymlinkToSecretIsNeverRead
+--- PASS: TestSymlinkToSecretIsNeverRead (0.00s)
+=== RUN   TestHardlinkEscapes
+--- PASS: TestHardlinkEscapes (0.00s)
+=== RUN   TestHardlinkToSymlinkLinksTheSymlink
+--- PASS: TestHardlinkToSymlinkLinksTheSymlink (0.00s)
+=== RUN   TestHardlinkToDirectoryRejected
+--- PASS: TestHardlinkToDirectoryRejected (0.00s)
+=== RUN   TestHardlinkShared
+--- PASS: TestHardlinkShared (0.00s)
+=== RUN   TestWhiteoutRemovesOnlyItsTarget
+--- PASS: TestWhiteoutRemovesOnlyItsTarget (0.00s)
+=== RUN   TestWhiteoutDoesNotRemoveSameLayerEntry
+--- PASS: TestWhiteoutDoesNotRemoveSameLayerEntry (0.00s)
+=== RUN   TestMaliciousWhiteouts
+--- PASS: TestMaliciousWhiteouts (0.00s)
+=== RUN   TestOpaqueDirectory
+--- PASS: TestOpaqueDirectory (0.01s)
+=== RUN   TestReplaceFileWithDirAndBack
+--- PASS: TestReplaceFileWithDirAndBack (0.00s)
+=== RUN   TestPrivilegeBitsStripped
+--- PASS: TestPrivilegeBitsStripped (0.00s)
+=== RUN   TestDeviceNodesSkipped
+--- PASS: TestDeviceNodesSkipped (0.00s)
+=== RUN   TestTruncatedLayerFails
+--- PASS: TestTruncatedLayerFails (0.00s)
+=== RUN   TestCopyTreeIndependent
+--- PASS: TestCopyTreeIndependent (0.01s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/layer	1.107s
+=== RUN   TestLinesPartialsAndStreams
+--- PASS: TestLinesPartialsAndStreams (0.01s)
+=== RUN   TestRotationBoundsSize
+--- PASS: TestRotationBoundsSize (0.02s)
+=== RUN   TestFollowAndChunks
+--- PASS: TestFollowAndChunks (0.00s)
+=== RUN   TestSinceFilter
+--- PASS: TestSinceFilter (0.00s)
+=== RUN   TestScanTailIsBoundedAndHandoffIsExact
+--- PASS: TestScanTailIsBoundedAndHandoffIsExact (0.12s)
+=== RUN   TestScanMemoryBoundForHugeTail
+--- PASS: TestScanMemoryBoundForHugeTail (3.95s)
+=== RUN   TestScanSlowConsumerDoesNotBlockWriters
+--- PASS: TestScanSlowConsumerDoesNotBlockWriters (0.10s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/logs	5.241s
+=== RUN   TestParseDigest
+--- PASS: TestParseDigest (0.00s)
+=== RUN   TestFromBytes
+--- PASS: TestFromBytes (0.00s)
+=== RUN   TestSelectManifest
+--- PASS: TestSelectManifest (0.00s)
+=== RUN   TestParsePlatform
+--- PASS: TestParsePlatform (0.00s)
+=== RUN   TestLayerCompression
+--- PASS: TestLayerCompression (0.00s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/oci	1.022s
+?   	github.com/Lord1Egypt/ThothDock/internal/platform	[no test files]
+=== RUN   TestForwardsBytesBothWaysWithHalfClose
+--- PASS: TestForwardsBytesBothWaysWithHalfClose (0.03s)
+=== RUN   TestDefaultsToLoopbackOnlyWhenAsked
+--- PASS: TestDefaultsToLoopbackOnlyWhenAsked (0.00s)
+=== RUN   TestCollisionAndReleaseOnClose
+--- PASS: TestCollisionAndReleaseOnClose (0.00s)
+=== RUN   TestNothingListeningInsideDropsTheClient
+--- PASS: TestNothingListeningInsideDropsTheClient (0.00s)
+=== RUN   TestConnectionLimit
+--- PASS: TestConnectionLimit (0.97s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/portmap	2.034s
+=== RUN   TestStartTimeIdentifiesOneProcess
+--- PASS: TestStartTimeIdentifiesOneProcess (0.00s)
+=== RUN   TestKillGroupRefusesAnotherProcessWithTheSamePid
+--- PASS: TestKillGroupRefusesAnotherProcessWithTheSamePid (0.00s)
+=== RUN   TestKillGroupKillsTheVerifiedProcess
+--- PASS: TestKillGroupKillsTheVerifiedProcess (0.00s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/procid	1.037s
+=== RUN   TestParseReference
+--- PASS: TestParseReference (0.00s)
+=== RUN   TestClientBearerAuthAndDigests
+--- PASS: TestClientBearerAuthAndDigests (0.04s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/registry	1.067s
+?   	github.com/Lord1Egypt/ThothDock/internal/registry/registrytest	[no test files]
+=== RUN   TestPRootCapturesStdoutStderrExit
+--- PASS: TestPRootCapturesStdoutStderrExit (0.02s)
+=== RUN   TestPRootEnvAndCwd
+--- PASS: TestPRootEnvAndCwd (0.02s)
+=== RUN   TestPRootSignalExitCodes
+--- PASS: TestPRootSignalExitCodes (0.61s)
+=== RUN   TestPRootSignalledShellLoopExits143
+--- PASS: TestPRootSignalledShellLoopExits143 (6.02s)
+=== RUN   TestPRootKillTakesTheWholeTree
+--- PASS: TestPRootKillTakesTheWholeTree (0.31s)
+=== RUN   TestPRootStdin
+--- PASS: TestPRootStdin (0.01s)
+=== RUN   TestPRootTTY
+--- PASS: TestPRootTTY (0.52s)
+=== RUN   TestFakeRuntime
+--- PASS: TestFakeRuntime (0.00s)
+=== RUN   TestPRootOptionCheck
+--- PASS: TestPRootOptionCheck (0.01s)
+=== RUN   TestSignalAfterExitIsRefusedAndHarmless
+--- PASS: TestSignalAfterExitIsRefusedAndHarmless (0.00s)
+=== RUN   TestGroupLeftoversAreRemovedWhenLeaderExits
+--- PASS: TestGroupLeftoversAreRemovedWhenLeaderExits (0.00s)
+=== RUN   TestSignalRacesWithExit
+--- PASS: TestSignalRacesWithExit (0.03s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/runtime	8.570s
+=== RUN   TestOpenFileFollowsSymlinksInsideRootOnly
+--- PASS: TestOpenFileFollowsSymlinksInsideRootOnly (0.01s)
+=== RUN   TestRemoveTreeNeverFollows
+--- PASS: TestRemoveTreeNeverFollows (0.01s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/securefs	1.031s
+=== RUN   TestWriteFileAtomicReplacesAndLeavesNoTemp
+--- PASS: TestWriteFileAtomicReplacesAndLeavesNoTemp (0.02s)
+=== RUN   TestBlobIngestVerifies
+--- PASS: TestBlobIngestVerifies (0.01s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/store	1.045s
+?   	github.com/Lord1Egypt/ThothDock/internal/version	[no test files]
+=== RUN   TestHostileNamesRefused
+--- PASS: TestHostileNamesRefused (0.04s)
+=== RUN   TestCreateIdempotentLabelsAndLayout
+--- PASS: TestCreateIdempotentLabelsAndLayout (0.01s)
+=== RUN   TestRemoveInUsePersistenceAndPrune
+--- PASS: TestRemoveInUsePersistenceAndPrune (0.01s)
+=== RUN   TestOpenCleansInterruptedAndForeignEntriesWithoutFollowingLinks
+--- PASS: TestOpenCleansInterruptedAndForeignEntriesWithoutFollowingLinks (0.01s)
+PASS
+ok  	github.com/Lord1Egypt/ThothDock/internal/volume	1.086s

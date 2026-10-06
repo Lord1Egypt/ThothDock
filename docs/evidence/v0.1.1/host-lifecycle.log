@@ -1,0 +1,13 @@
+PASS: pull
+PASS: run -d, logs
+PASS: stop (exit 143)
+PASS: start
+PASS: restart
+PASS: kill (exit 137)
+PASS: kill -s TERM, wait (143)
+PASS: rm
+PASS: missing command (127)
+PASS: interactive TTY (docker run -it)
+PASS: neighbour isolation
+PASS: pull ceiling (--max-extracted-bytes): clear error, nothing left behind
+lifecycle: all checks passed

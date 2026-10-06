@@ -1,0 +1,51 @@
+PASS recorded allow-malformed-unprotected (allow)
+PASS recorded allow-placeholder-install (allow)
+PASS recorded allow-placeholder-reinstall (allow)
+PASS recorded allow-placeholder-upgrade (allow)
+PASS recorded allow-remove (allow)
+PASS recorded allow-unrelated-install (allow)
+PASS recorded block-arch-qualified-name (block)
+PASS recorded block-foreign-epoch-9999 (block)
+PASS recorded block-malformed-protected (block)
+PASS recorded block-stock-among-unrelated (block)
+PASS recorded block-stock-fresh-install (block)
+PASS recorded block-stock-install (block)
+PASS recorded block-wrong-protocol (block)
+PASS stock docker.io replaces the placeholder (block)
+PASS stock docker-ce replaces the placeholder (block)
+PASS stock docker-engine replaces the placeholder (block)
+PASS stock moby-engine replaces the placeholder (block)
+PASS stock containerd replaces the placeholder (block)
+PASS stock containerd.io replaces the placeholder (block)
+PASS stock runc replaces the placeholder (block)
+PASS message names the package and version
+PASS apt update
+PASS apt install stock docker.io on a clean system
+PASS nothing of stock docker.io was installed
+PASS apt install stock docker-ce on a clean system
+PASS nothing of stock docker-ce was installed
+PASS apt install stock docker-engine on a clean system
+PASS nothing of stock docker-engine was installed
+PASS apt install stock moby-engine on a clean system
+PASS nothing of stock moby-engine was installed
+PASS apt install stock containerd on a clean system
+PASS nothing of stock containerd was installed
+PASS apt install stock containerd.io on a clean system
+PASS nothing of stock containerd.io was installed
+PASS apt install stock runc on a clean system
+PASS nothing of stock runc was installed
+PASS apt install the placeholder
+PASS the pin chose the placeholder, not stock
+PASS apt install stock docker.io over the placeholder
+PASS refusal left the placeholder installed
+PASS apt install unrelated packages
+PASS apt update (repo with newer placeholder)
+PASS apt upgrade
+PASS apt upgrade took the newer ThothDock placeholder
+PASS apt upgrade upgraded the unrelated package
+PASS apt full-upgrade
+PASS apt full-upgrade left the placeholder alone
+PASS apt remove an unrelated package
+PASS apt reinstall the placeholder
+PASS apt install the stock package over the upgraded placeholder
+engine-guard: all passed

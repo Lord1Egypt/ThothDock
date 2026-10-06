@@ -1,0 +1,15 @@
+PASS: socket /tmp/tds.vlyZGv/run/thothdock.sock is 0600
+PASS: docker version (server ThothDock, API 1.41)
+PASS: docker info
+PASS: docker ps
+PASS: docker images
+PASS: unsupported endpoints say so
+PASS: docker pull alpine:3.20
+PASS: docker run --rm alpine echo
+PASS: exit codes, logs, prune
+PASS: run -d, stop, rm
+PASS: docker exec (stdout, exit code, env/workdir/user, stdin, shared fs)
+PASS: named volumes (persistence, in-use protection, hostile name)
+PASS: -p TCP publishing on 127.0.0.1 (curl, collision-free stop, UDP and LAN refused)
+PASS: Engine Guard (full-upgrade, engine installs no-op, downgrade refused, CLI allowed, doctor)
+smoke: all checks passed
