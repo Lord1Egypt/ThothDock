@@ -7,6 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // StartTime is the start time of pid, or 0 when it does not exist.
@@ -44,4 +47,33 @@ func Cmdline0(pid int) string {
 // Alive reports whether pid is the process that started at start.
 func Alive(pid int, start uint64) bool {
 	return pid > 0 && start != 0 && StartTime(pid) == start
+}
+
+// KillGroup sends SIGKILL to the process group led by pid and to pid, but
+// only while pid is still the process that started at start. A pidfd taken
+// before the identity check pins that process: it is killed through the
+// pidfd, and the group is signalled only while the pidfd shows it has not
+// exited, so a pid recycled after the check is never signalled. It reports
+// whether the process was alive and signalled.
+func KillGroup(pid int, start uint64) bool {
+	fd, err := unix.PidfdOpen(pid, 0)
+	if err != nil {
+		return false
+	}
+	defer unix.Close(fd)
+	if !Alive(pid, start) {
+		return false
+	}
+	if !pidfdRunning(fd) {
+		return false
+	}
+	syscall.Kill(-pid, syscall.SIGKILL)
+	return unix.PidfdSendSignal(fd, syscall.SIGKILL, nil, 0) == nil
+}
+
+// pidfdRunning is false once the process behind fd has terminated.
+func pidfdRunning(fd int) bool {
+	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+	n, err := unix.Poll(fds, 0)
+	return err == nil && n == 0
 }

@@ -1,0 +1,4 @@
+VERSION 3
+APT::Architecture=amd64
+
+docker.io 9999:1.0+thothdock.1 all

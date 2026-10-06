@@ -1,0 +1,5 @@
+VERSION 3
+APT::Architecture=amd64
+
+docker.io 9999:1.0+thothdock.2 all none = 9999:1.0+thothdock.2 all none /var/cache/apt/archives/docker.io_1.0+thothdock.2_all.deb
+docker.io 9999:1.0+thothdock.2 all none = 9999:1.0+thothdock.2 all none **CONFIGURE**

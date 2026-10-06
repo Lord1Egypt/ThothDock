@@ -1,7 +1,11 @@
 package runtime
 
 import (
+	"fmt"
+	"os/exec"
+
 	"bytes"
+	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"io"
 	"os"
 	"path/filepath"
@@ -211,5 +215,82 @@ func TestPRootOptionCheck(t *testing.T) {
 	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
 	if _, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// plainProc wraps an ordinary command in the same lifecycle bookkeeping a
+// PRoot process has, so the pid-identity rules can be tested without proot.
+func plainProc(t *testing.T, script string) (*prootProc, *syncBuf) {
+	t.Helper()
+	var out syncBuf
+	cmd := exec.Command("/bin/sh", "-c", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Stdout = &out
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	p := &prootProc{cmd: cmd, sigSeen: make(chan int, 1), exited: make(chan struct{})}
+	go p.watch()
+	return p, &out
+}
+
+func TestSignalAfterExitIsRefusedAndHarmless(t *testing.T) {
+	p, _ := plainProc(t, "exit 0")
+	p.Wait()
+	if !p.gone {
+		t.Fatal("process not marked gone after Wait")
+	}
+	// After the reap the pid may belong to anyone; nothing may be sent.
+	if err := p.Signal(syscall.SIGKILL); err != nil {
+		t.Fatalf("Signal after exit: %v", err)
+	}
+	if err := p.Kill(); err != nil {
+		t.Fatalf("Kill after exit: %v", err)
+	}
+}
+
+func TestGroupLeftoversAreRemovedWhenLeaderExits(t *testing.T) {
+	p, out := plainProc(t, "sleep 60 & echo $!")
+	p.Wait()
+	var pid int
+	if _, err := fmt.Sscan(out.String(), &pid); err != nil {
+		t.Fatalf("no leftover pid in %q", out.String())
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		// A killed child reparented to init is reaped asynchronously; a
+		// zombie still has a /proc entry but no cmdline.
+		if err := syscall.Kill(pid, 0); err != nil || procid.Cmdline0(pid) == "" {
+			return
+		}
+		if time.Now().After(deadline) {
+			syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatal("a process left in the group survived the leader")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Hammer Signal and Kill while processes exit and are reaped. Run with -race.
+func TestSignalRacesWithExit(t *testing.T) {
+	for i := 0; i < 40; i++ {
+		p, _ := plainProc(t, "exit 0")
+		var wg sync.WaitGroup
+		for j := 0; j < 4; j++ {
+			wg.Add(1)
+			go func(j int) {
+				defer wg.Done()
+				for k := 0; k < 50; k++ {
+					if j%2 == 0 {
+						p.Signal(syscall.SIGCONT)
+					} else {
+						p.Kill()
+					}
+				}
+			}(j)
+		}
+		p.Wait()
+		wg.Wait()
+		p.Signal(syscall.SIGTERM)
 	}
 }

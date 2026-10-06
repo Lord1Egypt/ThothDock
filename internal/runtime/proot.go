@@ -159,6 +159,14 @@ type prootProc struct {
 	sigSeen  chan int
 	waitOnce sync.Once
 	exit     Exit
+
+	// sigMu makes "the process has not been reaped" and "signal its group"
+	// one step. Until proot is reaped it stays a zombie and holds its pid
+	// (and so its process group id) reserved; the watcher marks it gone
+	// before Wait reaps it, and no signal is sent after that.
+	sigMu  sync.RWMutex
+	gone   bool
+	exited chan struct{} // closed once gone is set
 }
 
 func (r *PRootRuntime) Start(spec Spec) (Process, error) {
@@ -170,7 +178,7 @@ func (r *PRootRuntime) Start(spec Spec) (Process, error) {
 	cmd.Env = r.Env(spec)
 	cmd.Dir = r.cfg.TmpDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
-	p := &prootProc{cmd: cmd, sigSeen: make(chan int, 1)}
+	p := &prootProc{cmd: cmd, sigSeen: make(chan int, 1), exited: make(chan struct{})}
 	var childEnds []*os.File
 	closeChildEnds := func() {
 		for _, f := range childEnds {
@@ -237,6 +245,7 @@ func (r *PRootRuntime) Start(spec Spec) (Process, error) {
 		return nil, fmt.Errorf("proot: %w", err)
 	}
 	closeChildEnds()
+	go p.watch()
 	if spec.Tty {
 		p.copies.Add(1)
 		go func() {
@@ -305,8 +314,33 @@ func (p *prootProc) Pid() int { return p.cmd.Process.Pid }
 
 func (p *prootProc) Stdin() io.WriteCloser { return p.stdin }
 
+// watch blocks until proot has terminated without reaping it (WNOWAIT keeps
+// the zombie, and with it the pid and process group id, reserved), then
+// removes anything it left in its process group and marks the process gone.
+// Wait reaps only after that, so a signal can never reach a reused pid.
+func (p *prootProc) watch() {
+	pid := p.cmd.Process.Pid
+	var info unix.Siginfo
+	for {
+		err := unix.Waitid(unix.P_PID, pid, &info, unix.WEXITED|unix.WNOWAIT, nil)
+		if err != unix.EINTR {
+			break
+		}
+	}
+	p.sigMu.Lock()
+	syscall.Kill(-pid, syscall.SIGKILL)
+	p.gone = true
+	p.sigMu.Unlock()
+	close(p.exited)
+}
+
 func (p *prootProc) Signal(sig syscall.Signal) error {
 	// The workload shares proot's process group (session, with a TTY).
+	p.sigMu.RLock()
+	defer p.sigMu.RUnlock()
+	if p.gone {
+		return nil
+	}
 	err := syscall.Kill(-p.cmd.Process.Pid, sig)
 	if err == syscall.ESRCH {
 		return nil
@@ -317,12 +351,17 @@ func (p *prootProc) Signal(sig syscall.Signal) error {
 func (p *prootProc) Kill() error {
 	// SIGKILL to proot is enough: --kill-on-exit and PTRACE_O_EXITKILL take
 	// every tracee with it. The group is signalled too for good measure.
-	syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
-	err := p.cmd.Process.Signal(syscall.SIGKILL)
-	if errors.Is(err, os.ErrProcessDone) {
+	p.sigMu.RLock()
+	defer p.sigMu.RUnlock()
+	if p.gone {
 		return nil
 	}
-	return err
+	pid := p.cmd.Process.Pid
+	syscall.Kill(-pid, syscall.SIGKILL)
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+		return err
+	}
+	return nil
 }
 
 func (p *prootProc) Resize(w, h uint16) error {
@@ -338,6 +377,7 @@ const outputGrace = 3 * time.Second
 
 func (p *prootProc) Wait() Exit {
 	p.waitOnce.Do(func() {
+		<-p.exited
 		err := p.cmd.Wait()
 		done := make(chan struct{})
 		go func() {

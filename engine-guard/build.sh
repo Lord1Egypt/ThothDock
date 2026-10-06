@@ -24,7 +24,8 @@ set -eu
 umask 022
 OUT="${1:?usage: build.sh OUT_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VERSION='9999:1.0+thothdock.1'
+VERSION='9999:1.0+thothdock.1'   # the placeholders
+GUARD_VERSION='1.0+thothdock.2' # the guard: bumped when its hook or pin changes, so dpkg replaces an older one
 EPOCH="${SOURCE_DATE_EPOCH:-1790000000}"
 export SOURCE_DATE_EPOCH="$EPOCH"
 PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc"
@@ -64,7 +65,7 @@ g="$WORK/thothdock-engine-guard"
 mkdir -p "$g/DEBIAN" "$g/etc/apt/preferences.d" "$g/etc/apt/apt.conf.d" "$g/usr/lib/thothdock" "$g/usr/share/doc/thothdock-engine-guard"
 cat > "$g/DEBIAN/control" <<CTL
 Package: thothdock-engine-guard
-Version: ${VERSION#*:}
+Version: $GUARD_VERSION
 Architecture: all
 Section: admin
 Priority: optional
@@ -100,6 +101,6 @@ CONF
 sed "s/@PROTECTED@/$PROTECTED/" "$HERE/engine-guard-hook.sh" > "$g/usr/lib/thothdock/engine-guard-hook"
 chmod 755 "$g/usr/lib/thothdock/engine-guard-hook"
 cp "$HERE/README.Debian" "$g/usr/share/doc/thothdock-engine-guard/README.Debian"
-build "$g" "thothdock-engine-guard_${VERSION#*:}_all.deb"
+build "$g" "thothdock-engine-guard_${GUARD_VERSION}_all.deb"
 ( cd "$OUT" && sha256sum *.deb > SHA256SUMS )
 cat "$OUT/SHA256SUMS"

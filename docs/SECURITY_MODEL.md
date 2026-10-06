@@ -54,6 +54,31 @@ including mutation checks showing the tests fail when the rule is removed
 (`internal/layer/apply_test.go`, `internal/securefs/securefs_test.go`,
 `internal/image/image_test.go`).
 
+## Resource ceilings on pull (threat A, storage exhaustion)
+
+A pull is bounded by explicit ceilings, set with `thothdock serve` options.
+A value of `0` or the option left out takes the default; `-1` disables that
+one limit. Every ceiling counts bytes actually read and written, not what a
+manifest claims, and a pull that crosses one fails with an error naming the
+option and discards the staging directory (nothing partial becomes an image).
+
+| Option | Default | What it bounds |
+|---|---|---|
+| `--max-layers` | 128 | layers per image, checked from the manifest before any download |
+| `--max-compressed-bytes` | 8 GiB | sum of the layer sizes the manifest declares, checked before any download; each blob is also held to its declared size while it downloads |
+| `--max-layer-bytes` | 16 GiB | one layer's uncompressed tar stream (the decompression-bomb ceiling), headers and padding included |
+| `--max-extracted-bytes` | 16 GiB | bytes written for the whole image: file contents plus hard links the platform forces into copies. It counts bytes written, not net size, so a file a later layer deletes still counts |
+| `--max-entries` | 4,000,000 | tar entries (files, directories, links) for the whole image |
+| `--min-free-bytes` | 512 MiB | free space that must remain on the store's filesystem: checked before each layer download (the layer's size must also fit), before extraction, and about every 32 MiB written |
+
+Free space comes from `statfs` of the store's filesystem. Where the platform
+does not report it, only the ceilings above apply; the check never blocks a
+pull merely because the figure is unavailable. The defaults sit far above
+ordinary images (large CUDA or PyTorch bases are single-digit GiB). What the
+ceilings do **not** do: they do not bound the space containers themselves
+write at run time (there are no cgroups or quotas, see above), and a layer
+blob that failed extraction stays in the blob store, verified, until `gc`.
+
 ## API rules
 
 - Request bodies are limited to 1 MiB and decoded into typed structures

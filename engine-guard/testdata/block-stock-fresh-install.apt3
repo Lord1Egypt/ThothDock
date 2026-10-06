@@ -1,0 +1,5 @@
+VERSION 3
+APT::Architecture=amd64
+
+docker.io - - none < 26.1.5-1 all none /var/cache/apt/archives/docker.io_26.1.5-1_all.deb
+docker.io - - none < 26.1.5-1 all none **CONFIGURE**

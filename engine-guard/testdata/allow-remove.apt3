@@ -1,0 +1,4 @@
+VERSION 3
+APT::Architecture=amd64
+
+bar 1.0 all none > - - none **REMOVE**

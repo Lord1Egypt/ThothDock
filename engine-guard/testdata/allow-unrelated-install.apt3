@@ -1,0 +1,7 @@
+VERSION 3
+APT::Architecture=amd64
+
+bar - - none < 1.0 all none /var/cache/apt/archives/bar_1.0_all.deb
+foo - - none < 1.0 all none /var/cache/apt/archives/foo_1.0_all.deb
+bar - - none < 1.0 all none **CONFIGURE**
+foo - - none < 1.0 all none **CONFIGURE**
