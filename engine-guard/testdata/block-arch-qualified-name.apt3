@@ -1,0 +1,4 @@
+VERSION 3
+APT::Architecture=amd64
+
+docker.io:amd64 - - none < 26.1.5-1 all none /x.deb

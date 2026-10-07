@@ -1,0 +1,20 @@
+ok  	github.com/Lord1Egypt/ThothDock/cmd/thothdock	0.024s
+ok  	github.com/Lord1Egypt/ThothDock/internal/api	1.824s
+ok  	github.com/Lord1Egypt/ThothDock/internal/engine	1.922s
+?   	github.com/Lord1Egypt/ThothDock/internal/errdefs	[no test files]
+ok  	github.com/Lord1Egypt/ThothDock/internal/guard	0.024s
+ok  	github.com/Lord1Egypt/ThothDock/internal/image	1.184s
+ok  	github.com/Lord1Egypt/ThothDock/internal/layer	0.073s
+ok  	github.com/Lord1Egypt/ThothDock/internal/logs	0.407s
+ok  	github.com/Lord1Egypt/ThothDock/internal/oci	0.004s
+?   	github.com/Lord1Egypt/ThothDock/internal/platform	[no test files]
+ok  	github.com/Lord1Egypt/ThothDock/internal/portmap	0.972s
+ok  	github.com/Lord1Egypt/ThothDock/internal/procid	0.021s
+ok  	github.com/Lord1Egypt/ThothDock/internal/registry	0.027s
+?   	github.com/Lord1Egypt/ThothDock/internal/registry/registrytest	[no test files]
+ok  	github.com/Lord1Egypt/ThothDock/internal/runtime	7.546s
+ok  	github.com/Lord1Egypt/ThothDock/internal/securefs	0.015s
+ok  	github.com/Lord1Egypt/ThothDock/internal/store	0.034s
+?   	github.com/Lord1Egypt/ThothDock/internal/version	[no test files]
+ok  	github.com/Lord1Egypt/ThothDock/internal/volume	0.095s
+go test exit 0

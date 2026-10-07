@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
@@ -149,10 +148,8 @@ func (e *Engine) reconcile(c *Container) error {
 	if st.Status != StatusRunning && st.Status != StatusStarting {
 		return nil
 	}
-	if st.Pid > 0 && procid.Alive(st.Pid, st.PidStart) {
-		e.log.Warn("killing container process left by a previous daemon", "id", c.rec.ID, "pid", st.Pid)
-		syscall.Kill(-st.Pid, syscall.SIGKILL)
-		syscall.Kill(st.Pid, syscall.SIGKILL)
+	if st.Pid > 0 && procid.KillGroup(st.Pid, st.PidStart) {
+		e.log.Warn("killed container process left by a previous daemon", "id", c.rec.ID, "pid", st.Pid)
 	}
 	st.Status = StatusExited
 	st.ExitCode = 137

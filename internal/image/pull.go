@@ -40,6 +40,7 @@ type PullOptions struct {
 type Puller struct {
 	Store  *Store
 	Client *registry.Client
+	Limits Limits // zero fields take the defaults; see Limits
 }
 
 func short(d oci.Digest) string { return d.Hex()[:12] }
@@ -109,6 +110,14 @@ func (p *Puller) Pull(ctx context.Context, name string, opts PullOptions) (Summa
 	if _, err := oci.ParseDigest(string(m.Config.Digest)); err != nil {
 		return Summary{}, "", fmt.Errorf("config: %w", err)
 	}
+	lim := p.Limits.resolved()
+	sizes := make([]int64, len(m.Layers))
+	for i, l := range m.Layers {
+		sizes[i] = l.Size
+	}
+	if err := lim.checkManifest(sizes); err != nil {
+		return Summary{}, "", err
+	}
 	for _, l := range m.Layers {
 		if _, err := oci.ParseDigest(string(l.Digest)); err != nil {
 			return Summary{}, "", fmt.Errorf("layer: %w", err)
@@ -166,6 +175,9 @@ func (p *Puller) Pull(ctx context.Context, name string, opts PullOptions) (Summa
 				continue
 			}
 			sid := short(l.Digest)
+			if err := lim.ensureSpace(s.tmp, l.Size); err != nil {
+				return Summary{}, "", err
+			}
 			if err := p.fetch(ctx, ref, l, opts.Creds, func(cur int64) {
 				progress(Progress{ID: sid, Status: "Downloading", Current: cur, Total: l.Size})
 			}); err != nil {
@@ -174,7 +186,7 @@ func (p *Puller) Pull(ctx context.Context, name string, opts PullOptions) (Summa
 			progress(Progress{ID: sid, Status: "Verifying Checksum"})
 			progress(Progress{ID: sid, Status: "Download complete"})
 		}
-		size, err := p.assemble(ctx, id, m.Layers, cfg.RootFS.DiffIDs, progress)
+		size, err := p.assemble(ctx, id, m.Layers, cfg.RootFS.DiffIDs, lim, progress)
 		if err != nil {
 			return Summary{}, "", err
 		}
@@ -246,7 +258,7 @@ func (p *Puller) fetch(ctx context.Context, ref registry.Reference, d oci.Descri
 // assemble applies the layers in order to a staging directory and renames
 // it into place. A digest or diff ID mismatch, an unsafe entry or any error
 // discards the staging directory.
-func (p *Puller) assemble(ctx context.Context, id oci.Digest, layers []oci.Descriptor, diffIDs []oci.Digest, progress func(Progress)) (int64, error) {
+func (p *Puller) assemble(ctx context.Context, id oci.Digest, layers []oci.Descriptor, diffIDs []oci.Digest, lim Limits, progress func(Progress)) (int64, error) {
 	s := p.Store
 	staging, err := os.MkdirTemp(s.tmp, "rootfs-")
 	if err != nil {
@@ -262,18 +274,22 @@ func (p *Puller) assemble(ctx context.Context, id oci.Digest, layers []oci.Descr
 	if err := os.Mkdir(rootfs, 0o755); err != nil {
 		return 0, err
 	}
-	var size int64
+	if err := lim.ensureSpace(s.tmp, 0); err != nil {
+		return 0, err
+	}
+	var size, entries int64
 	for i, l := range layers {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
 		sid := short(l.Digest)
 		progress(Progress{ID: sid, Status: "Extracting"})
-		st, err := applyVerified(s.Blobs, l, diffIDs[i], rootfs)
+		st, err := applyVerified(s.Blobs, l, diffIDs[i], rootfs, lim.layerLimits(s.tmp, size, entries))
 		if err != nil {
-			return 0, fmt.Errorf("layer %s: %w", sid, err)
+			return 0, limitMessage(fmt.Errorf("layer %s: %w", sid, err))
 		}
 		size += st.Bytes
+		entries += st.Entries
 		progress(Progress{ID: sid, Status: "Pull complete"})
 	}
 	dir := filepath.Join(s.root, id.Hex())
@@ -292,7 +308,7 @@ func (p *Puller) assemble(ctx context.Context, id oci.Digest, layers []oci.Descr
 // applyVerified re-hashes the stored blob, then applies it while hashing
 // both the compressed bytes (they must still match) and the uncompressed
 // tar (it must match the diff ID).
-func applyVerified(blobs *store.Blobs, l oci.Descriptor, diffID oci.Digest, rootfs string) (layer.Stats, error) {
+func applyVerified(blobs *store.Blobs, l oci.Descriptor, diffID oci.Digest, rootfs string, lim layer.Limits) (layer.Stats, error) {
 	if err := blobs.Verify(l.Digest); err != nil {
 		return layer.Stats{}, err
 	}
@@ -314,7 +330,7 @@ func applyVerified(blobs *store.Blobs, l oci.Descriptor, diffID oci.Digest, root
 		tarStream = zr
 	}
 	diff := oci.NewDigester()
-	st, err := layer.Apply(rootfs, io.TeeReader(tarStream, diff))
+	st, err := layer.ApplyLimited(rootfs, io.TeeReader(tarStream, diff), lim)
 	if err != nil {
 		return st, err
 	}

@@ -1,0 +1,4 @@
+VERSION 3
+APT::Architecture=amd64
+
+docker.io - - none < 9999:6.6.6 all none /var/cache/apt/archives/docker.io_6.6.6_all.deb

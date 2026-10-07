@@ -71,16 +71,25 @@ type applier struct {
 	keep    map[string]struct{} // those paths and every ancestor
 	opaque  []string
 	dirs    []pendingDir
+	lim     Limits
 }
 
 // Apply extracts the uncompressed layer tar r onto the directory rootDir.
 func Apply(rootDir string, r io.Reader) (Stats, error) {
+	return ApplyLimited(rootDir, r, Limits{})
+}
+
+// ApplyLimited is Apply with resource ceilings; see Limits.
+func ApplyLimited(rootDir string, r io.Reader, lim Limits) (Stats, error) {
 	root, err := securefs.OpenRoot(rootDir)
 	if err != nil {
 		return Stats{}, err
 	}
 	defer root.Close()
-	a := &applier{root: root, written: map[string]bool{}, keep: map[string]struct{}{}}
+	a := &applier{root: root, written: map[string]bool{}, keep: map[string]struct{}{}, lim: lim}
+	if lim.MaxStreamBytes > 0 {
+		r = &streamLimiter{r: r, max: lim.MaxStreamBytes}
+	}
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
@@ -147,6 +156,9 @@ func (a *applier) markWritten(comps []string) {
 
 func (a *applier) entry(hdr *tar.Header, tr io.Reader) error {
 	a.stats.Entries++
+	if a.lim.MaxEntries > 0 && a.stats.Entries > a.lim.MaxEntries {
+		return &LimitError{What: "entry count", Limit: a.lim.MaxEntries}
+	}
 	comps, err := cleanName(hdr.Name)
 	if err != nil {
 		return err
@@ -241,7 +253,18 @@ func (a *applier) file(par *securefs.Parent, hdr *tar.Header, tr io.Reader) erro
 		return fmt.Errorf("layer entry %q: create: %w", hdr.Name, err)
 	}
 	f := os.NewFile(uintptr(fd), hdr.Name)
-	n, err := io.Copy(f, tr)
+	var src io.Reader = tr
+	budget := int64(-1)
+	if a.lim.MaxFileBytes > 0 {
+		// One byte past the budget, so exceeding it is seen as such and not
+		// as a short file.
+		budget = a.lim.MaxFileBytes - a.stats.Bytes
+		src = io.LimitReader(tr, budget+1)
+	}
+	n, err := io.Copy(&spaceWriter{w: f, a: a}, src)
+	if err == nil && budget >= 0 && n > budget {
+		err = &LimitError{What: "extracted size", Limit: a.lim.MaxFileBytes}
+	}
 	if err == nil && n != hdr.Size {
 		err = io.ErrUnexpectedEOF
 	}
@@ -304,6 +327,11 @@ func (a *applier) hardlink(par *securefs.Parent, hdr *tar.Header, rel string) er
 	if _, err := replaceable(par, false); err != nil {
 		return fmt.Errorf("layer entry %q: %w", hdr.Name, err)
 	}
+	if a.lim.CheckSpace != nil && st.Mode&unix.S_IFMT == unix.S_IFREG {
+		if err := a.lim.CheckSpace(); err != nil {
+			return err
+		}
+	}
 	copied, err := LinkOrCopy(tpar.FD, tpar.Name, par.FD, par.Name)
 	if err != nil {
 		return fmt.Errorf("layer entry %q: %w", hdr.Name, err)
@@ -311,6 +339,14 @@ func (a *applier) hardlink(par *securefs.Parent, hdr *tar.Header, rel string) er
 	a.stats.Hardlinks++
 	if copied {
 		a.stats.HardlinkCopies++
+		// A copy costs the file's size again: many links to one big file
+		// must not get around the extracted-size ceiling.
+		if st.Mode&unix.S_IFMT == unix.S_IFREG {
+			a.stats.Bytes += st.Size
+			if a.lim.MaxFileBytes > 0 && a.stats.Bytes > a.lim.MaxFileBytes {
+				return &LimitError{What: "extracted size", Limit: a.lim.MaxFileBytes}
+			}
+		}
 	}
 	return nil
 }

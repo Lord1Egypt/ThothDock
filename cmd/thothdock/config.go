@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/Lord1Egypt/ThothDock/internal/image"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 )
@@ -38,6 +39,7 @@ type options struct {
 	allowPublish  bool
 	devTCP        string
 	debug         bool
+	limits        image.Limits
 }
 
 func (o *options) register(fs *flag.FlagSet) {
@@ -53,6 +55,13 @@ func (o *options) register(fs *flag.FlagSet) {
 	fs.Var(&o.allowBind, "allow-bind", "host directory containers may bind-mount from (repeatable; default none)")
 	fs.BoolVar(&o.allowPublish, "allow-publish-nonlocal", false, "let -p name a host address other than loopback (default: published ports are reachable from this device only)")
 	fs.StringVar(&o.devTCP, "dev-tcp", "", "DEVELOPMENT ONLY: also listen on this loopback TCP address (127.0.0.1:PORT), unauthenticated")
+	dl := image.DefaultLimits()
+	fs.IntVar(&o.limits.MaxLayers, "max-layers", dl.MaxLayers, "refuse images with more layers than this (-1: no limit)")
+	fs.Int64Var(&o.limits.MaxCompressedBytes, "max-compressed-bytes", dl.MaxCompressedBytes, "refuse images whose layers total more compressed bytes than this (-1: no limit)")
+	fs.Int64Var(&o.limits.MaxLayerBytes, "max-layer-bytes", dl.MaxLayerBytes, "stop a layer that expands to more uncompressed bytes than this (-1: no limit)")
+	fs.Int64Var(&o.limits.MaxExtractedBytes, "max-extracted-bytes", dl.MaxExtractedBytes, "stop an image that writes more than this many bytes when extracted (-1: no limit)")
+	fs.Int64Var(&o.limits.MaxEntries, "max-entries", dl.MaxEntries, "stop an image with more tar entries than this (-1: no limit)")
+	fs.Int64Var(&o.limits.MinFreeBytes, "min-free-bytes", dl.MinFreeBytes, "keep at least this much storage free while pulling (-1: do not check)")
 	fs.BoolVar(&o.debug, "debug", false, "log every request")
 }
 

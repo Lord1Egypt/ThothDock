@@ -100,7 +100,7 @@ func build(o *options, log *slog.Logger) (*stack, error) {
 	if err != nil {
 		return nil, err
 	}
-	puller := &image.Puller{Store: images, Client: registry.NewClient(registry.DefaultHTTPClient(), "ThothDock/"+version.Version)}
+	puller := &image.Puller{Store: images, Client: registry.NewClient(registry.DefaultHTTPClient(), "ThothDock/"+version.Version), Limits: o.limits}
 	var roots []string
 	for _, b := range o.allowBind {
 		c, err := filepath.EvalSymlinks(b)

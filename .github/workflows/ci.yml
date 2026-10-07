@@ -26,6 +26,10 @@ jobs:
           (umask 022; sh engine-guard/build.sh "$RUNNER_TEMP/eg022" >/dev/null)
           (umask 002; sh engine-guard/build.sh "$RUNNER_TEMP/eg002" >/dev/null)
           diff -r "$RUNNER_TEMP/eg022" "$RUNNER_TEMP/eg002"
+      - name: Engine Guard hook against recorded and real apt (v3 records)
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sh engine-guard/test.sh
       - name: vendor directory is in sync with go.mod
         run: |
           go mod vendor

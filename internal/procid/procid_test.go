@@ -3,6 +3,7 @@ package procid
 import (
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 )
 
@@ -31,5 +32,46 @@ func TestStartTimeIdentifiesOneProcess(t *testing.T) {
 	}
 	if Cmdline0(self) == "" {
 		t.Fatal("no cmdline")
+	}
+}
+
+func startSleeper(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("sleep", "60")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	return cmd
+}
+
+func TestKillGroupRefusesAnotherProcessWithTheSamePid(t *testing.T) {
+	cmd := startSleeper(t)
+	pid := cmd.Process.Pid
+	start := StartTime(pid)
+	if KillGroup(pid, start+1) {
+		t.Fatal("killed a process whose start time differs")
+	}
+	if KillGroup(pid, 0) {
+		t.Fatal("killed with no recorded start time")
+	}
+	if !Alive(pid, start) {
+		t.Fatal("process died although the identity did not match")
+	}
+}
+
+func TestKillGroupKillsTheVerifiedProcess(t *testing.T) {
+	cmd := startSleeper(t)
+	pid := cmd.Process.Pid
+	if !KillGroup(pid, StartTime(pid)) {
+		t.Fatal("verified process was not signalled")
+	}
+	err := cmd.Wait()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != -1 {
+		t.Fatalf("sleep ended with %v, want killed by a signal", err)
+	}
+	if KillGroup(pid, 1) {
+		t.Fatal("signalled a pid that no longer exists")
 	}
 }
