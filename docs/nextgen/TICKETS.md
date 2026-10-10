@@ -255,6 +255,17 @@ script. Commit references are ThothDock `feature/nextgen` unless marked
 - **Definition of Done:** host tests pass. · **Rollback:** —
 - **Evidence:** 4f7612f. · **Status:** DONE (host); device row in P3-04
 
+### P3-05 — Phantom-process limit (new, found on the device)
+- **Purpose:** keep long-running containers alive under Android's device-wide child-process cap.
+- **Existing behaviour:** Android killed the production engine and its 4 containers when a second engine's processes pushed the total over the cap (log line in `ANDROID_LIFECYCLE.md`).
+- **Expected behaviour:** restart policies restore them; the panel and Containers screen show the process count against the cap; a one-time owner-run command is documented to raise the cap.
+- **Dependencies:** P3-03 · **Affected modules:** Android (count, warning), docs
+- **Implementation tasks:** read the process count of the app tree; warn above ~24; document the adb setting.
+- **Unit tests:** parser for the count. · **Android device tests:** with the cap raised, run production + QA together and confirm nothing is killed.
+- **Security checks:** none (reading our own process tree). · **Performance checks:** read only when the screen is open.
+- **Definition of Done:** warning shown; device test passes. · **Rollback:** —
+- **Evidence:** `evidence/device/` log excerpt. · **Status:** PLANNED
+
 ### P3-04 — Android lifecycle integration
 - **Purpose:** honest semantics on Android.
 - **Existing behaviour:** lifecycle matrix measured for v0.1.1.

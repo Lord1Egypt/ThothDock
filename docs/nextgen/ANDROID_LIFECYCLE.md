@@ -18,6 +18,30 @@ statements to verify in the P3-04 / P7 device rounds.
 | App update (`adb install -r`, store update) | the app process is replaced | as force-stop | as force-stop | — |
 | Uninstall | data root deleted with the app | deleted | deleted | measured |
 
+## Android's phantom-process limit (measured 2026-10-10)
+
+Android 12+ caps the number of child ("phantom") processes **across all
+apps on the device** (default 32) and, past the cap, kills the oldest app's
+children: `am_kill ... Killing PhantomProcessRecord 10918:libthothdock.so ...
+Trimming phantom processes`. Every container is at least a PRoot process plus
+its workload, and the engine, terminal shells and `docker exec` add more.
+A second ThothTerm app running its own engine pushed the SM-A165F over the
+cap and Android killed the **production** engine, which stopped its four
+containers (they had no restart policy). So: the golden four-container run is
+safe only while the device-wide total stays under the cap; a second engine
+or many containers can lose the older group without warning.
+
+Mitigations, in order of preference (tickets P3-05, P7-03):
+1. a restart policy on every long-running container, so they come back when
+   the engine restarts (Android restarts the foreground service);
+2. never run two ThothDock engines at once (QA packages are stopped after a test);
+3. the owner may raise the limit (adb, reversible): `adb shell device_config put
+   activity_manager max_phantom_processes 2147483647` and
+   `adb shell settings put global settings_enable_monitor_phantom_procs false`;
+   Samsung may reset these on reboot;
+4. engine-side: fewer processes per container is not possible under PRoot
+   (loader + tracee); the engine will report its process count to the panel.
+
 ## Rules this design keeps
 
 - **No wake locks** are taken by the engine or the panel. Long-running work
