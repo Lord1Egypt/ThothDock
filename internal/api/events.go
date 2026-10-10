@@ -113,6 +113,11 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	past, sub := s.Engine.Events.Subscribe(since)
 	defer sub.Close()
+	if since.IsZero() && until.IsZero() {
+		// As dockerd: history only when asked for. Compose subscribes
+		// without since and would read an old "die" as a fresh exit.
+		past = nil
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)

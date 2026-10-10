@@ -107,6 +107,32 @@ func TestEventsReplaySinceUntilAndBadInput(t *testing.T) {
 	f.do(t, "POST", "/v1.41/containers/"+id+"/stop?t=1", "")
 }
 
+func TestEventsWithoutSinceAreLiveOnly(t *testing.T) {
+	f := newAPI(t)
+	f.pull(t)
+	old := f.createRunning(t, "old", "")
+	f.do(t, "POST", "/v1.41/containers/"+old+"/start", "")
+	f.do(t, "POST", "/v1.41/containers/"+old+"/stop?t=1", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", f.srv.URL+"/v1.41/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	fresh := f.createRunning(t, "fresh", "")
+	sc := bufio.NewScanner(resp.Body)
+	if !sc.Scan() {
+		t.Fatal("no event")
+	}
+	var ev wireEvent
+	json.Unmarshal(sc.Bytes(), &ev)
+	if ev.Actor.ID != fresh || ev.Action != "create" {
+		t.Fatalf("first event without since is %s %s, want the live create of %s", ev.Action, ev.Actor.ID, fresh)
+	}
+}
+
 func TestUpdateRestartPolicyAndRefusedResources(t *testing.T) {
 	f := newAPI(t)
 	f.pull(t)

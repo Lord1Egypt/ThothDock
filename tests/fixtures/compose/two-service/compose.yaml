@@ -1,0 +1,19 @@
+# Deterministic two-service stack for tests/regression/compose.sh: "web"
+# answers HTTP on port 80 with what it fetched from "api" by service name.
+# Both listen on privileged ports, published on loopback only.
+services:
+  api:
+    image: alpine:3.20
+    command: ["sh", "-c", "echo boot >> /data/boots; while true; do printf 'HTTP/1.0 200 OK\\r\\n\\r\\napi-ok\\n' | nc -l -p 3000; done"]
+    restart: unless-stopped
+    volumes:
+      - apidata:/data
+  web:
+    image: alpine:3.20
+    command: ["sh", "-c", "while true; do body=$$(wget -q -T 3 -O- http://api:3000/ || echo api-unreachable); printf 'HTTP/1.0 200 OK\\r\\n\\r\\nweb sees %s\\n' \"$$body\" | nc -l -p 80; done"]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-18090}:80"
+    depends_on:
+      - api
+volumes:
+  apidata:
