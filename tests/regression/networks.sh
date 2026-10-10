@@ -32,7 +32,7 @@ orphans() { ps -eo args | grep -c "^$PROOT --rootfs=$WORK/" || true; }
 cleanup() {
     [ -n "$PID" ] && { kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; }
     [ -n "$HOSTSRV" ] && kill "$HOSTSRV" 2>/dev/null
-    case "$WORK" in /tmp/tdnet.*) rm -rf "$WORK" "$WORK.log" ;; esac
+    case "$WORK" in /tmp/tdnet.*) rm -rf "$WORK" "$WORK.log" "$WORK.before" "$WORK.after" ;; esac
 }
 trap cleanup EXIT
 # A tiny HTTP server: answers every connection on PORT with BODY.
