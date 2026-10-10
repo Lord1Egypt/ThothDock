@@ -12,7 +12,12 @@
 #     files, so dockerd, containerd and runc stay absent;
 #   * thothdock-engine-guard: an apt pin (priority 1001 on those versions), a
 #     Pre-Install-Pkgs hook that refuses to install a protected name at any
-#     other version (e.g. apt install --allow-downgrades), and a notice.
+#     other version (e.g. apt install --allow-downgrades) and refuses to remove
+#     a placeholder or the guard, and a notice. It also Depends on every
+#     placeholder and Conflicts with every lower version of those names, so dpkg itself
+#     refuses "dpkg -r runc" and "dpkg -i containerd_1.7_arm64.deb" (apt's hook
+#     does not run for a direct dpkg call; only --force-depends/--force-conflicts
+#     or removing the guard defeats this, and that is a deliberate root action).
 #
 # The Docker CLI is NOT guarded: docker-cli / docker-ce-cli contain no daemon
 # (verified against the Debian trixie packages) and may be updated freely.
@@ -25,7 +30,7 @@ umask 022
 OUT="${1:?usage: build.sh OUT_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VERSION='9999:1.0+thothdock.1'   # the placeholders
-GUARD_VERSION='1.0+thothdock.2' # the guard: bumped when its hook or pin changes, so dpkg replaces an older one
+GUARD_VERSION='1.0+thothdock.3' # the guard: bumped when its hook or pin changes, so dpkg replaces an older one
 EPOCH="${SOURCE_DATE_EPOCH:-1790000000}"
 export SOURCE_DATE_EPOCH="$EPOCH"
 PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc"
@@ -61,6 +66,12 @@ CTL
     build "$d" "${p}_${VERSION#*:}_all.deb"
 done
 
+DEPENDS=
+CONFLICTS=
+for p in $PROTECTED; do
+    DEPENDS="${DEPENDS:+$DEPENDS, }$p (>= $VERSION)"
+    CONFLICTS="${CONFLICTS:+$CONFLICTS, }$p (<< 9999:0)"
+done
 g="$WORK/thothdock-engine-guard"
 mkdir -p "$g/DEBIAN" "$g/etc/apt/preferences.d" "$g/etc/apt/apt.conf.d" "$g/usr/lib/thothdock" "$g/usr/share/doc/thothdock-engine-guard"
 cat > "$g/DEBIAN/control" <<CTL
@@ -69,12 +80,16 @@ Version: $GUARD_VERSION
 Architecture: all
 Section: admin
 Priority: optional
+Depends: $DEPENDS
+Conflicts: $CONFLICTS
 Maintainer: ThothDock <noreply@users.noreply.github.com>
 Description: Keeps a stock Docker Engine from replacing ThothDock
  Installs an apt pin and an apt hook that refuse any attempt to install the
  stock Docker Engine packages (docker.io, docker-ce, docker-engine,
  moby-engine, containerd, containerd.io, runc) in place of the ThothDock
- placeholders. The Docker CLI is not restricted.
+ placeholders, or to remove the placeholders. Docker Engine is integrated
+ into the ThothDock app and is updated with it, not with apt. The Docker CLI
+ is not restricted.
 CTL
 cat > "$g/DEBIAN/postinst" <<'SH'
 #!/bin/sh

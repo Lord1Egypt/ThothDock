@@ -99,6 +99,7 @@ func Check(root string) []Finding {
 	} else {
 		out = append(out, Finding{Warn, "thothdock-engine-guard", "not installed: no apt pin or hook"})
 	}
+	out = append(out, enforcement(root)...)
 	for _, b := range EngineBinaries {
 		var found string
 		for _, d := range binDirs {
@@ -111,6 +112,34 @@ func Check(root string) []Finding {
 			out = append(out, Finding{Fail, b, "PRESENT at " + found + " (a stock engine binary; ThothDock is the engine)"})
 		} else {
 			out = append(out, Finding{OK, b, "absent"})
+		}
+	}
+	return out
+}
+
+// enforcementFiles are what makes apt refuse a stock engine: the hook, the apt
+// configuration that runs it, and the pin. The app rewrites them every time a
+// terminal window opens, so a missing one is a Warn, not a Fail.
+var enforcementFiles = []struct {
+	path, what string
+	exec       bool
+}{
+	{"usr/lib/thothdock/engine-guard-hook", "apt hook", true},
+	{"etc/apt/apt.conf.d/99thothdock-engine-guard", "apt hook configuration", false},
+	{"etc/apt/preferences.d/thothdock-engine-guard", "apt pin", false},
+}
+
+func enforcement(root string) []Finding {
+	var out []Finding
+	for _, f := range enforcementFiles {
+		fi, err := os.Stat(filepath.Join(root, f.path))
+		switch {
+		case err != nil || !fi.Mode().IsRegular():
+			out = append(out, Finding{Warn, f.what, "missing: /" + f.path + " (restored when a terminal window opens)"})
+		case f.exec && fi.Mode().Perm()&0o111 == 0:
+			out = append(out, Finding{Fail, f.what, "/" + f.path + " is not executable: apt would fail closed"})
+		default:
+			out = append(out, Finding{OK, f.what, "/" + f.path})
 		}
 	}
 	return out

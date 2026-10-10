@@ -10,7 +10,20 @@ containerd, containerd.io, runc) are replaced by empty placeholders versioned
 9999:1.0+thothdock.N, pinned at priority 1001, so "apt upgrade" and
 "apt full-upgrade" leave them alone and "apt install docker.io" reports them
 as already installed. Installing a real one at another version is refused by
-/usr/lib/thothdock/engine-guard-hook.
+/usr/lib/thothdock/engine-guard-hook, and so is removing a placeholder (a
+package such as podman-docker, which conflicts with docker.io, cannot be
+installed here). The guard package also Depends on every placeholder and
+Conflicts with every lower version of those names, so a direct "dpkg -r runc"
+or "dpkg -i containerd_1.7_arm64.deb" is refused by dpkg itself, before
+anything is unpacked.
+
+What this cannot do: root in the guest can still delete the guard, pass
+--force-depends/--force-conflicts to dpkg, or unpack an engine by hand (tar,
+a static docker tarball). Even then the real dockerd cannot run here, and the
+managed /usr/local/bin/docker and /usr/local/bin/thothdock are read-only binds
+from the app that no package can replace. ThothTerm rewrites the hook, its
+configuration and the pin whenever a terminal window opens and registers the
+placeholders again when the engine starts.
 
 The Docker CLI (docker-cli, docker-ce-cli) is not restricted. ThothDock itself
 is updated by the ThothTerm app, not by apt.

@@ -1,0 +1,4 @@
+VERSION 3
+APT::Architecture=amd64
+
+thothdock-engine-guard 1.0+thothdock.2 all none < 1.0+thothdock.3 all none /var/cache/apt/archives/thothdock-engine-guard_1.0+thothdock.3_all.deb

@@ -9,8 +9,13 @@
 # apt aborts the dpkg run if this hook exits non-zero. Fail closed: a record
 # of a protected package that cannot be read is refused, and so is a stream
 # that is not protocol 3.
+# Removing a placeholder (or the guard itself) is refused as well: the pin only
+# matches installed placeholders, so without one apt would offer the stock
+# package again, and "podman-docker" (Conflicts: docker.io) would take it out.
 PROTECTED="@PROTECTED@"
+GUARD="thothdock-engine-guard"
 bad=
+removed=
 in_list=
 first=1
 while IFS= read -r line <&3; do
@@ -35,13 +40,19 @@ while IFS= read -r line <&3; do
     for p in $PROTECTED; do
         [ "$name" = "$p" ] && protected=1
     done
-    [ -z "$protected" ] && continue
+    if [ -z "$protected" ]; then
+        if [ "$name" = "$GUARD" ] && [ $# -ge 9 ] && [ "$9" = '**REMOVE**' ]; then removed="$removed $name"; fi
+        continue
+    fi
     if [ $# -lt 9 ]; then
         bad="$bad $name(unreadable)"
         continue
     fi
     new=$6 action=$9
-    case "$action" in '**CONFIGURE**'|'**REMOVE**') continue ;; esac
+    case "$action" in
+        '**CONFIGURE**') continue ;;
+        '**REMOVE**') removed="$removed $name"; continue ;;
+    esac
     case "$new" in 9999:*+thothdock.*) ;; *) bad="$bad $name($new)" ;; esac
 done
 if [ -n "$bad" ]; then
@@ -50,6 +61,15 @@ if [ -n "$bad" ]; then
         echo "E: Docker Engine is provided by ThothDock. Stock dockerd/containerd/runc"
         echo "E: are intentionally disabled (they need kernel namespaces and cgroups)."
         echo "E: The Docker CLI is unaffected; update ThothDock through its app."
+    } >&2
+    exit 1
+fi
+if [ -n "$removed" ]; then
+    {
+        echo "E: Refusing to remove the ThothDock Docker Engine placeholder:$removed"
+        echo "E: Docker Engine is integrated into this app and is not an apt package;"
+        echo "E: the placeholders keep apt from installing a stock engine over it."
+        echo "E: A package that conflicts with them (such as podman-docker) cannot be installed here."
     } >&2
     exit 1
 fi

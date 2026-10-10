@@ -37,7 +37,8 @@ func TestProtectedState(t *testing.T) {
 		st.WriteString(rec(p, "9999:1.0+thothdock.1", "install ok installed"))
 	}
 	st.WriteString(rec("thothdock-engine-guard", "1.0+thothdock.1", "install ok installed"))
-	fs := Check(fixture(t, st.String(), "usr/bin/docker"))
+	fs := Check(fixture(t, st.String(), "usr/bin/docker", "usr/lib/thothdock/engine-guard-hook",
+		"etc/apt/apt.conf.d/99thothdock-engine-guard", "etc/apt/preferences.d/thothdock-engine-guard"))
 	if Worst(fs) != OK {
 		t.Fatalf("%+v", fs)
 	}
@@ -66,5 +67,20 @@ func TestNotApplicableWithoutDpkg(t *testing.T) {
 	fs := Check(t.TempDir())
 	if len(fs) != 1 || fs[0].Level != OK || !strings.Contains(fs[0].Detail, "not applicable") {
 		t.Fatalf("%+v", fs)
+	}
+}
+
+func TestEnforcementFilesAreChecked(t *testing.T) {
+	root := fixture(t, "", "usr/lib/thothdock/engine-guard-hook", "etc/apt/preferences.d/thothdock-engine-guard")
+	fs := Check(root)
+	if find(fs, "apt hook").Level != OK || find(fs, "apt pin").Level != OK {
+		t.Fatalf("present files should pass: %+v", fs)
+	}
+	if f := find(fs, "apt hook configuration"); f.Level != Warn || !strings.Contains(f.Detail, "restored when a terminal window opens") {
+		t.Fatalf("a missing configuration should warn: %+v", f)
+	}
+	os.Chmod(filepath.Join(root, "usr/lib/thothdock/engine-guard-hook"), 0o644)
+	if find(Check(root), "apt hook").Level != Fail {
+		t.Fatal("a hook that cannot run makes apt fail closed: that is a failure")
 	}
 }
