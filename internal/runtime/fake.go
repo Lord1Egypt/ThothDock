@@ -17,16 +17,23 @@ type FakeRuntime struct {
 	programs map[string]FakeFunc
 	nextPid  atomic.Int64
 	Started  []Spec
+	// NoNetIP makes the fake behave like a PRoot without --net-ip.
+	NoNetIP bool
 }
 
 // NewFake returns an empty fake runtime.
 func NewFake() *FakeRuntime {
 	f := &FakeRuntime{programs: map[string]FakeFunc{}}
-	f.nextPid.Store(1000)
+	// Above the kernel's pid_max ceiling (2^22): a fake PID can never name a
+	// real process, so recovery code that kills by PID never hits one.
+	f.nextPid.Store(1 << 30)
 	return f
 }
 
 func (f *FakeRuntime) Name() string { return "fake" }
+
+// SupportsNetIP is true unless NoNetIP is set.
+func (f *FakeRuntime) SupportsNetIP() bool { return !f.NoNetIP }
 
 // Program registers fn for an executable path.
 func (f *FakeRuntime) Program(path string, fn FakeFunc) {

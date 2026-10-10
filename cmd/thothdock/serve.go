@@ -213,6 +213,9 @@ func serve(args []string) error {
 	if o.socket != "none" {
 		fmt.Fprintf(os.Stderr, "\n  export DOCKER_HOST=unix://%s\n\n", sock)
 	}
+	// Containers whose restart policy asks for it start again now that the
+	// API answers (ADR-0004).
+	st.engine.RestoreRestartPolicies()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

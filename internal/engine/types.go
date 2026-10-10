@@ -143,14 +143,15 @@ type CreateRequest struct {
 }
 
 // Container states. ThothDock keeps them explicit; the API maps
-// starting->created and failed->exited (with State.Error).
+// starting->created and failed->dead. The allowed moves are in state.go.
 const (
-	StatusCreated  = "created"
-	StatusStarting = "starting"
-	StatusRunning  = "running"
-	StatusExited   = "exited"
-	StatusFailed   = "failed"
-	StatusRemoving = "removing"
+	StatusCreated    = "created"
+	StatusStarting   = "starting"
+	StatusRunning    = "running"
+	StatusExited     = "exited"
+	StatusRestarting = "restarting" // waiting for a restart-policy start
+	StatusFailed     = "failed"
+	StatusRemoving   = "removing"
 )
 
 // State is a container's persisted run state.
@@ -162,6 +163,11 @@ type State struct {
 	FinishedAt time.Time `json:"finishedAt"`
 	ExitCode   int       `json:"exitCode"`
 	Error      string    `json:"error"`
+	// ManuallyStopped is set by stop (and kill with SIGKILL) through the API
+	// and cleared by start; a restart policy never overrides it at run time.
+	ManuallyStopped bool `json:"manuallyStopped,omitempty"`
+	// Restarting mirrors Status == restarting for the API.
+	Restarting bool `json:"restarting,omitempty"`
 }
 
 // Record is what is persisted for a container (containers/<id>/config.json).
@@ -178,6 +184,11 @@ type Record struct {
 	Binds        []BindRecord    `json:"binds"`
 	State        State           `json:"state"`
 	RestartCount int             `json:"restartCount"`
+	// Networks are the user-defined networks the container is attached to,
+	// by network ID; NetIP is its loopback address while it has any
+	// (docs/nextgen/adr/ADR-0002). Both are empty on the device network.
+	Networks map[string]EndpointRecord `json:"networks,omitempty"`
+	NetIP    string                    `json:"netIP,omitempty"`
 	// Ports are the ports published while the container runs; never persisted.
 	Ports []PortAssign `json:"-"`
 }

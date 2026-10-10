@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/events"
 	"github.com/Lord1Egypt/ThothDock/internal/volume"
 )
 
@@ -84,6 +85,7 @@ func (s *Server) createVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.Engine.Events.Publish(events.Event{Type: "volume", Action: "create", ID: v.Name, Attrs: map[string]string{"driver": "local"}})
 	writeJSON(w, http.StatusCreated, s.volumeJSON(v))
 }
 
@@ -107,6 +109,7 @@ func (s *Server) removeVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.Engine.Events.Publish(events.Event{Type: "volume", Action: "destroy", ID: r.PathValue("name"), Attrs: map[string]string{"driver": "local"}})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -126,6 +129,9 @@ func (s *Server) pruneVolumes(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	for _, name := range gone {
+		s.Engine.Events.Publish(events.Event{Type: "volume", Action: "destroy", ID: name, Attrs: map[string]string{"driver": "local"}})
 	}
 	if gone == nil {
 		gone = []string{}

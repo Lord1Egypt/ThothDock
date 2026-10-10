@@ -16,33 +16,66 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
 )
 
+type startMode int
+
+const (
+	startAPI    startMode = iota // docker start/restart: clears a manual stop
+	startPolicy                  // a restart policy: the timer or the restore at daemon start
+)
+
 // Start runs the container's process.
 func (e *Engine) Start(ref string) error {
 	c, err := e.Lookup(ref)
 	if err != nil {
 		return err
 	}
+	return e.start(c, startAPI)
+}
+
+func (e *Engine) start(c *Container, mode startMode) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return e.startLocked(c, mode)
+}
+
+func (e *Engine) startLocked(c *Container, mode startMode) error {
+	if c.gone {
+		return errdefs.NotFound("No such container: %s", c.rec.ID[:12])
+	}
 	switch c.rec.State.Status {
 	case StatusRunning, StatusStarting:
 		return errdefs.NotModified("container already started")
 	case StatusRemoving:
 		return errdefs.Conflict("container %s is marked for removal and cannot be started", c.rec.ID[:12])
+	case StatusRestarting:
+		// docker start on a container waiting for its policy: start it now.
+		c.cancelRestartLocked()
+	}
+	if mode == startAPI {
+		c.rec.State.ManuallyStopped = false
+		c.restartDelay = 0
+	}
+	if len(c.rec.Networks) == 0 && c.rec.NetIP != "" {
+		// Disconnected from its last network while it ran: back to the
+		// device network.
+		e.addrs.Release(c.rec.NetIP)
+		c.rec.NetIP = ""
 	}
 	spec, err := e.buildSpec(c)
 	if err != nil {
-		e.startFailed(c, err)
+		e.startFailed(c, mode, err)
 		return err
 	}
-	c.rec.State.Status = StatusStarting
+	if err := e.transition(c, StatusStarting); err != nil {
+		return err
+	}
 	c.rec.State.Error = ""
 	if err := e.persist(c); err != nil {
 		return err
 	}
 	fws, assigns, err := e.openPorts(c)
 	if err != nil {
-		e.startFailed(c, err)
+		e.startFailed(c, mode, err)
 		return err
 	}
 	proc, err := e.Runtime.Start(spec)
@@ -50,12 +83,15 @@ func (e *Engine) Start(ref string) error {
 		for _, f := range fws {
 			f.Close()
 		}
-		e.startFailed(c, err)
+		e.startFailed(c, mode, err)
 		return err
 	}
 	c.forwarders, c.ports = fws, assigns
+	if err := e.transition(c, StatusRunning); err != nil {
+		proc.Kill()
+		return err
+	}
 	st := &c.rec.State
-	st.Status = StatusRunning
 	st.Pid = proc.Pid()
 	st.PidStart = procid.StartTime(proc.Pid())
 	st.StartedAt = time.Now().UTC()
@@ -74,15 +110,18 @@ func (e *Engine) Start(ref string) error {
 		}
 	}
 	e.log.Info("container started", "id", c.rec.ID[:12], "pid", st.Pid)
+	e.containerEvent(c, "start")
 	go e.monitor(c, proc, c.runDone)
 	return nil
 }
 
 // startFailed records a process that could not start the way Docker does:
-// the container stays created, with an exit code and error; attached
-// clients are released, and an auto-remove container is removed (docker
-// run --rm waits for that). Called with c.mu held.
-func (e *Engine) startFailed(c *Container, err error) {
+// the container keeps its state (created, or exited if it ran before), with
+// an exit code and error; attached clients are released, and an auto-remove
+// container is removed (docker run --rm waits for that). A start that a
+// restart policy made counts as a failed run, so the policy decides again
+// (with a longer delay). Called with c.mu held.
+func (e *Engine) startFailed(c *Container, mode startMode, err error) {
 	defer func() {
 		c.logger.EndRun()
 		if c.rec.HostConfig.AutoRemove {
@@ -94,13 +133,22 @@ func (e *Engine) startFailed(c *Container, err error) {
 		}
 	}()
 	st := &c.rec.State
-	st.Status = StatusCreated
+	if st.StartedAt.IsZero() {
+		st.Status = StatusCreated
+	} else {
+		st.Status = StatusExited
+	}
+	st.Restarting = false
 	st.Error = err.Error()
 	st.ExitCode = 128
 	if strings.Contains(st.Error, "executable file not found") || strings.Contains(st.Error, "no such file or directory") {
 		st.ExitCode = 127
 	} else if strings.Contains(st.Error, "permission denied") {
 		st.ExitCode = 126
+	}
+	if mode == startPolicy && st.Status == StatusExited && !c.rec.HostConfig.AutoRemove && !e.shuttingDown.Load() &&
+		shouldRestart(c.rec.HostConfig.RestartPolicy, st.ExitCode, st.ManuallyStopped, c.rec.RestartCount, false) {
+		e.scheduleRestartLocked(c, 0)
 	}
 	if perr := e.persist(c); perr != nil {
 		e.log.Error("persisting failed start", "id", c.rec.ID, "err", perr)
@@ -184,7 +232,7 @@ func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) 
 	return runtime.Spec{
 		ID: c.rec.ID, Rootfs: rootfs,
 		Args: append([]string{exe}, p.Argv[1:]...), Env: env, Cwd: cwd,
-		UID: user.UID, GID: user.GID, Binds: binds,
+		UID: user.UID, GID: user.GID, Binds: binds, NetIP: c.rec.NetIP,
 		Tty: p.Tty, OpenStdin: p.OpenStdin,
 		Stdout: p.Stdout, Stderr: p.Stderr,
 	}, nil
@@ -192,13 +240,17 @@ func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) 
 
 func hasEnvIn(env []string, key string) bool { return hasEnv(env, key) }
 
-// monitor waits for the process, records its exit and wakes waiters.
+// monitor waits for the process, records its exit, applies the restart
+// policy and wakes waiters.
 func (e *Engine) monitor(c *Container, proc runtime.Process, done chan struct{}) {
 	ex := proc.Wait()
 	c.logger.EndRun()
 	c.mu.Lock()
 	st := &c.rec.State
-	st.Status = StatusExited
+	ranFor := time.Since(st.StartedAt)
+	if err := e.transition(c, StatusExited); err != nil {
+		st.Status = StatusExited // the process is gone whatever the record said
+	}
 	st.ExitCode = ex.Code
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
@@ -207,19 +259,79 @@ func (e *Engine) monitor(c *Container, proc runtime.Process, done chan struct{})
 	c.killExecsLocked()
 	c.stdin.end()
 	c.stdin = newStdinBroker()
+	e.containerEvent(c, "die", exitCodeAttr(ex.Code)...)
+	autoRemove := c.rec.HostConfig.AutoRemove
+	restart := !autoRemove && !e.shuttingDown.Load() &&
+		shouldRestart(c.rec.HostConfig.RestartPolicy, ex.Code, st.ManuallyStopped, c.rec.RestartCount, false)
+	if restart {
+		e.scheduleRestartLocked(c, ranFor)
+	}
 	if err := e.persist(c); err != nil {
 		e.log.Error("persisting exited container", "id", c.rec.ID, "err", err)
 	}
-	c.notifyLocked(WaitResult{StatusCode: ex.Code}, "not-running", "next-exit")
-	autoRemove := c.rec.HostConfig.AutoRemove
+	if restart {
+		// As in dockerd, a restarting container still counts as running:
+		// only next-exit waiters (docker run) see this exit.
+		c.notifyLocked(WaitResult{StatusCode: ex.Code}, "next-exit")
+	} else {
+		c.notifyLocked(WaitResult{StatusCode: ex.Code}, "not-running", "next-exit")
+	}
 	close(done)
 	c.mu.Unlock()
-	e.log.Info("container exited", "id", c.rec.ID[:12], "code", ex.Code)
+	e.log.Info("container exited", "id", c.rec.ID[:12], "code", ex.Code, "restart", restart)
 	if autoRemove {
 		if err := e.Remove(c.rec.ID, false); err != nil {
 			e.log.Error("auto-removing container", "id", c.rec.ID, "err", err)
 		}
 	}
+}
+
+// scheduleRestartLocked moves c to restarting and arms its restart timer.
+// Nothing runs until the timer fires. Called with c.mu held.
+func (e *Engine) scheduleRestartLocked(c *Container, ranFor time.Duration) {
+	if err := e.transition(c, StatusRestarting); err != nil {
+		return
+	}
+	c.restartDelay = nextRestartDelay(c.restartDelay, ranFor)
+	e.log.Info("container will restart", "id", c.rec.ID[:12], "policy", c.rec.HostConfig.RestartPolicy.Name, "in", c.restartDelay)
+	c.restartTimer = time.AfterFunc(c.restartDelay, func() { e.policyRestart(c) })
+}
+
+// policyRestart is the restart timer firing. It starts the container only if
+// it is still waiting: a stop, kill or removal in between cancelled it.
+func (e *Engine) policyRestart(c *Container) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.gone || c.rec.State.Status != StatusRestarting || e.shuttingDown.Load() {
+		return
+	}
+	c.restartTimer = nil
+	c.rec.RestartCount++
+	if err := e.startLocked(c, startPolicy); err != nil {
+		e.log.Warn("restart-policy start failed", "id", c.rec.ID[:12], "err", err)
+	}
+}
+
+// cancelRestartLocked disarms a pending policy restart. Called with c.mu held.
+func (c *Container) cancelRestartLocked() {
+	if c.restartTimer != nil {
+		c.restartTimer.Stop()
+		c.restartTimer = nil
+	}
+}
+
+// stopRestartingLocked ends a container that waits for its policy restart:
+// it stays exited. Called with c.mu held.
+func (e *Engine) stopRestartingLocked(c *Container, manual bool) {
+	c.cancelRestartLocked()
+	e.transition(c, StatusExited)
+	if manual {
+		c.rec.State.ManuallyStopped = true
+	}
+	if err := e.persist(c); err != nil {
+		e.log.Error("persisting stopped container", "id", c.rec.ID, "err", err)
+	}
+	c.notifyLocked(WaitResult{StatusCode: c.rec.State.ExitCode}, "not-running")
 }
 
 func (c *Container) notifyLocked(r WaitResult, conds ...string) {
@@ -302,7 +414,8 @@ var signals = map[string]syscall.Signal{
 	"XCPU": syscall.SIGXCPU, "XFSZ": syscall.SIGXFSZ,
 }
 
-// Kill signals a running container.
+// Kill signals a running container. SIGKILL also counts as a manual stop,
+// so a restart policy does not bring the container back.
 func (e *Engine) Kill(ref, signal string) error {
 	sig, err := ParseSignal(signal)
 	if err != nil {
@@ -313,7 +426,20 @@ func (e *Engine) Kill(ref, signal string) error {
 		return err
 	}
 	c.mu.Lock()
+	if c.rec.State.Status == StatusRestarting {
+		e.containerEvent(c, "kill", "signal", strconv.Itoa(int(sig)))
+		e.stopRestartingLocked(c, sig == syscall.SIGKILL)
+		c.mu.Unlock()
+		return nil
+	}
 	proc := c.proc
+	if proc != nil {
+		e.containerEvent(c, "kill", "signal", strconv.Itoa(int(sig)))
+		if sig == syscall.SIGKILL && !c.rec.State.ManuallyStopped {
+			c.rec.State.ManuallyStopped = true
+			e.persist(c)
+		}
+	}
 	c.mu.Unlock()
 	if proc == nil {
 		return errdefs.Conflict("Container %s is not running", c.rec.ID[:12])
@@ -324,15 +450,33 @@ func (e *Engine) Kill(ref, signal string) error {
 	return proc.Signal(sig)
 }
 
-// Stop sends the stop signal, then SIGKILL after timeout seconds.
+// Stop sends the stop signal, then SIGKILL after timeout seconds. It is a
+// manual stop: the restart policy does not restart the container.
 func (e *Engine) Stop(ref string, timeout *int) error {
 	c, err := e.Lookup(ref)
 	if err != nil {
 		return err
 	}
+	return e.stop(c, timeout, true)
+}
+
+func (e *Engine) stop(c *Container, timeout *int, manual bool) error {
 	c.mu.Lock()
+	if c.rec.State.Status == StatusRestarting {
+		e.stopRestartingLocked(c, manual)
+		e.containerEvent(c, "stop")
+		c.mu.Unlock()
+		return nil
+	}
 	proc, done := c.proc, c.runDone
 	stopSignal, stopTimeout := c.rec.Config.StopSignal, c.rec.Config.StopTimeout
+	if proc != nil && manual && !c.rec.State.ManuallyStopped {
+		// Recorded before the process exits, so the monitor never restarts it.
+		c.rec.State.ManuallyStopped = true
+		if err := e.persist(c); err != nil {
+			e.log.Error("persisting manual stop", "id", c.rec.ID, "err", err)
+		}
+	}
 	c.mu.Unlock()
 	if proc == nil {
 		return errdefs.NotModified("container already stopped")
@@ -350,7 +494,13 @@ func (e *Engine) Stop(ref string, timeout *int) error {
 			sig = s
 		}
 	}
+	c.mu.Lock()
+	e.containerEvent(c, "kill", "signal", strconv.Itoa(int(sig)))
+	c.mu.Unlock()
 	stopProcess(proc, done, sig, t)
+	c.mu.Lock()
+	e.containerEvent(c, "stop")
+	c.mu.Unlock()
 	return nil
 }
 
@@ -379,9 +529,13 @@ func (e *Engine) Restart(ref string, timeout *int) error {
 		return err
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.rec.RestartCount++
-	c.mu.Unlock()
-	return e.Start(ref)
+	if err := e.startLocked(c, startAPI); err != nil {
+		return err
+	}
+	e.containerEvent(c, "restart")
+	return nil
 }
 
 // Resize sets the TTY size of a running container.
@@ -413,24 +567,37 @@ func (e *Engine) Remove(ref string, force bool) error {
 		c.mu.Unlock()
 		return errdefs.Conflict("removal of container %s is already in progress", c.rec.ID[:12])
 	}
+	if c.rec.State.Status == StatusRestarting {
+		if !force {
+			c.mu.Unlock()
+			return errdefs.Conflict("You cannot remove a restarting container %s. Stop the container before attempting removal or force remove", c.rec.ID)
+		}
+		c.cancelRestartLocked()
+	}
 	if proc, done := c.proc, c.runDone; proc != nil {
 		if !force {
 			c.mu.Unlock()
 			return errdefs.Conflict("You cannot remove a running container %s. Stop the container before attempting removal or force remove", c.rec.ID)
 		}
+		// Killed for removal: never restarted by its policy.
+		c.rec.State.ManuallyStopped = true
 		c.mu.Unlock()
 		proc.Kill()
 		<-done
 		c.mu.Lock()
+		c.cancelRestartLocked()
 	}
-	c.rec.State.Status = StatusRemoving
+	if err := e.transition(c, StatusRemoving); err != nil {
+		c.mu.Unlock()
+		return err
+	}
 	if err := e.persist(c); err != nil {
 		c.mu.Unlock()
 		return err
 	}
 	c.logger.Close()
 	if err := securefs.RemoveTree(c.dir); err != nil {
-		c.rec.State.Status = StatusFailed
+		e.transition(c, StatusFailed)
 		c.rec.State.Error = fmt.Sprintf("removal failed: %v", err)
 		e.persist(c)
 		c.mu.Unlock()
@@ -438,7 +605,12 @@ func (e *Engine) Remove(ref string, force bool) error {
 	}
 	c.gone = true
 	e.forgetExecs(c)
+	if c.rec.NetIP != "" {
+		e.addrs.Release(c.rec.NetIP)
+	}
+	netIDs := netSet(c.rec.Networks)
 	c.notifyLocked(WaitResult{StatusCode: c.rec.State.ExitCode}, "not-running", "next-exit", "removed")
+	e.containerEvent(c, "destroy")
 	c.mu.Unlock()
 	e.mu.Lock()
 	delete(e.containers, c.rec.ID)
@@ -446,6 +618,9 @@ func (e *Engine) Remove(ref string, force bool) error {
 		delete(e.names, c.rec.Name)
 	}
 	e.mu.Unlock()
+	if len(netIDs) > 0 {
+		e.syncHosts(netIDs)
+	}
 	e.log.Info("container removed", "id", c.rec.ID[:12])
 	return nil
 }
@@ -480,8 +655,10 @@ func (e *Engine) Attach(ref string) (*Container, AttachStreams, error) {
 }
 
 // Shutdown stops every running container in parallel (stop signal, then
-// SIGKILL after timeout) so nothing outlives the daemon.
+// SIGKILL after timeout) so nothing outlives the daemon. It is not a manual
+// stop: restart policies bring the containers back when the daemon starts.
 func (e *Engine) Shutdown(timeout int) {
+	e.shuttingDown.Store(true)
 	var wg sync.WaitGroup
 	for _, r := range e.List() {
 		if IsRunning(r.State.Status) {
@@ -489,8 +666,12 @@ func (e *Engine) Shutdown(timeout int) {
 			wg.Add(1)
 			go func(id string) {
 				defer wg.Done()
+				c, err := e.Lookup(id)
+				if err != nil {
+					return
+				}
 				t := timeout
-				e.Stop(id, &t)
+				e.stop(c, &t, false)
 			}(r.ID)
 		}
 	}
@@ -508,4 +689,24 @@ func (e *Engine) Counts() (running, stopped, total int) {
 		}
 	}
 	return
+}
+
+// UpdateRestartPolicy changes a container's restart policy (docker update
+// --restart). It takes effect at the container's next exit.
+func (e *Engine) UpdateRestartPolicy(ref string, p RestartPolicy) error {
+	c, err := e.Lookup(ref)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := validateRestartPolicy(p, c.rec.HostConfig.AutoRemove); err != nil {
+		return err
+	}
+	c.rec.HostConfig.RestartPolicy = p
+	if err := e.persist(c); err != nil {
+		return err
+	}
+	e.containerEvent(c, "update")
+	return nil
 }

@@ -17,11 +17,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/events"
 	"github.com/Lord1Egypt/ThothDock/internal/image"
 	"github.com/Lord1Egypt/ThothDock/internal/logs"
+	"github.com/Lord1Egypt/ThothDock/internal/network"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/portmap"
@@ -48,18 +51,29 @@ type Config struct {
 
 // Engine manages containers.
 type Engine struct {
-	Layout  platform.Layout
-	Images  *image.Store
-	Puller  *image.Puller
-	Runtime runtime.Runtime
-	Volumes *volume.Store
-	cfg     Config
+	Layout   platform.Layout
+	Images   *image.Store
+	Puller   *image.Puller
+	Runtime  runtime.Runtime
+	Volumes  *volume.Store
+	Networks *network.Store
+	Events   *events.Bus
+	cfg      Config
+	// addrs are the containers' loopback addresses; hostsMu serialises
+	// /etc/hosts rewrites so the last one always reflects every membership.
+	addrs   *network.Pool
+	hostsMu sync.Mutex
 	log     *slog.Logger
 
 	mu         sync.Mutex
 	containers map[string]*Container
 	names      map[string]string // name -> ID
 	execs      map[string]*Exec
+	// restore holds the containers whose restart policy asks for a start
+	// now that the daemon runs again; RestoreRestartPolicies consumes it.
+	restore []string
+	// shuttingDown stops restart policies while the daemon stops containers.
+	shuttingDown atomic.Bool
 }
 
 // Container is a live container object.
@@ -78,6 +92,10 @@ type Container struct {
 	forwarders []*portmap.Forwarder
 	ports      []PortAssign
 	gone       bool // removed
+	// restartTimer is armed while the container waits for a policy restart;
+	// restartDelay is the backoff that timer used.
+	restartTimer *time.Timer
+	restartDelay time.Duration
 }
 
 type waiter struct {
@@ -100,8 +118,12 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 	if err != nil {
 		return nil, err
 	}
-	e := &Engine{Layout: layout, Volumes: vols, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
-		containers: map[string]*Container{}, names: map[string]string{}}
+	nets, err := network.Open(filepath.Join(layout.Root, "networks.json"))
+	if err != nil {
+		return nil, err
+	}
+	e := &Engine{Layout: layout, Volumes: vols, Networks: nets, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
+		Events: events.New(), addrs: network.NewPool(), containers: map[string]*Container{}, names: map[string]string{}}
 	entries, err := os.ReadDir(layout.Containers())
 	if err != nil {
 		return nil, err
@@ -130,6 +152,11 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 		if err := e.reconcile(c); err != nil {
 			return nil, err
 		}
+		e.loadNetworking(c)
+		if st := rec.State; !c.rec.State.StartedAt.IsZero() &&
+			shouldRestart(c.rec.HostConfig.RestartPolicy, c.rec.State.ExitCode, st.ManuallyStopped, c.rec.RestartCount, true) {
+			e.restore = append(e.restore, rec.ID)
+		}
 		if c.logger, err = logs.Open(filepath.Join(dir, "container.log"), cfg.LogMaxSize); err != nil {
 			return nil, err
 		}
@@ -142,10 +169,17 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 
 // reconcile never trusts a persisted "running": ThothDock cannot reattach
 // to a previous daemon's process output, so a survivor is killed and every
-// formerly running container is recorded as exited.
+// formerly running container is recorded as exited. A container that was
+// waiting for a policy restart is recorded as exited too; its policy is
+// applied again by RestoreRestartPolicies.
 func (e *Engine) reconcile(c *Container) error {
 	st := &c.rec.State
-	if st.Status != StatusRunning && st.Status != StatusStarting {
+	switch st.Status {
+	case StatusRestarting:
+		st.Status, st.Restarting = StatusExited, false
+		return e.persist(c)
+	case StatusRunning, StatusStarting:
+	default:
 		return nil
 	}
 	if st.Pid > 0 && procid.KillGroup(st.Pid, st.PidStart) {
@@ -157,6 +191,68 @@ func (e *Engine) reconcile(c *Container) error {
 	st.FinishedAt = time.Now().UTC()
 	st.Pid, st.PidStart = 0, 0
 	return e.persist(c)
+}
+
+// loadNetworking drops memberships of networks that no longer exist and
+// reserves the container's address; a container left on no user network
+// gives its address back. It writes the record only if something changed.
+// Called from New only, when no container runs.
+func (e *Engine) loadNetworking(c *Container) {
+	changed := false
+	for id, ep := range c.rec.Networks {
+		if _, err := e.Networks.Lookup(id); err != nil {
+			e.log.Warn("dropping a membership of a missing network", "id", c.rec.ID[:12], "network", ep.Name)
+			delete(c.rec.Networks, id)
+			changed = true
+		}
+	}
+	switch {
+	case len(c.rec.Networks) == 0 && c.rec.NetIP != "":
+		c.rec.NetIP, changed = "", true
+	case c.rec.NetIP != "":
+		if err := e.addrs.Reserve(c.rec.NetIP, c.rec.ID); err != nil {
+			e.log.Warn("container address unusable; it gets a new one", "id", c.rec.ID[:12], "err", err)
+			c.rec.NetIP, changed = "", true
+		}
+	}
+	if c.rec.NetIP == "" && len(c.rec.Networks) > 0 {
+		if ip, err := e.addrs.Allocate(c.rec.ID); err == nil {
+			c.rec.NetIP, changed = ip, true
+		}
+	}
+	if changed {
+		if err := e.persist(c); err != nil {
+			e.log.Warn("persisting networking", "id", c.rec.ID[:12], "err", err)
+		}
+	}
+}
+
+// RestoreRestartPolicies starts, once, the containers whose restart policy
+// asks for it after a daemon start (ADR-0004), oldest first. It returns
+// without waiting; failures are logged and recorded on the container.
+func (e *Engine) RestoreRestartPolicies() {
+	e.mu.Lock()
+	ids := e.restore
+	e.restore = nil
+	byCreated := make([]*Container, 0, len(ids))
+	for _, id := range ids {
+		if c, ok := e.containers[id]; ok {
+			byCreated = append(byCreated, c)
+		}
+	}
+	e.mu.Unlock()
+	sort.Slice(byCreated, func(i, j int) bool { return byCreated[i].rec.Created.Before(byCreated[j].rec.Created) })
+	go func() {
+		for _, c := range byCreated {
+			if e.shuttingDown.Load() {
+				return
+			}
+			e.log.Info("restoring container by restart policy", "id", c.rec.ID[:12], "policy", c.rec.HostConfig.RestartPolicy.Name)
+			if err := e.start(c, startPolicy); err != nil && errdefs.KindOf(err) != errdefs.KindNotModified {
+				e.log.Warn("restart-policy restore failed", "id", c.rec.ID[:12], "err", err)
+			}
+		}
+	}()
 }
 
 func (e *Engine) persist(c *Container) error {
@@ -278,8 +374,11 @@ func (e *Engine) ImageUsage(id oci.Digest) (running, stopped []string) {
 	return running, stopped
 }
 
-// IsRunning reports whether the status counts as running.
-func IsRunning(status string) bool { return status == StatusRunning || status == StatusStarting }
+// IsRunning reports whether the status counts as running. A container
+// waiting for a policy restart counts, as in dockerd (`docker ps` lists it).
+func IsRunning(status string) bool {
+	return status == StatusRunning || status == StatusStarting || status == StatusRestarting
+}
 
 func ignoreNotExist(err error) error {
 	if errors.Is(err, fs.ErrNotExist) {

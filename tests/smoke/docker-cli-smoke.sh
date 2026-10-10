@@ -44,8 +44,9 @@ docker ps >/dev/null || fail "docker ps"
 pass "docker ps"
 docker images >/dev/null || fail "docker images"
 pass "docker images"
-if docker network ls >/dev/null 2>"$WORK/net.err"; then fail "networks should be unsupported"; fi
-grep -q "ThothDock does not implement" "$WORK/net.err" || fail "unsupported endpoint message: $(cat "$WORK/net.err")"
+if docker system df >/dev/null 2>"$WORK/df.err"; then fail "system df should be unsupported"; fi
+grep -q "ThothDock does not implement" "$WORK/df.err" || fail "unsupported endpoint message: $(cat "$WORK/df.err")"
+[ "$(docker network ls --format '{{.Name}}' | sort | tr '\n' ' ')" = "bridge host none " ] || fail "docker network ls"
 pass "unsupported endpoints say so"
 
 if [ "${SMOKE_PULL:-0}" = 1 ]; then

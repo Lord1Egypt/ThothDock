@@ -296,7 +296,7 @@ func TestUnsupportedFeaturesAreRefused(t *testing.T) {
 	tr := true
 	cases := map[string]HostConfig{
 		"privileged": {Privileged: true}, "memory": {Memory: 1 << 20}, "cpus": {NanoCpus: 1e9},
-		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "restart": {RestartPolicy: RestartPolicy{Name: "always"}}, "readonly": {ReadonlyRootfs: true},
+		"pids": {PidsLimit: &one}, "caps": {CapAdd: []string{"NET_ADMIN"}}, "readonly": {ReadonlyRootfs: true},
 		"network-none": {NetworkMode: "none"}, "init": {Init: &tr}, "named-volume-ro": {Binds: []string{"data1:/vol:ro"}},
 		"ro-bind": {Binds: []string{"/tmp:/x:ro"}},
 	}
@@ -311,7 +311,7 @@ func TestUnsupportedFeaturesAreRefused(t *testing.T) {
 		t.Fatal("refused creates left containers")
 	}
 	_, warnings, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: &HostConfig{NetworkMode: "bridge"}}, "", "")
-	if err != nil || len(warnings) == 0 || !strings.Contains(warnings[0], "shares the device network") {
+	if err != nil || len(warnings) == 0 || !strings.Contains(warnings[0], "device network") {
 		t.Fatalf("%v %v", warnings, err)
 	}
 }

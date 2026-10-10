@@ -29,6 +29,9 @@ type Spec struct {
 	Tty   bool
 	// OpenStdin keeps a writable stdin; otherwise stdin is /dev/null.
 	OpenStdin bool
+	// NetIP, when set, is the process's own loopback address (PRoot
+	// --net-ip, ThothDock user-defined networks).
+	NetIP string
 	// Stdout receives output (the whole PTY stream with Tty); Stderr
 	// receives standard error when not Tty.
 	Stdout io.Writer

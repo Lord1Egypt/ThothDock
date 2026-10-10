@@ -38,6 +38,8 @@ type PRootConfig struct {
 // PRootRuntime runs each container process as a PRoot tracee.
 type PRootRuntime struct {
 	cfg PRootConfig
+	// netIP: this PRoot has --net-ip (Garden patch 0009).
+	netIP bool
 }
 
 // NewPRoot checks that proot is executable.
@@ -80,6 +82,7 @@ func (r *PRootRuntime) checkOptions() error {
 		return fmt.Errorf("proot: %s --help did not finish: %w", r.cfg.Path, ctx.Err())
 	}
 	help := string(out)
+	r.netIP = strings.Contains(help, "--net-ip")
 	for _, opt := range requiredOptions {
 		if !strings.Contains(help, opt) {
 			if err != nil {
@@ -92,6 +95,10 @@ func (r *PRootRuntime) checkOptions() error {
 }
 
 func (r *PRootRuntime) Name() string { return "proot" }
+
+// SupportsNetIP reports whether containers can have their own loopback
+// address (user-defined networks).
+func (r *PRootRuntime) SupportsNetIP() bool { return r.netIP }
 
 // Config returns the configuration.
 func (r *PRootRuntime) Config() PRootConfig { return r.cfg }
@@ -112,6 +119,9 @@ func (r *PRootRuntime) Argv(spec Spec) []string {
 		cwd = "/"
 	}
 	argv = append(argv, "--cwd="+cwd, "--kill-on-exit")
+	if spec.NetIP != "" {
+		argv = append(argv, "--net-ip="+spec.NetIP)
+	}
 	if r.cfg.KernelRelease != "" {
 		argv = append(argv, "--kernel-release="+r.cfg.KernelRelease)
 	}

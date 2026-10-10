@@ -25,6 +25,8 @@ func apiStatus(st engine.State) string {
 
 func statusText(st engine.State) string {
 	switch st.Status {
+	case engine.StatusRestarting:
+		return fmt.Sprintf("Restarting (%d) %s ago", st.ExitCode, humanDuration(time.Since(st.FinishedAt)))
 	case engine.StatusRunning, engine.StatusStarting:
 		return "Up " + humanDuration(time.Since(st.StartedAt))
 	case engine.StatusExited:
@@ -89,8 +91,8 @@ func (s *Server) listContainers(w http.ResponseWriter, r *http.Request) {
 			"Id": c.ID, "Names": []string{"/" + c.Name}, "Image": c.ImageRef, "ImageID": string(c.Image),
 			"Command": command(c), "Created": c.Created.Unix(), "Ports": portsList(c), "Labels": nonNilMap(c.Config.Labels),
 			"State": apiStatus(c.State), "Status": statusText(c.State),
-			"HostConfig":      map[string]string{"NetworkMode": "host"},
-			"NetworkSettings": map[string]any{"Networks": map[string]any{"host": map[string]any{}}},
+			"HostConfig":      map[string]string{"NetworkMode": networkMode(c)},
+			"NetworkSettings": map[string]any{"Networks": containerNetworks(c)},
 			"Mounts":          mounts(c),
 		})
 	}
@@ -168,7 +170,7 @@ func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"Id": rec.ID, "Created": rec.Created.Format(time.RFC3339Nano), "Path": rec.Path, "Args": nonNilSlice(rec.Args),
 		"State": map[string]any{
-			"Status": apiStatus(st), "Running": engine.IsRunning(st.Status), "Paused": false, "Restarting": false,
+			"Status": apiStatus(st), "Running": engine.IsRunning(st.Status), "Paused": false, "Restarting": st.Restarting,
 			"OOMKilled": false, "Dead": st.Status == engine.StatusFailed, "Pid": st.Pid, "ExitCode": st.ExitCode,
 			"Error": st.Error, "StartedAt": st.StartedAt.Format(time.RFC3339Nano), "FinishedAt": st.FinishedAt.Format(time.RFC3339Nano),
 		},
@@ -181,7 +183,7 @@ func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
 		"Mounts":      mounts(rec), "Config": cfg,
 		"NetworkSettings": map[string]any{
 			"Bridge": "", "SandboxID": "", "HairpinMode": false, "Ports": portsMap(rec),
-			"SandboxKey": "", "Networks": map[string]any{"host": map[string]any{"NetworkID": "host"}},
+			"SandboxKey": "", "Networks": containerNetworks(rec),
 		},
 	})
 }
@@ -225,6 +227,30 @@ func (s *Server) restartContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// updateContainer is docker update. Only the restart policy can change:
+// resource limits need cgroups and are refused, never ignored.
+func (s *Server) updateContainer(w http.ResponseWriter, r *http.Request) {
+	var hc engine.HostConfig
+	if err := decodeBody(w, r, &hc); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := engine.RefuseResourceLimits(&hc); err != nil {
+		writeError(w, err)
+		return
+	}
+	if hc.RestartPolicy.Name != "" {
+		if err := s.Engine.UpdateRestartPolicy(r.PathValue("id"), hc.RestartPolicy); err != nil {
+			writeError(w, err)
+			return
+		}
+	} else if _, err := s.Engine.Lookup(r.PathValue("id")); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"Warnings": []string{}})
 }
 
 func (s *Server) killContainer(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/events"
 	"github.com/Lord1Egypt/ThothDock/internal/image"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/registry"
@@ -180,6 +181,7 @@ func (s *Server) pullImage(w http.ResponseWriter, r *http.Request) {
 		send(m)
 		return
 	}
+	s.Engine.Events.Publish(events.Event{Type: "image", Action: "pull", ID: name, Attrs: map[string]string{"name": name}})
 	send(jsonMessage{Status: "Status: " + status})
 }
 
@@ -281,6 +283,7 @@ func (s *Server) imagePost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		s.Engine.Events.Publish(events.Event{Type: "image", Action: "tag", ID: name, Attrs: map[string]string{"name": target}})
 		w.WriteHeader(http.StatusCreated)
 	case "push":
 		writeError(w, errdefs.Unsupported("ThothDock does not implement docker push (planned)"))
@@ -294,6 +297,14 @@ func (s *Server) deleteImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	for _, it := range items {
+		if it.Untagged != "" {
+			s.Engine.Events.Publish(events.Event{Type: "image", Action: "untag", ID: it.Untagged, Attrs: map[string]string{"name": it.Untagged}})
+		}
+		if it.Deleted != "" {
+			s.Engine.Events.Publish(events.Event{Type: "image", Action: "delete", ID: it.Deleted, Attrs: map[string]string{"name": it.Deleted}})
+		}
 	}
 	writeJSON(w, http.StatusOK, items)
 }

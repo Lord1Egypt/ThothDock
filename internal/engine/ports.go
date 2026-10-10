@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
+	"github.com/Lord1Egypt/ThothDock/internal/network"
 	"github.com/Lord1Egypt/ThothDock/internal/portmap"
 )
 
@@ -41,7 +42,9 @@ func splitPortKey(key string) (int, string, error) {
 }
 
 // planPorts validates -p/-P. It returns what to publish and warnings.
-func (e *Engine) planPorts(hc *HostConfig, exposed map[string]struct{}) ([]portPlan, []string, error) {
+// addressed is true for a container with its own address (user networks),
+// where host and container ports never collide.
+func (e *Engine) planPorts(hc *HostConfig, exposed map[string]struct{}, addressed bool) ([]portPlan, []string, error) {
 	var plans []portPlan
 	var warnings []string
 	explicit := map[int]bool{}
@@ -96,7 +99,7 @@ func (e *Engine) planPorts(hc *HostConfig, exposed map[string]struct{}) ([]portP
 		}
 	}
 	for _, p := range plans {
-		if p.hostPort != 0 && p.hostPort == p.containerPort {
+		if !addressed && p.hostPort != 0 && p.hostPort == p.containerPort {
 			warnings = append(warnings, fmt.Sprintf("host port %d equals container port %d: containers share the device network, so the service is already reachable at its own address and no forwarder is started (its bind address is up to the service)", p.hostPort, p.containerPort))
 		}
 	}
@@ -106,7 +109,8 @@ func (e *Engine) planPorts(hc *HostConfig, exposed map[string]struct{}) ([]portP
 // openPorts binds the host side of every published port before the process
 // starts, so a taken port fails the start cleanly. Called with c.mu held.
 func (e *Engine) openPorts(c *Container) ([]*portmap.Forwarder, []PortAssign, error) {
-	plans, _, err := e.planPorts(&c.rec.HostConfig, c.rec.Config.ExposedPorts)
+	addressed := c.rec.NetIP != ""
+	plans, _, err := e.planPorts(&c.rec.HostConfig, c.rec.Config.ExposedPorts, addressed)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -118,11 +122,16 @@ func (e *Engine) openPorts(c *Container) ([]*portmap.Forwarder, []PortAssign, er
 		}
 	}
 	for _, p := range plans {
-		if p.hostPort != 0 && p.hostPort == p.containerPort {
+		if !addressed && p.hostPort != 0 && p.hostPort == p.containerPort {
 			assigns = append(assigns, PortAssign{HostIP: p.hostIP, HostPort: p.hostPort, ContainerPort: p.containerPort, Passthrough: true})
 			continue
 		}
-		f, err := portmap.Start(portmap.Binding{HostIP: p.hostIP, HostPort: p.hostPort, ContainerPort: p.containerPort})
+		b := portmap.Binding{HostIP: p.hostIP, HostPort: p.hostPort, ContainerPort: p.containerPort}
+		if addressed {
+			// The container's own address; PRoot moved ports below 1024 up.
+			b.Target = net.JoinHostPort(c.rec.NetIP, strconv.Itoa(network.Shift(p.containerPort)))
+		}
+		f, err := portmap.Start(b)
 		if err != nil {
 			closeAll()
 			var ae *portmap.AllocatedError

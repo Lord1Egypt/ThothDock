@@ -1,9 +1,11 @@
 // Package portmap publishes container TCP ports on the host in user space.
 //
-// ThothDock containers have no network namespace: a service inside one binds
-// on the device's own network. Publishing is therefore a plain TCP forwarder
-// from <host address>:<host port> to 127.0.0.1:<container port>. It binds the
-// loopback address unless told otherwise and needs no privilege.
+// ThothDock containers have no network namespace. A container on the device
+// network binds the device's own addresses; one on a user-defined network
+// binds its own loopback address (PRoot --net-ip). Publishing is a plain TCP
+// forwarder from <host address>:<host port> to 127.0.0.1:<container port>,
+// or to the container's own address. It binds the loopback address unless
+// told otherwise and needs no privilege.
 package portmap
 
 import (
@@ -27,6 +29,9 @@ type Binding struct {
 	HostIP        string // a literal IP address
 	HostPort      int    // 0: the system picks one
 	ContainerPort int
+	// Target is the address dialled for each connection; empty means
+	// 127.0.0.1:ContainerPort (a container on the device network).
+	Target string
 }
 
 // Forwarder serves one Binding until Close.
@@ -100,7 +105,11 @@ func (f *Forwarder) serve(client net.Conn) {
 		f.active--
 		f.mu.Unlock()
 	}()
-	target, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(f.Binding.ContainerPort)), dialTimeout)
+	addr := f.Binding.Target
+	if addr == "" {
+		addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(f.Binding.ContainerPort))
+	}
+	target, err := net.DialTimeout("tcp", addr, dialTimeout)
 	if err != nil {
 		return // nothing listens inside the container (yet): drop the client
 	}

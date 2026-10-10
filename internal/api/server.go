@@ -57,6 +57,16 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /containers/{id}/resize", s.resizeContainer)
 	m.HandleFunc("GET /containers/{id}/logs", s.containerLogs)
 	m.HandleFunc("DELETE /containers/{id}", s.removeContainer)
+	m.HandleFunc("POST /containers/{id}/update", s.updateContainer)
+	m.HandleFunc("GET /events", s.streamEvents)
+
+	m.HandleFunc("GET /networks", s.listNetworks)
+	m.HandleFunc("POST /networks/create", s.createNetwork)
+	m.HandleFunc("POST /networks/prune", s.pruneNetworks)
+	m.HandleFunc("GET /networks/{id}", s.inspectNetwork)
+	m.HandleFunc("DELETE /networks/{id}", s.removeNetwork)
+	m.HandleFunc("POST /networks/{id}/connect", s.connectNetwork)
+	m.HandleFunc("POST /networks/{id}/disconnect", s.disconnectNetwork)
 
 	m.HandleFunc("POST /containers/{id}/exec", s.execCreate)
 	m.HandleFunc("POST /exec/{id}/start", s.execStart)
@@ -78,7 +88,6 @@ func (s *Server) Handler() http.Handler {
 	for _, p := range []struct{ prefix, what string }{
 		{"/containers/{id}/pause", "pause/unpause (PRoot has no freezer cgroup)"},
 		{"/containers/{id}/unpause", "pause/unpause (PRoot has no freezer cgroup)"},
-		{"/containers/{id}/update", "resource updates (there are no cgroups)"},
 		{"/containers/{id}/stats", "container stats (there are no cgroups to read; planned from /proc)"},
 		{"/containers/{id}/top", "docker top (planned)"},
 		{"/containers/{id}/archive", "docker cp (planned)"},
@@ -87,8 +96,6 @@ func (s *Server) Handler() http.Handler {
 		{"/containers/{id}/rename", "docker rename (planned)"},
 		{"/build", "docker build (planned)"},
 		{"/commit", "docker commit (planned)"},
-		{"/networks", "networks (no network namespaces; containers share the device network)"},
-		{"/events", "the event stream (planned)"},
 		{"/system/df", "disk usage reporting (planned)"},
 		{"/swarm", "swarm mode"},
 		{"/nodes", "swarm mode"},

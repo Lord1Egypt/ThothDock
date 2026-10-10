@@ -25,19 +25,12 @@ const noCgroups = "containers run under PRoot without cgroups, so the limit woul
 // pretending, and returns warnings for what it honours differently.
 func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 	var warnings []string
+	if err := RefuseResourceLimits(hc); err != nil {
+		return nil, err
+	}
 	switch {
 	case hc.Privileged:
 		return nil, unsupported("privileged containers", "PRoot cannot grant kernel privileges")
-	case hc.Memory > 0, hc.MemoryReservation > 0, hc.MemorySwap > 0:
-		return nil, unsupported("memory limits", noCgroups)
-	case hc.NanoCpus > 0, hc.CpuQuota > 0, hc.CpuPeriod > 0, hc.CpuShares > 0, hc.CpusetCpus != "", hc.CpusetMems != "":
-		return nil, unsupported("CPU limits", noCgroups)
-	case hc.PidsLimit != nil && *hc.PidsLimit > 0:
-		return nil, unsupported("PID limits", noCgroups)
-	case hc.BlkioWeight > 0 || len(hc.BlkioDeviceReadBps) > 0:
-		return nil, unsupported("block I/O limits", noCgroups)
-	case len(hc.Ulimits) > 0:
-		return nil, unsupported("ulimits", "not implemented yet")
 	case hc.CgroupParent != "":
 		return nil, unsupported("cgroup parents", "there are no cgroups")
 	case len(hc.CapAdd) > 0 || len(hc.CapDrop) > 0:
@@ -65,8 +58,8 @@ func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 	case len(hc.GroupAdd) > 0:
 		return nil, unsupported("--group-add", "not implemented yet")
 	}
-	if hc.RestartPolicy.Name != "" && hc.RestartPolicy.Name != "no" {
-		return nil, unsupported("restart policy "+hc.RestartPolicy.Name, "planned")
+	if err := validateRestartPolicy(hc.RestartPolicy, hc.AutoRemove); err != nil {
+		return nil, err
 	}
 	if hc.Runtime != "" && hc.Runtime != e.Runtime.Name() {
 		return nil, errdefs.Invalid("unknown runtime %q (ThothDock has %q)", hc.Runtime, e.Runtime.Name())
@@ -84,14 +77,50 @@ func (e *Engine) validateHostConfig(hc *HostConfig) ([]string, error) {
 	}
 	switch hc.NetworkMode {
 	case "bridge":
-		warnings = append(warnings, "ThothDock has no network namespaces: the container shares the device network (like --network host)")
-	case "", "default", "host":
+		warnings = append(warnings, "the default bridge is the device network (like --network host); create a network for per-container addresses and names")
 	case "none":
 		return nil, unsupported("--network none", "there is no network namespace to isolate the container in")
-	default:
-		return nil, unsupported("network "+hc.NetworkMode, "user-defined networks need network namespaces")
 	}
 	return warnings, nil
+}
+
+// RefuseResourceLimits refuses any cgroup-backed limit (create and docker
+// update): there are no cgroups to enforce it, so it is never accepted and
+// silently ignored.
+func RefuseResourceLimits(hc *HostConfig) error {
+	switch {
+	case hc.Memory > 0, hc.MemoryReservation > 0, hc.MemorySwap > 0:
+		return unsupported("memory limits", noCgroups)
+	case hc.NanoCpus > 0, hc.CpuQuota > 0, hc.CpuPeriod > 0, hc.CpuShares > 0, hc.CpusetCpus != "", hc.CpusetMems != "":
+		return unsupported("CPU limits", noCgroups)
+	case hc.PidsLimit != nil && *hc.PidsLimit > 0:
+		return unsupported("PID limits", noCgroups)
+	case hc.BlkioWeight > 0 || len(hc.BlkioDeviceReadBps) > 0:
+		return unsupported("block I/O limits", noCgroups)
+	case len(hc.Ulimits) > 0:
+		return unsupported("ulimits", "not implemented yet")
+	}
+	return nil
+}
+
+// validateRestartPolicy applies dockerd's rules for HostConfig.RestartPolicy.
+func validateRestartPolicy(p RestartPolicy, autoRemove bool) error {
+	switch p.Name {
+	case "", PolicyNo, PolicyAlways, PolicyUnlessStopped:
+		if p.MaximumRetryCount != 0 {
+			return errdefs.Invalid("maximum retry count cannot be used with restart policy '%s'", p.Name)
+		}
+	case PolicyOnFailure:
+		if p.MaximumRetryCount < 0 {
+			return errdefs.Invalid("invalid restart policy: maximum retry count cannot be negative")
+		}
+	default:
+		return errdefs.Invalid("invalid restart policy '%s'", p.Name)
+	}
+	if autoRemove && p.Name != "" && p.Name != PolicyNo {
+		return errdefs.Invalid("can't create 'AutoRemove' container with restart policy")
+	}
+	return nil
 }
 
 func (e *Engine) bindAllowed(canon string) bool {
@@ -142,6 +171,10 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if len(req.Healthcheck) > 0 && string(req.Healthcheck) != "null" {
 		return "", nil, unsupported("health checks", "not implemented yet")
 	}
+	nets, err := e.resolveNetworks(hc.NetworkMode, req.NetworkingConfig)
+	if err != nil {
+		return "", nil, err
+	}
 	binds, err := e.resolveMounts(hc)
 	if err != nil {
 		return "", nil, err
@@ -150,7 +183,7 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if exposed == nil {
 		exposed = img.Config.Config.ExposedPorts
 	}
-	_, portWarnings, err := e.planPorts(hc, exposed)
+	_, portWarnings, err := e.planPorts(hc, exposed, len(nets) > 0)
 	if err != nil {
 		return "", nil, err
 	}
@@ -227,10 +260,24 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	id := newID()
 	e.names[name] = id // reserved while the filesystem is prepared
 	e.mu.Unlock()
+	var netIP string
+	if len(nets) > 0 {
+		if netIP, err = e.addrs.Allocate(id); err != nil {
+			e.mu.Lock()
+			delete(e.names, name)
+			e.mu.Unlock()
+			return "", nil, err
+		}
+	} else {
+		nets = nil
+	}
 	release := func() {
 		e.mu.Lock()
 		delete(e.names, name)
 		e.mu.Unlock()
+		if netIP != "" {
+			e.addrs.Release(netIP)
+		}
 	}
 	if cfg.Hostname == "" {
 		cfg.Hostname = id[:12]
@@ -239,7 +286,7 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	dir := filepath.Join(e.Layout.Containers(), id)
 	rec := Record{ID: id, Name: name, Created: time.Now().UTC(), Image: img.ID, ImageRef: req.Image,
 		Config: cfg, HostConfig: *hc, Path: argv[0], Args: argv[1:], Binds: binds,
-		State: State{Status: StatusCreated}}
+		State: State{Status: StatusCreated}, Networks: nets, NetIP: netIP}
 	moreWarnings, err := e.prepareDir(dir, &rec)
 	if err != nil {
 		release()
@@ -269,7 +316,14 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	e.mu.Lock()
 	e.containers[id] = c
 	e.mu.Unlock()
-	e.log.Info("container created", "id", id[:12], "name", name, "image", req.Image)
+	if netIP != "" {
+		// Its own hosts file and its peers' now that it is registered.
+		e.syncHosts(netSet(nets))
+	}
+	e.log.Info("container created", "id", id[:12], "name", name, "image", req.Image, "address", netIP)
+	c.mu.Lock()
+	e.containerEvent(c, "create")
+	c.mu.Unlock()
 	if warnings == nil {
 		warnings = []string{}
 	}
@@ -292,7 +346,12 @@ func (e *Engine) prepareDir(dir string, rec *Record) ([]string, error) {
 	if err := root.MkdirAll(rec.Config.WorkingDir); err != nil {
 		return nil, errdefs.Invalid("cannot create working directory %s: %v", rec.Config.WorkingDir, err)
 	}
-	hosts, err := hostsFile(rec.Config.Hostname, rec.HostConfig.ExtraHosts)
+	var hosts []byte
+	if rec.NetIP != "" {
+		hosts, err = hostsFor(*rec, nil) // peers are added by syncHosts after registration
+	} else {
+		hosts, err = hostsFile(rec.Config.Hostname, rec.HostConfig.ExtraHosts)
+	}
 	if err != nil {
 		return nil, err
 	}
