@@ -1,0 +1,9 @@
+daemon=10918 tree_pids=10918 6120
+6332
+9713
+9719
+19638
+daemon_rss_kb=5780
+window1 cpu_ticks=5 switches=666
+window2 cpu_ticks=10 switches=1017
+window3 cpu_ticks=9 switches=1041

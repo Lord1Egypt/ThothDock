@@ -1,0 +1,4 @@
+daemon=15292 containers_proot=3  daemon_rss_kb=14252
+window1 cpu_ticks=4 switches=211
+window2 cpu_ticks=2 switches=350
+window3 cpu_ticks=2 switches=193

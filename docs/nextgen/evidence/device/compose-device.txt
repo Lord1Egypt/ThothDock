@@ -1,0 +1,23 @@
+ Container demo-api-1  Creating
+ Container demo-api-1  Created
+ Container demo-web-1  Creating
+ Container demo-web-1  Created
+ Container demo-api-1  Starting
+ Container demo-api-1  Started
+ Container demo-web-1  Starting
+ Container demo-web-1  Started
+api running
+web running
+web sees api-unreachable
+api-ok
+[2Kapi-1  | Connection: close
+[2Kapi-1  | 
+ Container demo-api-1  Stopping
+ Container demo-api-1  Stopped
+ Container demo-web-1  Starting
+ Container demo-web-1  Started
+ Container demo-api-1  Removing
+ Container demo-api-1  Removed
+ Network demo_default  Removing
+ Network demo_default  Removed
+gone keep loop web1 

@@ -1,0 +1,15 @@
+com.thothterm.security  versionName=0.1.0  lastUpdateTime=٢٠٢٦-١٠-٠٧ ٠٦:١٨:٠٧  firstInstallTime=٢٠٢٦-١٠-٠٧ ٠٦:١٨:٠٧ 
+package:/data/app/~~RHcm3Suuaq8t_rMx6qEXag==/com.thothterm.security-pI8D8lOFPvsw8W_H5E38WA==/base.apk
+com.thothterm.arch  versionName=0.1.0  lastUpdateTime=٢٠٢٦-١٠-٠٣ ١٥:٤٥:٢٨  firstInstallTime=٢٠٢٦-٠٩-٣٠ ١٧:٣٣:٥٧ 
+package:/data/app/~~i17PvsMRS9ZahkCnZvwR1Q==/com.thothterm.arch-5S5bBJrV6YKs7gusVdIhvg==/base.apk
+com.thothterm.devel  versionName=1.3.1  lastUpdateTime=٢٠٢٦-٠٩-٢٧ ١٩:٣٤:٢٣  firstInstallTime=٢٠٢٦-٠٩-١٨ ٠٧:٣٦:٤٠ 
+package:/data/app/~~g7FzLSiaztrccP8yw8vY1g==/com.thothterm.devel-FACwDqZkxue84NtqI7wU9A==/base.apk
+com.thothterm.ubuntu  versionName=0.3.0  lastUpdateTime=٢٠٢٦-٠٩-٣٠ ١٨:٠٣:٣٩  firstInstallTime=٢٠٢٦-٠٩-٣٠ ١٨:٠٣:٣٩ 
+package:/data/app/~~nqo-P5lyWLb7YjUF88_Hvw==/com.thothterm.ubuntu-swLcNW7Dj17h9AyXpc5kpA==/base.apk
+com.thothterm.debian  versionName=0.3.0  lastUpdateTime=٢٠٢٦-١٠-٠٥ ٢٣:٤٩:٤٨  firstInstallTime=٢٠٢٦-١٠-٠٥ ٢٣:٤٩:٤٨ 
+package:/data/app/~~51DT66-s0Tv8uByAPG9qjg==/com.thothterm.debian-My61h7pWixXysnahwPJySw==/base.apk
+com.thothterm.debian 09aca5ff1724a068a7380456a482b5b3af8516aa1554bb204526b18f2efa7466
+com.thothterm.ubuntu fbddb517f0f121cb31b2cdfaca6bf65b5db5d7a9cab4ff7cdd46f0536efbda3a
+com.thothterm.arch 34e840cf3fea8f1f7af6d60de73307a68b61987262fc9503bf0d0310a1d77a8a
+com.thothterm.security 77232551c45193a401a5afc334f7be2d38d3e1b1fbeebe97d4c52351238d6d7b
+com.thothterm.devel 70426ed5a75e3d0e38a96b01429cd5ffa22ef36e1ca0f46ea60ebf7d00cc2a80

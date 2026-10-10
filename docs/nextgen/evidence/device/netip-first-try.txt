@@ -1,0 +1,22 @@
++ docker pull -q alpine:3.20
++ echo pulled
+pulled
++ docker network create demo
+302d397401ed569eec77a3af9ef879cf3b8bfb9dd626e47860a79d7ab0289586
++ docker run -d --name web1 --network demo alpine:3.20 sh -c 'while true; do printf "HTTP/1.0 200 OK\r\n\r\nweb1\n" | nc -l -p 80; done'
+bae6554617b589e5c1f5076da1e1c613195231feab91e6cf59ee31bc25a73aee
++ docker run -d --name web2 --network demo alpine:3.20 sh -c 'while true; do printf "HTTP/1.0 200 OK\r\n\r\nweb2\n" | nc -l -p 80; done'
+41922b5edc565b7f6ba8063c93ec3e2780e759ec790ed1b8b3044b64033cfa89
++ sleep 3
++ docker ps --format '{{.Names}} {{.Status}}'
+web2 Up 3 seconds
+web1 Up 3 seconds
++ docker inspect -f '{{.Name}} {{.NetworkSettings.Networks.demo.IPAddress}}' web1 web2
+/web1 127.77.0.2
+/web2 127.77.0.3
++ docker exec web2 wget -q -T 5 -O- http://web1/
+web1
++ docker exec web1 wget -q -T 5 -O- http://web2/
+web2
++ docker exec web1 wget -q -T 5 -O- http://localhost/
+web1
