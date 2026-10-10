@@ -51,6 +51,9 @@ type Server struct {
 	cert        tls.Certificate
 	fingerprint string
 	log         *slog.Logger
+	// CodeChanged is called after a pairing code is used up or exhausted, so
+	// whoever shows the code (the Android app) can stop showing a dead one.
+	CodeChanged func()
 }
 
 // New prepares the state directory, the certificate and the sessions.
@@ -286,10 +289,16 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusTooManyRequests
 		}
 		s.log.Warn("panel pairing refused", "remote", remoteHost(r), "reason", err)
+		if s.CodeChanged != nil && !s.auth.codeActive() {
+			s.CodeChanged() // five wrong tries ended the code
+		}
 		jsonError(w, status, err.Error())
 		return
 	}
 	s.log.Info("panel paired a browser", "remote", remoteHost(r))
+	if s.CodeChanged != nil {
+		s.CodeChanged() // the code is single use
+	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteStrictMode, MaxAge: int(sessionIdle / time.Second)})
 	jsonOK(w, map[string]string{"csrf": csrf})

@@ -487,3 +487,23 @@ func TestTLSStillWorksAndSlowClientsDoNotBlockIt(t *testing.T) {
 	}
 	_ = f
 }
+
+func TestCodeChangedFiresWhenTheCodeIsUsedOrExhausted(t *testing.T) {
+	f := newFixture(t)
+	calls := 0
+	f.panel.CodeChanged = func() { calls++ }
+	f.pair() // the code is used
+	if calls != 1 {
+		t.Fatalf("after a successful pairing: %d calls", calls)
+	}
+	clock := time.Now()
+	f.panel.auth.now = func() time.Time { return clock }
+	f.panel.NewCode()
+	for i := 0; i < codeAttempts; i++ {
+		clock = clock.Add(2 * time.Second)
+		f.req("POST", "/pair", `{"code":"1111111`+fmt.Sprint(i)+`"}`, f.origin())
+	}
+	if calls != 2 {
+		t.Fatalf("after five wrong tries: %d calls, want 2 (only the exhausting try)", calls)
+	}
+}

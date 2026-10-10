@@ -20,12 +20,21 @@ def check(ok, what):
 
 
 with sync_playwright() as p:
-    b = p.chromium.launch()
+    host = url.split("//")[1].split(":")[0]
+    b = p.chromium.launch(args=[f"--host-resolver-rules=MAP phone.test {host}"])
     page = b.new_page(ignore_https_errors=True, viewport={"width": 1280, "height": 860})
     problems = []
     page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
-    page.goto(url)
+    port = url.rsplit(":", 1)[1].rstrip("/")
+    page.goto(f"http://{host}:{port}/")
     page.wait_for_selector("#pair:not([hidden])")
+    check(page.url.startswith("https://"), f"http:// typed by mistake lands on {page.url}")
+    other = b.new_page(ignore_https_errors=True, viewport={"width": 1000, "height": 700})
+    other.goto(f"http://phone.test:{port}/")
+    check("uses HTTPS" in other.text_content("body"), "http:// with a name the panel cannot vouch for gets the explanation page")
+    other.screenshot(path=f"{shots}/device-http-misuse.png")
+    other.close()
+    page.screenshot(path=f"{shots}/device-panel-pairing.png")
     page.fill("#code", code)
     page.click("#pair-form button")
     page.wait_for_selector("#app:not([hidden])", timeout=15000)

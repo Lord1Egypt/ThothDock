@@ -146,6 +146,13 @@ func (a *auth) pair(code, remote string) (token, csrf string, err error) {
 	return token, csrf, nil
 }
 
+// codeActive reports whether a pairing code can still be used.
+func (a *auth) codeActive() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.code != "" && !a.now().After(a.codeExpires)
+}
+
 // check returns the session of a cookie token, if it is valid.
 func (a *auth) check(token string) (session, bool) {
 	if token == "" {

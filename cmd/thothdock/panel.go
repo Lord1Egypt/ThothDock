@@ -89,6 +89,17 @@ func panelCmd(args []string) error {
 		}
 	}
 	pairingFile := filepath.Join(*stateDir, "pairing.json")
+	// writePairing publishes what the Android app shows. An empty code means
+	// "none active": it was used, or five wrong tries ended it.
+	writePairing := func(code, expires string) error {
+		return store.WriteJSONAtomic(pairingFile, map[string]any{"urls": urls, "fingerprint": srv.Fingerprint(),
+			"code": code, "expires": expires})
+	}
+	srv.CodeChanged = func() {
+		if err := writePairing("", ""); err != nil {
+			log.Error("writing pairing state", "err", err)
+		}
+	}
 	announce := func() error {
 		code, expires, err := srv.NewCode()
 		if err != nil {
@@ -100,8 +111,7 @@ func panelCmd(args []string) error {
 		}
 		fmt.Printf("  Certificate:   SHA-256 %s\n", srv.Fingerprint())
 		fmt.Printf("  Pairing code:  %s %s (valid until %s)\n\n", code[:4], code[4:], expires.Format("15:04"))
-		return store.WriteJSONAtomic(pairingFile, map[string]any{"urls": urls, "fingerprint": srv.Fingerprint(),
-			"code": code, "expires": expires.UTC().Format(time.RFC3339)})
+		return writePairing(code, expires.UTC().Format(time.RFC3339))
 	}
 	if err := announce(); err != nil {
 		return err
