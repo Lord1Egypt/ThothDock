@@ -11,3 +11,4 @@ engine (`Killing PhantomProcessRecord 10918:libthothdock.so`) after the QA app's
 processes raised the device-wide total over the cap. The owner's four production
 containers stopped (no restart policy). Not caused by any command aimed at the
 production app; caused by running a second engine. See ../../ANDROID_LIFECYCLE.md.
+2026-10-10: com.thothterm.debian (0.3.0, owner-authorised) uninstalled after clean Exit; owner confirmed the data in it (incl. /home/thoth/M/Pictures copy) was test data.

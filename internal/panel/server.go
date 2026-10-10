@@ -113,6 +113,13 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return s.Serve(ctx, ln)
+}
+
+// Serve serves HTTPS on ln until ctx ends. A client that speaks plain HTTP is
+// told to use https:// (sniff.go); the panel itself is never served in clear.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	ln = newSniffListener(ln)
 	srv := &http.Server{
 		Handler:           s.Handler(),
 		TLSConfig:         s.TLSConfig(),

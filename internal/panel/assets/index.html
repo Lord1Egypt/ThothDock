@@ -11,22 +11,32 @@
 </head>
 <body>
 <header class="bar">
-  <img class="mark" src="/mark.png" alt="" width="32" height="32">
-  <div class="brand"><span class="silver">THOTH</span><span class="cyan">DOCK</span> <span class="sub">Web Panel</span></div>
+  <img class="mark" src="/mark.png" alt="" width="34" height="34">
+  <div class="brand"><span class="silver">THOTH</span><span class="cyan">DOCK</span><span class="sub">Web Panel</span></div>
   <div class="spacer"></div>
-  <span id="engine-state" class="pill" hidden></span>
-  <button id="logout" class="ghost" hidden>Sign out</button>
+  <span id="engine-version" class="chip" hidden></span>
+  <span id="session-state" class="chip" hidden></span>
+  <button id="logout" class="btn ghost" hidden>Sign out</button>
 </header>
 
+<div id="banner" class="banner" role="alert" hidden>
+  <span id="banner-text"></span>
+  <button id="banner-action" class="btn ghost small">Retry</button>
+</div>
+
 <main>
-  <section id="pair" class="card narrow" hidden>
-    <h1>Pair this browser</h1>
-    <p>Enter the 8-digit pairing code shown where the panel was started on your phone. Codes expire after 10 minutes.</p>
-    <p class="muted">Before pairing, compare the certificate fingerprint your browser shows with the one on the phone. Pair only if they match.</p>
+  <section id="pair" class="card pair" hidden>
+    <h1>Connect this browser</h1>
+    <p class="lead">Pair once with the code shown in the ThothDock app on your phone (<b>Web Panel</b> page).</p>
+    <ol class="steps">
+      <li><b>Check the address.</b> It must start with <code>https://</code>.</li>
+      <li><b>Check the certificate.</b> Your browser warns that it is self-signed. Open the certificate details and compare the SHA-256 fingerprint with the one in the app. Continue only if they match.</li>
+      <li><b>Enter the code.</b> It works once and expires after 10 minutes. Ask the app for a new one if it ran out.</li>
+    </ol>
     <form id="pair-form" autocomplete="off">
       <label for="code">Pairing code</label>
       <input id="code" name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="9" placeholder="1234 5678" required>
-      <button type="submit" class="primary">Pair</button>
+      <button type="submit" class="btn primary">Pair this browser</button>
     </form>
     <p id="pair-error" class="error" role="alert"></p>
   </section>
@@ -34,7 +44,7 @@
   <section id="app" hidden>
     <div class="tiles" id="tiles"></div>
     <div class="host" id="host"></div>
-    <nav class="tabs" role="tablist">
+    <nav class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" data-tab="containers" class="active">Containers</button>
       <button role="tab" data-tab="stacks">Stacks</button>
       <button role="tab" data-tab="images">Images</button>
@@ -42,19 +52,26 @@
       <button role="tab" data-tab="networks">Networks</button>
       <button role="tab" data-tab="events">Events</button>
     </nav>
-    <div id="view" class="view"></div>
+    <div id="view" class="view" aria-live="polite"></div>
     <p id="toast" class="toast" role="status" hidden></p>
   </section>
 </main>
 
 <dialog id="logs">
-  <div class="dialog-head"><h2 id="logs-title">Logs</h2><button id="logs-refresh" class="ghost">Refresh</button><button id="logs-close" class="ghost">Close</button></div>
+  <div class="dialog-head"><h2 id="logs-title">Logs</h2><button id="logs-refresh" class="btn ghost small">Refresh</button><button id="logs-close" class="btn ghost small">Close</button></div>
   <pre id="logs-text"></pre>
 </dialog>
 
-<dialog id="confirm">
+<dialog id="shell" class="small-dialog">
+  <div class="dialog-head"><h2>Shell</h2><button id="shell-close" class="btn ghost small">Close</button></div>
+  <p class="lead">A browser cannot open a shell in a container. Run this in the ThothDock terminal on the phone:</p>
+  <pre id="shell-cmd" class="cmd"></pre>
+  <div class="dialog-actions"><button id="shell-copy" class="btn primary">Copy command</button></div>
+</dialog>
+
+<dialog id="confirm" class="small-dialog">
   <p id="confirm-text"></p>
-  <div class="dialog-actions"><button id="confirm-no" class="ghost">Cancel</button><button id="confirm-yes" class="danger">Delete</button></div>
+  <div class="dialog-actions"><button id="confirm-no" class="btn ghost">Cancel</button><button id="confirm-yes" class="btn danger">Delete</button></div>
 </dialog>
 
 <footer class="foot"><span id="fingerprint"></span></footer>

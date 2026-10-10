@@ -1,8 +1,8 @@
-// ThothDock Web Panel. Every value from the engine is inserted as text,
-// never as markup. The page refreshes on engine events, it does not poll.
+// ThothDock Web Panel. Every value from the engine is inserted as text, never
+// as markup. The page refreshes on engine events; it does not poll.
 "use strict";
 
-const state = { csrf: "", tab: "containers", events: [], source: null, timer: 0, logsId: "" };
+const state = { csrf: "", tab: "containers", events: [], source: null, timer: 0, logsId: "", loaded: false };
 const $ = (id) => document.getElementById(id);
 
 function el(tag, props, ...children) {
@@ -23,21 +23,36 @@ async function api(method, path, body) {
   const headers = {};
   if (method !== "GET") headers["X-ThothDock-CSRF"] = state.csrf;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetch(path, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : JSON.stringify(body) });
+  let res;
+  try {
+    res = await fetch(path, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch (_) {
+    throw new Error("Cannot reach the phone. Check that the panel is still running and you are on the same network.");
+  }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) throw new Unauthorized(data.error || "pairing required");
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
 
-function toast(text, bad) {
+function toast(text, kind) {
   const t = $("toast");
   t.textContent = text;
-  t.className = bad ? "toast bad" : "toast";
+  t.className = "toast" + (kind ? " " + kind : "");
   t.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { t.hidden = true; }, 4000);
+  toast.timer = setTimeout(() => { t.hidden = true; }, 3800);
 }
+
+function banner(text, info, action) {
+  $("banner").className = "banner" + (info ? " info" : "");
+  $("banner-text").textContent = text;
+  const b = $("banner-action");
+  b.hidden = !action;
+  b.onclick = action || null;
+  $("banner").hidden = false;
+}
+function clearBanner() { $("banner").hidden = true; }
 
 function bytes(n) {
   if (!n && n !== 0) return "–";
@@ -55,15 +70,25 @@ function ago(seconds) {
   return Math.floor(s / 86400) + " days ago";
 }
 
+function chip(id, text, kind) {
+  const c = $(id);
+  c.textContent = text;
+  c.className = "chip" + (kind ? " " + kind : "");
+  c.hidden = false;
+}
+
 // ------------------------------------------------------------- pairing
 
-function showPair(message) {
+function showPair(message, expired) {
   if (state.source) { state.source.close(); state.source = null; }
   $("app").hidden = true;
   $("logout").hidden = true;
-  $("engine-state").hidden = true;
+  $("session-state").hidden = true;
+  $("engine-version").hidden = true;
   $("pair").hidden = false;
   $("pair-error").textContent = message || "";
+  if (expired) banner("Your session ended. Pair this browser again with a new code from the phone.", true);
+  else clearBanner();
   $("code").focus();
 }
 
@@ -75,6 +100,7 @@ $("pair-form").addEventListener("submit", async (e) => {
     const r = await api("POST", "/pair", { code: $("code").value });
     state.csrf = r.csrf;
     $("code").value = "";
+    clearBanner();
     await start();
   } catch (err) {
     $("pair-error").textContent = err.message;
@@ -98,6 +124,7 @@ async function start() {
   $("pair").hidden = true;
   $("app").hidden = false;
   $("logout").hidden = false;
+  chip("session-state", "Paired", "ok");
   listen();
   await refresh();
 }
@@ -113,35 +140,29 @@ function listen() {
     clearTimeout(state.timer);
     state.timer = setTimeout(refresh, 300);
   };
-  src.onerror = () => engineState(false);
-  src.onopen = () => engineState(true);
+  src.onerror = () => chip("session-state", "Reconnecting…", "bad");
+  src.onopen = () => chip("session-state", "Paired", "ok");
   state.source = src;
-}
-
-function engineState(ok) {
-  const p = $("engine-state");
-  p.hidden = false;
-  p.textContent = ok ? "Engine online" : "Engine unreachable";
-  p.className = ok ? "pill ok" : "pill bad";
 }
 
 async function refresh() {
   try {
     await Promise.all([summary(), render()]);
-    engineState(true);
+    clearBanner();
   } catch (err) {
-    if (err instanceof Unauthorized) return showPair("Your session ended. Pair again.");
-    engineState(false);
-    toast(err.message, true);
+    if (err instanceof Unauthorized) return showPair("", true);
+    banner(err.message, false, refresh);
   }
 }
 
 async function summary() {
   const s = await api("GET", "/api/summary");
+  chip("engine-version", "Engine " + s.engine.version, "");
   const tile = (n, label, cls) => el("div", { class: "tile" }, el("div", { class: "n " + (cls || ""), text: String(n) }), el("div", { class: "l", text: label }));
   $("tiles").replaceChildren(
     tile(s.containers.running, "Running", "running"), tile(s.containers.stopped, "Stopped"),
-    tile(s.stacks, "Stacks"), tile(s.images, "Images"), tile(s.volumes, "Volumes"), tile(s.networks, "Networks"));
+    tile(s.images, "Images", "cyan"), tile(s.volumes, "Volumes", "blue"),
+    tile(s.stacks, "Stacks"), tile(s.networks, "Networks"));
   const h = s.host || {};
   const parts = [];
   const fig = (label, value) => el("span", null, label + " ", el("b", { text: value }));
@@ -155,26 +176,29 @@ async function summary() {
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
   state.tab = b.dataset.tab;
-  render().catch((err) => toast(err.message, true));
+  state.loaded = false;
+  render().catch((err) => toast(err.message, "bad"));
 }));
 
 async function render() {
   const view = $("view");
+  if (!state.loaded) view.replaceChildren(el("div", { class: "list" }, el("div", { class: "skeleton" }), el("div", { class: "skeleton" })));
   const views = { containers: containersView, stacks: stacksView, images: imagesView, volumes: volumesView, networks: networksView, events: eventsView };
   const content = await views[state.tab]();
+  state.loaded = true;
   view.replaceChildren(content);
 }
 
-function empty(text) { return el("div", { class: "empty", text }); }
+function empty(title, text) { return el("div", { class: "empty" }, el("b", { text: title }), el("span", { text })); }
 
 async function act(button, fn, done) {
   button.disabled = true;
   try {
     await fn();
-    if (done) toast(done);
+    if (done) toast(done, "good");
   } catch (err) {
-    if (err instanceof Unauthorized) return showPair("Your session ended. Pair again.");
-    toast(err.message, true);
+    if (err instanceof Unauthorized) return showPair("", true);
+    toast(err.message, "bad");
   } finally {
     button.disabled = false;
     refresh();
@@ -183,44 +207,45 @@ async function act(button, fn, done) {
 
 function containerRow(c) {
   const id = encodeURIComponent(c.id);
-  const action = (label, verb) => el("button", { class: "act", text: label, onclick: (e) => act(e.target, () => api("POST", "/api/containers/" + id + "/" + verb), label + ": " + c.name) });
+  const verb = (label, v, cls) => el("button", { class: "btn " + (cls || ""), text: label, onclick: (e) => act(e.target, () => api("POST", "/api/containers/" + id + "/" + v), label + " · " + c.name) });
   const actions = el("div", { class: "actions" });
-  if (c.state === "running" || c.state === "restarting") actions.append(action("Stop", "stop"), action("Restart", "restart"));
-  else actions.append(action("Start", "start"));
+  if (c.state === "running" || c.state === "restarting") actions.append(verb("Stop", "stop", "go"), verb("Restart", "restart", "go"));
+  else actions.append(verb("Start", "start", "go"));
   actions.append(
-    el("button", { class: "act", text: "Logs", onclick: () => openLogs(c) }),
-    el("button", { class: "act del", text: "Delete", onclick: (e) => confirmDelete(c, e.target) }));
+    el("button", { class: "btn", text: "Logs", onclick: () => openLogs(c) }),
+    el("button", { class: "btn", text: "Shell", onclick: () => openShell(c) }),
+    el("button", { class: "btn del", text: "Delete", onclick: (e) => confirmDelete(c, e.target) }));
+  const ports = c.ports.length ? el("div", { class: "ports" }, ...c.ports.map((p) => el("span", { class: "port", text: p }))) : null;
   return el("div", { class: "row" },
     el("div", { class: "head" }, el("span", { class: "dot " + c.state }), el("span", { class: "name", text: c.name }), el("span", { class: "state " + c.state, text: c.state })),
     el("div", { class: "meta", text: c.image }),
     el("div", { class: "meta dim", text: c.status + (c.project ? " · stack " + c.project + " / " + c.service : "") }),
-    c.ports.length ? el("div", { class: "ports", text: c.ports.join("   ") }) : null,
-    actions);
+    ports, actions);
 }
 
 async function containersView() {
   const cs = await api("GET", "/api/containers");
-  if (!cs.length) return empty("No containers yet. Run one with the Docker CLI in the ThothDock terminal.");
+  if (!cs.length) return empty("No containers yet", "Run one in the ThothDock terminal, for example: docker run -d --name hello --restart unless-stopped alpine sleep 100000");
   return el("div", { class: "list" }, ...cs.map(containerRow));
 }
 
 async function stacksView() {
   const stacks = await api("GET", "/api/stacks");
-  if (!stacks.length) return empty("No Compose stacks. Start one with docker compose up -d in the terminal.");
+  if (!stacks.length) return empty("No Compose stacks", "Start one in the terminal with docker compose up -d.");
   return el("div", { class: "list" }, ...stacks.map((st) => {
     const name = encodeURIComponent(st.name);
-    const action = (label, verb) => el("button", { class: "act", text: label, onclick: (e) => act(e.target, () => api("POST", "/api/stacks/" + name + "/" + verb), label + ": stack " + st.name) });
+    const verb = (label, v) => el("button", { class: "btn go", text: label, onclick: (e) => act(e.target, () => api("POST", "/api/stacks/" + name + "/" + v), label + " · stack " + st.name) });
     return el("div", { class: "row" },
       el("div", { class: "head" }, el("span", { class: "dot " + (st.running ? "running" : "") }), el("span", { class: "name", text: st.name }),
         el("span", { class: "state" + (st.running ? " running" : ""), text: st.running + " / " + st.services.length + " running" })),
       ...st.services.map((s) => el("div", { class: "svc" }, el("span", { class: "dot " + s.state }), el("span", { text: s.service + " — " + s.status }))),
-      el("div", { class: "actions" }, action("Start", "start"), action("Stop", "stop"), action("Restart", "restart")));
+      el("div", { class: "actions" }, verb("Start", "start"), verb("Stop", "stop"), verb("Restart", "restart")));
   }));
 }
 
 async function imagesView() {
   const imgs = await api("GET", "/api/images");
-  if (!imgs.length) return empty("No images.");
+  if (!imgs.length) return empty("No images", "Pull one with docker pull.");
   return el("div", { class: "list" }, ...imgs.map((i) => el("div", { class: "row" },
     el("div", { class: "head" }, el("span", { class: "name", text: i.tags.length ? i.tags.join(", ") : "<untagged>" }), el("span", { class: "state", text: bytes(i.size) })),
     el("div", { class: "meta dim", text: i.id.slice(0, 12) + " · created " + ago(i.created) }))));
@@ -228,7 +253,7 @@ async function imagesView() {
 
 async function volumesView() {
   const vols = await api("GET", "/api/volumes");
-  if (!vols.length) return empty("No volumes.");
+  if (!vols.length) return empty("No volumes", "Create one with docker volume create, or use -v name:/path.");
   return el("div", { class: "list" }, ...vols.map((v) => el("div", { class: "row" },
     el("div", { class: "head" }, el("span", { class: "name", text: v.name }), el("span", { class: "state", text: v.driver })),
     el("div", { class: "meta dim", text: (v.project ? "stack " + v.project + " · " : "") + "created " + v.created }))));
@@ -240,11 +265,11 @@ async function networksView() {
     el("div", { class: "head" }, el("span", { class: "name", text: n.name }), el("span", { class: "state", text: n.builtin ? "device network" : n.subnet })),
     el("div", { class: "meta dim", text: n.builtin
       ? "Built in: containers here share the phone's network"
-      : "Own loopback address per container, names resolve inside the network" + (n.project ? " · stack " + n.project : "") }))));
+      : "Own loopback address per container; names resolve inside the network" + (n.project ? " · stack " + n.project : "") }))));
 }
 
 async function eventsView() {
-  if (!state.events.length) return empty("Engine events appear here as they happen.");
+  if (!state.events.length) return empty("Waiting for activity", "Engine events appear here as they happen.");
   return el("div", { class: "events" }, ...state.events.map((e) => el("div", null,
     el("span", { class: "t", text: new Date(e.time * 1000).toLocaleTimeString() + "  " }),
     el("span", { text: e.type + " " }), el("span", { class: "a", text: e.action + " " }), el("span", { text: e.name || e.id.slice(0, 12) }))));
@@ -265,8 +290,19 @@ async function openLogs(c) {
   $("logs").showModal();
   try { await loadLogs(); } catch (err) { $("logs-text").textContent = err.message; }
 }
-$("logs-refresh").addEventListener("click", () => loadLogs().catch((err) => toast(err.message, true)));
+$("logs-refresh").addEventListener("click", () => loadLogs().catch((err) => toast(err.message, "bad")));
 $("logs-close").addEventListener("click", () => $("logs").close());
+
+function openShell(c) {
+  const safe = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(c.name) ? c.name : c.id.slice(0, 12);
+  $("shell-cmd").textContent = "docker exec -it " + safe + " sh";
+  $("shell").showModal();
+}
+$("shell-close").addEventListener("click", () => $("shell").close());
+$("shell-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("shell-cmd").textContent); toast("Command copied", "good"); }
+  catch (_) { toast("Select the command and copy it", "bad"); }
+});
 
 function confirmDelete(c, button) {
   $("confirm-text").textContent = "Delete container " + c.name + "? It is stopped first if it runs. Its data outside named volumes is lost.";

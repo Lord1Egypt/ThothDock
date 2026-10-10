@@ -27,14 +27,25 @@ def check(ok, what):
 
 
 with sync_playwright() as p:
-    browser = p.chromium.launch()
+    browser = p.chromium.launch(args=["--host-resolver-rules=MAP phone.test 127.0.0.1"])
     page = browser.new_page(ignore_https_errors=True, viewport={"width": 1280, "height": 860})
     problems = []
     page.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: problems.append(str(e)))
 
+    # The mistake users make: http:// on the HTTPS port.
+    port = url.rsplit(":", 1)[1].rstrip("/")
+    page.goto(f"http://127.0.0.1:{port}/")
+    page.wait_for_selector("#pair:not([hidden])")
+    check(page.url.startswith("https://127.0.0.1:"), f"http:// on the panel port lands on {page.url} (redirected, not an error)")
+    explain = browser.new_page(ignore_https_errors=True, viewport={"width": 1000, "height": 700})
+    explain.goto(f"http://phone.test:{port}/")
+    check("uses HTTPS" in explain.text_content("body") and explain.url.startswith("http://"), "a hostname the panel cannot vouch for gets an explanation, not a redirect")
+    explain.screenshot(path=f"{shots}/panel-http-misuse.png")
+    explain.close()
     page.goto(url)
     page.wait_for_selector("#pair:not([hidden])")
+    page.screenshot(path=f"{shots}/panel-pairing.png")
     check(page.is_visible("#pair") and not page.is_visible("#app"), "an unpaired browser sees only the pairing form")
     page.fill("#code", "0000 0000")
     page.click("#pair-form button")
@@ -55,7 +66,8 @@ with sync_playwright() as p:
     tiles = dict(zip(page.locator(".tile .l").all_text_contents(), page.locator(".tile .n").all_text_contents()))
     check(tiles.get("Running") == "2" and tiles.get("Stacks") == "1", f"dashboard tiles {tiles}")
     check("127.0.0.1:" in page.text_content("#view"), "published ports are shown")
-    check("Engine online" in page.text_content("#engine-state"), "engine status pill")
+    check("Engine " in page.text_content("#engine-version") and "Paired" in page.text_content("#session-state"), "header shows the engine version and the session state")
+    check(tiles.get("Volumes") is not None and tiles.get("Images") is not None, "summary cards include Images and Volumes")
     check(page.text_content("#fingerprint").count(":") == 31, "the certificate fingerprint is shown")
 
     # Stop the web service; the event stream refreshes the page by itself.
@@ -67,6 +79,10 @@ with sync_playwright() as p:
     page.locator(".row", has_text="demo-web-1").locator(".state", has_text="running").wait_for(timeout=20000)
     check(True, "Start brings it back")
 
+    page.locator(".row", has_text="demo-api-1").locator("button", has_text="Shell").click()
+    page.wait_for_selector("#shell[open]")
+    check("docker exec -it demo-api-1 sh" in page.text_content("#shell-cmd"), "Shell shows the exact docker exec command")
+    page.click("#shell-close")
     page.locator(".row", has_text="demo-api-1").locator("button", has_text="Logs").click()
     page.wait_for_selector("#logs[open]")
     page.locator("#logs-text", has_text="GET / HTTP").wait_for(timeout=10000)

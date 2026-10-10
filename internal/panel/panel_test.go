@@ -398,3 +398,92 @@ func TestDemux(t *testing.T) {
 		t.Fatalf("limit: %q", got)
 	}
 }
+
+// ---- plain HTTP on the HTTPS port (sniff.go)
+
+func startServing(t *testing.T) (*fixture, string, context.CancelFunc) {
+	f := newFixture(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { f.panel.Serve(ctx, ln); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	return f, ln.Addr().String(), cancel
+}
+
+func rawHTTP(t *testing.T, addr, request string) string {
+	t.Helper()
+	c, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	io.WriteString(c, request)
+	b, _ := io.ReadAll(c)
+	return string(b)
+}
+
+func TestPlainHTTPGetsAFriendlyRedirectNeverContent(t *testing.T) {
+	f, addr, _ := startServing(t)
+	f.pair()
+	reply := rawHTTP(t, addr, "GET /api/containers HTTP/1.1\r\nHost: "+addr+"\r\n\r\n")
+	if !strings.HasPrefix(reply, "HTTP/1.1 307 ") || !strings.Contains(reply, "Location: https://"+addr+"/\r\n") {
+		t.Fatalf("no redirect to the https address:\n%s", reply)
+	}
+	if strings.Contains(reply, "\"id\"") || strings.Contains(reply, "Set-Cookie") {
+		t.Fatalf("plain HTTP leaked panel data:\n%s", reply)
+	}
+	if !strings.Contains(reply, "uses HTTPS") || !strings.Contains(reply, "https://"+addr+"/") {
+		t.Fatalf("no explanation:\n%s", reply)
+	}
+	// The redirect target never carries the requested path (no parameter smuggling).
+	if strings.Contains(rawHTTP(t, addr, "GET /api/containers?x=1 HTTP/1.1\r\nHost: "+addr+"\r\n\r\n"), "x=1") {
+		t.Fatal("redirect echoed the request path")
+	}
+}
+
+func TestPlainHTTPWithAForeignHostIsNotRedirected(t *testing.T) {
+	_, addr, _ := startServing(t)
+	_, port, _ := net.SplitHostPort(addr)
+	for _, host := range []string{"evil.example:" + port, "evil.example", addr + "@evil.example", "127.0.0.1:1", "[::1]:" + port + "x"} {
+		reply := rawHTTP(t, addr, "GET / HTTP/1.1\r\nHost: "+host+"\r\n\r\n")
+		if !strings.HasPrefix(reply, "HTTP/1.1 400 ") || strings.Contains(reply, "Location:") {
+			t.Fatalf("Host %q: expected a plain explanation, got:\n%s", host, reply)
+		}
+		if !strings.Contains(reply, "https://") {
+			t.Fatalf("Host %q: no https instructions:\n%s", host, reply)
+		}
+	}
+	if reply := rawHTTP(t, addr, "garbage garbage\r\n\r\n"); !strings.HasPrefix(reply, "HTTP/1.1 400 ") {
+		t.Fatalf("garbage: %s", reply)
+	}
+	if reply := rawHTTP(t, addr, "HEAD / HTTP/1.1\r\nHost: localhost:"+port+"\r\n\r\n"); !strings.HasPrefix(reply, "HTTP/1.1 307 ") || strings.Contains(reply, "<html") {
+		t.Fatalf("HEAD: %s", reply)
+	}
+}
+
+func TestTLSStillWorksAndSlowClientsDoNotBlockIt(t *testing.T) {
+	f, addr, _ := startServing(t)
+	// Ten connections that never send a byte must not stop a real TLS client.
+	for i := 0; i < 10; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+	}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	resp, err := client.Get("https://" + addr + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Security-Policy") == "" {
+		t.Fatalf("https: %d", resp.StatusCode)
+	}
+	_ = f
+}
