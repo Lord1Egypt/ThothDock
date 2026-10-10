@@ -7,8 +7,8 @@ refer to. **Status** reflects verified evidence only.
 
 | ID | Requirement | Measure | Status |
 |---|---|---|---|
-| NFR-01 | Idle cost stays zero: no new periodic wakeup, goroutine loop or resident process when nothing happens | `tests/perf/baseline.sh`: `idle_*.tree_wakeups` and `tree_cpu_ms` per 10 s window stay 0 in steady state | baseline measured (host); device PENDING |
-| NFR-02 | Memory: idle daemon RSS within +10% of v0.1.1 (11.7 MiB empty, 17.8 MiB with four containers on the host) | `idle_*.daemon_rss_kib` | met by the Phase 1/3 build (+1%) |
+| NFR-01 | Idle cost stays zero: no new periodic wakeup, goroutine loop or resident process when nothing happens | `tests/perf/baseline.sh`: `idle_*.tree_wakeups` and `tree_cpu_ms` per 10 s window stay 0 in steady state | met on the host (0 / 0, also with four containers on a user network); device PENDING |
+| NFR-02 | Memory: idle daemon RSS within +10% of v0.1.1 (11.7 MiB empty, 17.8 MiB with four containers on the host) | `idle_*.daemon_rss_kib` | met on the host by the complete build (+4%: 12.2 / 18.7 MiB); device PENDING |
 | NFR-03 | A crash loop cannot drain the battery: restarts back off to at most one per minute | `tests/regression/restart-policies.sh` | met (host) |
 | NFR-04 | Features not in use cost nothing: Compose, Web Panel, networks | process count and RSS with the feature unused | by design (ADR-0005/0006); measured per phase |
 | NFR-05 | No change to the default execution path (CLI → engine → PRoot) | architecture review | met |

@@ -12,7 +12,7 @@
   "verification_keys": {
     "T": "go test -race ./... (unit and API tests)",
     "H": "host end-to-end with the stock Docker CLI and a real PRoot (tests/regression, tests/smoke)",
-    "C": "host end-to-end with Docker Compose v5.5.1 and Debian 2.26.1-4 (tests/regression/compose.sh)",
+    "C": "end-to-end with Docker Compose v5.5.1 and Debian 2.26.1-4 (host) and v2.38.2 (CI), tests/regression/compose.sh",
     "B": "browser end-to-end (tests/panel/e2e.sh)",
     "P": "on the SM-A165F phone (Android 16)"
   },

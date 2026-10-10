@@ -12,7 +12,8 @@ PRoot. They are stated plainly; none is hidden behind a silent emulation.
 | `docker exec` | An exec process runs in the container's root filesystem and environment but is not a member of a PID namespace: it is absent from the container's process table. |
 | Metrics | No CPU or memory figures: there are no cgroups to read. `docker stats`, `top`, `pause` and `update` are unsupported rather than faked. |
 | Resource limits | `--memory`, `--cpus`, `--pids-limit`, ulimits, devices, `--privileged` and capabilities are refused (HTTP 501), never ignored. |
-| Lifetime | Containers do not outlive the app. Closing the last terminal window, Exit and force-stop end the daemon and every container. Running containers are reported `Exited (137)` after a kill. |
+| Lifetime | Containers do not outlive the app. Closing the last terminal window, Exit and force-stop end the daemon and every container. Running containers are reported `Exited (137)` after a kill. On the nextgen branch, restart policies bring eligible containers back when the engine starts again (the app is opened); nothing can restart them while Android keeps the app stopped. |
+| Networks (nextgen) | A user-defined network is address translation in PRoot, not isolation: any container or app on the device can connect to a container's 127.77.x.y address; membership controls only which names resolve. Servers see peers as 127.0.0.1. There is no DNS server, so resolvers that bypass `/etc/hosts` do not see container names. |
 | Volumes | No copy-up of image content into a new named volume; image `VOLUME`s do not become anonymous volumes. |
 | Exit codes | A workload killed by a signal reports `128+signal` (a shell loop killed by SIGTERM reports 143; fixed since the Golden QA build, which reported 0). |
 | Images | Pulled from registries over HTTPS only when you run `docker pull` / `docker run`; nothing is downloaded in the background. |

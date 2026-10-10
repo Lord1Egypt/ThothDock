@@ -48,6 +48,16 @@ transcripts.
 - `-p` TCP port publishing, bound to `127.0.0.1` by default; collisions are reported and listeners are closed on stop, removal and daemon exit.
 - `apk add` inside Alpine and `apt-get update && apt-get install` inside Debian, on the phone.
 
+## New on the `feature/nextgen` branch (verified on the host and in CI; phone verification pending)
+
+- **User-defined networks** (`docker network create/ls/inspect/rm/prune/connect/disconnect`). Each attached container gets its own loopback address (127.77.x.y) through Garden PRoot's `--net-ip` (patch 0009): two containers can listen on the same port, `localhost` is private to the container, a service on `0.0.0.0` is not exposed beyond loopback, and names, `--network-alias` and Compose service names resolve. `host.docker.internal` reaches the device's loopback.
+- **Restart policies** `no`, `always`, `unless-stopped`, `on-failure[:N]` with dockerd's semantics and backoff; containers are restored when the engine starts again. `docker update --restart`.
+- **`docker events`** with filters, `since` and `until`.
+- **Docker Compose**: `config`, `pull`, `up [-d]`, `ps`, `logs`, `exec`, `stop`, `start`, `restart`, `down [-v]` pass with Compose v5.5.1, v2.38.2 and Debian 13's 2.26.1-4 (`apt install docker-compose` in the guest).
+- **ThothDock Web Panel** (`thothdock panel`): an opt-in HTTPS panel for a browser on your network, paired with a one-time code. Off unless started.
+
+The design, decisions, tickets and evidence are in [docs/nextgen](docs/nextgen/) (start with `ROADMAP.md`; the feature-by-feature status is `COMPATIBILITY_MATRIX.md`).
+
 ## What does not work, and why
 
 PRoot is a ptrace-based userspace translator. It is not a kernel container.
@@ -62,8 +72,9 @@ docker: Error response from daemon: ThothDock does not support memory limits:
 containers run under PRoot without cgroups, so the limit would not be enforced
 ```
 
-Containers share the device network and process table. Networks, `docker build`
-and Compose are not implemented. UDP port publishing is refused.
+Containers share the device's process table and, unless attached to a
+user-defined network, its network. `docker build` and health checks are not
+implemented. UDP port publishing is refused.
 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) has the full table, and
 [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) has the threat model.
 
