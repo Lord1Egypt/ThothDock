@@ -470,3 +470,14 @@ its views are the reference for the screens.
 | P8-01 | Audit: hosts-file injection (done), panel (done in P6), OCI extraction and ceilings (v0.1.1), path traversal, API fuzzing of the new endpoints | IN_PROGRESS |
 | P8-02 | Compatibility tests against the Engine API specification for the implemented endpoints; differential runs against a real dockerd where the owner allows it | PLANNED |
 | P8-03 | P2-04b connection filtering by membership in the PRoot extension | PLANNED |
+
+## Engine Guard hardening (owner requirement, 2026-10-10)
+
+| ID | Item | Status |
+|---|---|---|
+| EG-01 | Real-guest investigation of apt candidates, dependencies and file ownership for every Docker-related name (`ENGINE_GUARD_HARDENING.md`) | DONE |
+| EG-02 | Hook refuses removing a placeholder or the guard (found: `apt remove runc` succeeded; `podman-docker` would remove `docker.io`) | DONE |
+| EG-03 | Guard `Depends`/`Conflicts` so dpkg refuses direct `dpkg -i/-r` of same-name stock packages before unpacking (found: Debian `runc`/`containerd` installed via dpkg) | DONE |
+| EG-04 | `doctor --guard` checks the hook, its configuration and the pin | DONE |
+| EG-05 | Regression tests: `engine-guard/test.sh` (115), `internal/guard`, `tests/device/guard-hardening.sh` (48 on device) | DONE |
+| EG-06 | Arch-based editions have no dpkg hook; decide whether pacman needs an equivalent (`IgnorePkg`/hook) | PLANNED |
