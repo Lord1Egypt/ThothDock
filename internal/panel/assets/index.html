@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>ThothDock Web Panel</title>
+<link rel="icon" href="/mark.png">
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <img class="mark" src="/mark.png" alt="" width="32" height="32">
+  <div class="brand"><span class="silver">THOTH</span><span class="cyan">DOCK</span> <span class="sub">Web Panel</span></div>
+  <div class="spacer"></div>
+  <span id="engine-state" class="pill" hidden></span>
+  <button id="logout" class="ghost" hidden>Sign out</button>
+</header>
+
+<main>
+  <section id="pair" class="card narrow" hidden>
+    <h1>Pair this browser</h1>
+    <p>Enter the 8-digit pairing code shown where the panel was started on your phone. Codes expire after 10 minutes.</p>
+    <p class="muted">Before pairing, compare the certificate fingerprint your browser shows with the one on the phone. Pair only if they match.</p>
+    <form id="pair-form" autocomplete="off">
+      <label for="code">Pairing code</label>
+      <input id="code" name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="9" placeholder="1234 5678" required>
+      <button type="submit" class="primary">Pair</button>
+    </form>
+    <p id="pair-error" class="error" role="alert"></p>
+  </section>
+
+  <section id="app" hidden>
+    <div class="tiles" id="tiles"></div>
+    <div class="host" id="host"></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="containers" class="active">Containers</button>
+      <button role="tab" data-tab="stacks">Stacks</button>
+      <button role="tab" data-tab="images">Images</button>
+      <button role="tab" data-tab="volumes">Volumes</button>
+      <button role="tab" data-tab="networks">Networks</button>
+      <button role="tab" data-tab="events">Events</button>
+    </nav>
+    <div id="view" class="view"></div>
+    <p id="toast" class="toast" role="status" hidden></p>
+  </section>
+</main>
+
+<dialog id="logs">
+  <div class="dialog-head"><h2 id="logs-title">Logs</h2><button id="logs-refresh" class="ghost">Refresh</button><button id="logs-close" class="ghost">Close</button></div>
+  <pre id="logs-text"></pre>
+</dialog>
+
+<dialog id="confirm">
+  <p id="confirm-text"></p>
+  <div class="dialog-actions"><button id="confirm-no" class="ghost">Cancel</button><button id="confirm-yes" class="danger">Delete</button></div>
+</dialog>
+
+<footer class="foot"><span id="fingerprint"></span></footer>
+</body>
+</html>

@@ -20,6 +20,7 @@ Usage:
   thothdock doctor [flags]       check this device and configuration
   thothdock inspect-store [-verify]  list images, blobs and containers
   thothdock gc                   remove unreferenced blobs and leftovers (daemon stopped)
+  thothdock panel [flags]        run the Web Panel (HTTPS, pairing code; off unless started)
 
 Run "thothdock <command> -h" for a command's flags.
 `
@@ -42,6 +43,8 @@ func main() {
 		err = inspectStore(os.Args[2:])
 	case "gc":
 		err = gc(os.Args[2:])
+	case "panel":
+		err = panelCmd(os.Args[2:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
