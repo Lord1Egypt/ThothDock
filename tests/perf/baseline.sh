@@ -7,7 +7,8 @@
 #
 # PERF_IMAGE (default alpine:3.20) is pulled once; PERF_WINDOW (default 10)
 # is the length in seconds of each idle sampling window; PERF_REPS (default 3)
-# is how many windows and timed runs are taken.
+# is how many windows and timed runs are taken. PERF_NETWORK=1 runs the four
+# idle containers on a user-defined network (needs a PRoot with --net-ip).
 #
 # Output is key=value lines. Every figure is a raw measurement of this run on
 # this machine; compare runs only when the machine and load are the same.
@@ -113,7 +114,7 @@ timed() {
     echo "cpus=$(getconf _NPROCESSORS_ONLN)"
     echo "mem_total_kib=$(awk '/^MemTotal/ {print $2}' /proc/meminfo)"
     echo "loadavg_start=$(cut -d' ' -f1-3 /proc/loadavg)"
-    echo "image=$IMAGE window_s=$WINDOW reps=$REPS"
+    echo "image=$IMAGE window_s=$WINDOW reps=$REPS network=${PERF_NETWORK:-0}"
 } > "$WORK/result"
 
 # The clock's own cost (process start of the helper), included once in every
@@ -145,7 +146,12 @@ timed exec_true docker exec perf-exec true
 docker rm -f perf-exec >/dev/null
 
 # 5. Four idle containers.
-for n in 1 2 3 4; do docker run -d --name "perf-idle$n" "$IMAGE" sleep 100000 >/dev/null; done
+NETOPT=
+if [ "${PERF_NETWORK:-0}" = 1 ]; then
+    docker network create perfnet >/dev/null
+    NETOPT="--network perfnet"
+fi
+for n in 1 2 3 4; do docker run -d --name "perf-idle$n" $NETOPT "$IMAGE" sleep 100000 >/dev/null; done
 sleep 1
 idle_window idle_four
 

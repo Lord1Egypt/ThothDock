@@ -35,6 +35,8 @@ jobs:
           go mod vendor
           git diff --exit-code -- vendor go.mod go.sum
           go mod verify
+      - name: compatibility matrix is rendered from compatibility.json
+        run: python3 docs/nextgen/render_matrix.py --check
 
   test:
     runs-on: ubuntu-24.04
@@ -91,3 +93,38 @@ jobs:
         run: |
           docker --version
           tests/smoke/docker-cli-smoke.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/proot/proot"
+
+  # Networks, Compose and restart policies need Garden's PRoot with patch
+  # 0009 (--net-ip), built from AndroidThothTerm at a pinned commit by its own
+  # host check, which also tests the patch.
+  nextgen:
+    runs-on: ubuntu-24.04
+    env:
+      GARDEN_COMMIT: c149f1263ee7ee8741d189f0b0e69e09de94310b
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/checkout@v6
+        with:
+          repository: Lord1Egypt/AndroidThothTerm
+          ref: ${{ env.GARDEN_COMMIT }}
+          path: garden
+          submodules: false
+      - name: Garden PRoot (patches 0001-0009) and its --net-ip host check
+        run: |
+          git -C garden submodule update --init --depth 1 third_party/proot
+          mkdir -p "$RUNNER_TEMP/gp"
+          WORK="$RUNNER_TEMP/gp" sh garden/tests/garden-common/proot/net-ip-check.sh
+          cp "$RUNNER_TEMP/gp/proot/src/proot" "$RUNNER_TEMP/garden-proot"
+      - name: Build ThothDock
+        run: go build -o "$RUNNER_TEMP/thothdock" ./cmd/thothdock
+      - name: Restart policies and events (stock Docker CLI)
+        run: tests/regression/restart-policies.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/garden-proot"
+      - name: User-defined networks (stock Docker CLI)
+        run: tests/regression/networks.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/garden-proot"
+      - name: Docker Compose
+        run: |
+          docker compose version
+          tests/regression/compose.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/garden-proot"
