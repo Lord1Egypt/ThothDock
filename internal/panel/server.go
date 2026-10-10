@@ -513,32 +513,58 @@ func (s *Server) volumes(w http.ResponseWriter, r *http.Request, _ string, _ ses
 	jsonOK(w, out)
 }
 
-func (s *Server) networks(w http.ResponseWriter, r *http.Request, _ string, _ session) {
+// networkView is one network as the panel shows it. Everything about what a
+// network is comes from the engine (network.Describe); the panel guesses nothing.
+type networkView struct {
+	Name       string   `json:"name"`
+	ID         string   `json:"id"`
+	Kind       string   `json:"kind"`
+	Builtin    bool     `json:"builtin"`
+	Supported  bool     `json:"supported"`
+	Summary    string   `json:"summary"`
+	Isolation  string   `json:"isolation"`
+	Subnet     string   `json:"subnet"`
+	Attached   int      `json:"attached"`
+	Operations []string `json:"operations"`
+	Project    string   `json:"project,omitempty"`
+}
+
+const kindUserDefined = "user-defined"
+
+func (s *Server) listNetworks(ctx context.Context) ([]networkView, error) {
 	var raw []struct {
-		Name, Id, Driver, Created string
-		IPAM                      struct{ Config []struct{ Subnet string } }
-		Labels                    map[string]string
+		Name, Id  string
+		Labels    map[string]string
+		ThothDock struct {
+			Kind                       string
+			Builtin, Supported         bool
+			Summary, Isolation, Subnet string
+			Attached                   int
+			Operations                 []string
+		}
 	}
-	if err := s.eng.getJSON(r.Context(), "/networks", &raw); err != nil {
+	if err := s.eng.getJSON(ctx, "/networks", &raw); err != nil {
+		return nil, err
+	}
+	out := make([]networkView, 0, len(raw))
+	for _, n := range raw {
+		t := n.ThothDock
+		ops := t.Operations
+		if ops == nil {
+			ops = []string{}
+		}
+		out = append(out, networkView{Name: n.Name, ID: n.Id, Kind: t.Kind, Builtin: t.Builtin, Supported: t.Supported,
+			Summary: t.Summary, Isolation: t.Isolation, Subnet: t.Subnet, Attached: t.Attached, Operations: ops,
+			Project: n.Labels[labelProject]})
+	}
+	return out, nil
+}
+
+func (s *Server) networks(w http.ResponseWriter, r *http.Request, _ string, _ session) {
+	out, err := s.listNetworks(r.Context())
+	if err != nil {
 		engineFail(w, err)
 		return
-	}
-	type view struct {
-		Name    string `json:"name"`
-		ID      string `json:"id"`
-		Driver  string `json:"driver"`
-		Builtin bool   `json:"builtin"`
-		Subnet  string `json:"subnet"`
-		Project string `json:"project,omitempty"`
-	}
-	out := make([]view, 0, len(raw))
-	for _, n := range raw {
-		v := view{Name: n.Name, ID: n.Id, Driver: n.Driver, Project: n.Labels[labelProject]}
-		v.Builtin = len(n.IPAM.Config) == 0
-		if !v.Builtin {
-			v.Subnet = n.IPAM.Config[0].Subnet
-		}
-		out = append(out, v)
 	}
 	jsonOK(w, out)
 }
@@ -641,21 +667,21 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request, _ string, _ ses
 	}
 	var vols struct{ Volumes []json.RawMessage }
 	s.eng.getJSON(r.Context(), "/volumes", &vols)
-	var nets []struct {
-		IPAM struct{ Config []json.RawMessage }
-	}
-	s.eng.getJSON(r.Context(), "/networks", &nets)
+	// The tile counts user-defined networks only, and says so; the built-in
+	// compatibility networks are listed on the Networks tab with what they are.
 	userNets := 0
-	for _, n := range nets {
-		if len(n.IPAM.Config) > 0 {
-			userNets++
+	if nets, err := s.listNetworks(r.Context()); err == nil {
+		for _, n := range nets {
+			if n.Kind == kindUserDefined {
+				userNets++
+			}
 		}
 	}
 	jsonOK(w, map[string]any{
 		"engine": map[string]any{"version": info.ServerVersion, "os": info.OperatingSystem, "kernel": info.KernelVersion,
 			"arch": info.Architecture, "cpus": info.NCPU},
 		"containers": map[string]int{"total": info.Containers, "running": info.ContainersRunning, "stopped": info.ContainersStopped},
-		"images":     info.Images, "volumes": len(vols.Volumes), "networks": userNets, "stacks": len(groupStacks(cs)),
+		"images":     info.Images, "volumes": len(vols.Volumes), "userNetworks": userNets, "stacks": len(groupStacks(cs)),
 		"host": hostFigures(s.cfg.DataRoot),
 	})
 }

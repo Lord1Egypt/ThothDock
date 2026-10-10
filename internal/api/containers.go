@@ -167,6 +167,8 @@ func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
 	st := rec.State
 	cfg := rec.Config
 	dir := c.Dir()
+	hostConfig := rec.HostConfig
+	hostConfig.NetworkMode = networkMode(rec) // "default" when none was asked for, as Docker reports it
 	writeJSON(w, http.StatusOK, map[string]any{
 		"Id": rec.ID, "Created": rec.Created.Format(time.RFC3339Nano), "Path": rec.Path, "Args": nonNilSlice(rec.Args),
 		"State": map[string]any{
@@ -178,7 +180,7 @@ func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
 		"HostnamePath": filepath.Join(dir, "hostname"), "HostsPath": filepath.Join(dir, "hosts"),
 		"LogPath": c.Logger().Path(), "Name": "/" + rec.Name, "RestartCount": rec.RestartCount,
 		"Driver": "thothdock-copy", "Platform": "linux", "MountLabel": "", "ProcessLabel": "", "AppArmorProfile": "",
-		"ExecIDs": nil, "HostConfig": rec.HostConfig,
+		"ExecIDs": nil, "HostConfig": hostConfig,
 		"GraphDriver": map[string]any{"Name": "thothdock-copy", "Data": map[string]string{"RootDir": filepath.Join(dir, "rootfs")}},
 		"Mounts":      mounts(rec), "Config": cfg,
 		"NetworkSettings": map[string]any{

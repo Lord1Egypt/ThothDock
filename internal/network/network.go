@@ -57,6 +57,9 @@ type Network struct {
 	Builtin bool `json:"-"`
 }
 
+// BuiltinID is the fixed ID of the built-in network called name.
+func BuiltinID(name string) string { return builtinID(name) }
+
 func builtinID(name string) string {
 	h := sha256.Sum256([]byte("thothdock-builtin-network:" + name))
 	return hex.EncodeToString(h[:])
@@ -76,6 +79,68 @@ func IsDeviceMode(mode string) bool {
 		return true
 	}
 	return false
+}
+
+// Kind says what a network really is. The Engine API has no field for this,
+// so ThothDock reports it itself (labels on the built-in networks, the
+// "ThothDock" object in network JSON) and the Web Panel and app show it.
+const (
+	KindDeviceBridge = "device-bridge" // "bridge": the Android device network, not a Linux bridge
+	KindDeviceHost   = "device-host"   // "host": the Android device network
+	KindUnsupported  = "unsupported"   // "none": network-disabled mode is not implemented
+	KindUserDefined  = "user-defined"  // per-container loopback addresses and names
+)
+
+// Info is the truthful description of one network.
+type Info struct {
+	Kind       string
+	Builtin    bool
+	Supported  bool
+	Summary    string
+	Isolation  string
+	Subnet     string
+	Operations []string
+}
+
+// IsolationNote is the limit every user-defined network shares.
+const IsolationNote = "Functional address separation, not enforced isolation: a container that knows another container's 127.77.x.y address can reach it whatever network it is on."
+
+// Describe reports what the network is and which operations it supports.
+func Describe(n Network) Info {
+	switch {
+	case !n.Builtin:
+		return Info{Kind: KindUserDefined, Supported: true, Subnet: Subnet,
+			Summary:    "Userspace network: every container gets its own loopback address (" + Subnet + ") and the names and aliases of its members resolve through /etc/hosts.",
+			Isolation:  IsolationNote,
+			Operations: []string{"inspect", "connect", "disconnect", "remove"}}
+	case n.Name == "bridge":
+		return Info{Kind: KindDeviceBridge, Builtin: true, Supported: true,
+			Summary:    "Compatibility mode: the shared Android device network. It is not a Linux Docker bridge and has no address range of its own.",
+			Isolation:  "None: containers share the phone's network stack.",
+			Operations: []string{"inspect"}}
+	case n.Name == "host":
+		return Info{Kind: KindDeviceHost, Builtin: true, Supported: true,
+			Summary:    "The shared Android device network, as with --network host.",
+			Isolation:  "None: containers share the phone's network stack.",
+			Operations: []string{"inspect"}}
+	default:
+		return Info{Kind: KindUnsupported, Builtin: true, Supported: false,
+			Summary:   "Not implemented: --network none is refused. There is no network namespace to disable networking in, so ThothDock does not pretend to.",
+			Isolation: "Not available.", Operations: []string{"inspect"}}
+	}
+}
+
+// Labels are the ThothDock labels the Engine API shows on a built-in
+// network, so docker network inspect tells the truth too.
+func (i Info) Labels() map[string]string {
+	if !i.Builtin {
+		return nil
+	}
+	return map[string]string{
+		"io.thothdock.network.kind":      i.Kind,
+		"io.thothdock.network.supported": map[bool]string{true: "true", false: "false"}[i.Supported],
+		"io.thothdock.network.note":      i.Summary,
+	}
 }
 
 var nameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)

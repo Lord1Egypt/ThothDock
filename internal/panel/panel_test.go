@@ -23,6 +23,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/api"
 	"github.com/Lord1Egypt/ThothDock/internal/engine"
 	"github.com/Lord1Egypt/ThothDock/internal/image"
+	"github.com/Lord1Egypt/ThothDock/internal/network"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/registry"
@@ -505,5 +506,59 @@ func TestCodeChangedFiresWhenTheCodeIsUsedOrExhausted(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("after five wrong tries: %d calls, want 2 (only the exhausting try)", calls)
+	}
+}
+
+// The Networks tab and the summary tile come from the engine's own
+// description of each network; the tile counts user-defined networks only and
+// the list tells the built-in ones apart by what the engine says they are.
+func TestNetworksAreDescribedByTheEngineAndCountedConsistently(t *testing.T) {
+	f := newFixture(t)
+	f.pair()
+	if _, err := f.eng.NetworkCreate(network.CreateRequest{Name: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	resp, sum := f.req("GET", "/api/summary", "", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("summary: %d", resp.StatusCode)
+	}
+	if sum["userNetworks"] != float64(1) {
+		t.Fatalf("the tile must count user-defined networks only, got %v", sum["userNetworks"])
+	}
+	if _, old := sum["networks"]; old {
+		t.Fatal("the ambiguous 'networks' count is gone")
+	}
+	r, _ := http.NewRequest("GET", f.srv.URL+"/api/networks", nil)
+	res, err := f.client.Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var nets []networkView
+	if err := json.NewDecoder(res.Body).Decode(&nets); err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]networkView{}
+	user := 0
+	for _, n := range nets {
+		by[n.Name] = n
+		if n.Kind == kindUserDefined {
+			user++
+		}
+	}
+	if len(nets) != 4 || user != 1 {
+		t.Fatalf("want bridge, host, none and demo (1 user-defined): %+v", nets)
+	}
+	if user != int(sum["userNetworks"].(float64)) {
+		t.Fatal("the tile and the list disagree")
+	}
+	if n := by["none"]; n.Supported || n.Kind != "unsupported" || len(n.Operations) != 1 || n.Operations[0] != "inspect" {
+		t.Fatalf("none must not look usable: %+v", n)
+	}
+	if n := by["bridge"]; !n.Builtin || n.Subnet != "" || !strings.Contains(strings.ToLower(n.Summary), "not a linux docker bridge") {
+		t.Fatalf("bridge: %+v", n)
+	}
+	if n := by["demo"]; n.Builtin || n.Subnet != "127.77.0.0/16" || !strings.Contains(n.Isolation, "not enforced isolation") {
+		t.Fatalf("demo: %+v", n)
 	}
 }

@@ -256,6 +256,34 @@ func (e *Engine) NetworkUsers(id string) []Record {
 	return out
 }
 
+// DeviceMode is which built-in network a container on the device network
+// asked for: "bridge" (also the default) or "host".
+func DeviceMode(r Record) string {
+	if r.HostConfig.NetworkMode == "host" {
+		return "host"
+	}
+	return "bridge"
+}
+
+// NetworkMembers lists the containers attached to any network, built-in ones
+// included: a container on the device network belongs to "bridge" or "host"
+// by the mode it asked for, and nothing belongs to "none".
+func (e *Engine) NetworkMembers(n network.Network) []Record {
+	if !n.Builtin {
+		return e.NetworkUsers(n.ID)
+	}
+	if n.Name == "none" {
+		return nil
+	}
+	var out []Record
+	for _, r := range e.List() {
+		if len(r.Networks) == 0 && DeviceMode(r) == n.Name {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // NetworkRemove deletes a user-defined network nothing is attached to.
 func (e *Engine) NetworkRemove(ref string) error {
 	n, err := e.Networks.Lookup(ref)
@@ -279,6 +307,16 @@ func (e *Engine) NetworkRemove(ref string) error {
 	return nil
 }
 
+// builtinConnectRefusal explains, truthfully per built-in network, why it
+// cannot be joined or left: a container is on the device network (bridge, host)
+// by how it was created, and "none" is not implemented.
+func builtinConnectRefusal(n network.Network, what string) error {
+	if n.Name == "none" {
+		return unsupported("the none network", "network-disabled mode is not implemented, so ThothDock cannot "+what+" it")
+	}
+	return errdefs.Forbidden("ThothDock cannot %s the pre-defined %s network: it is the Android device network that containers share by how they were created (--network %s)", what, n.Name, n.Name)
+}
+
 // NetworkConnect attaches a container. A running container that is still on
 // the device network cannot get an address until it restarts, so that case
 // is refused rather than half-applied.
@@ -288,7 +326,7 @@ func (e *Engine) NetworkConnect(netRef, ctrRef string, ep *EndpointRequest) erro
 		return err
 	}
 	if n.Builtin {
-		return errdefs.Forbidden("ThothDock cannot connect a container to the pre-defined %s network: it is the device network every container already shares", n.Name)
+		return builtinConnectRefusal(n, "connect a container to")
 	}
 	if !e.supportsNetIP() {
 		return unsupported("user-defined networks", "this PRoot has no --net-ip option (Garden patch 0009)")
@@ -334,6 +372,9 @@ func (e *Engine) NetworkDisconnect(netRef, ctrRef string) error {
 	n, err := e.Networks.Lookup(netRef)
 	if err != nil {
 		return err
+	}
+	if n.Builtin {
+		return builtinConnectRefusal(n, "disconnect a container from")
 	}
 	c, err := e.Lookup(ctrRef)
 	if err != nil {

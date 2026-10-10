@@ -54,6 +54,7 @@ with sync_playwright() as p:
     page.click("button[data-tab=networks]")
     page.locator(".row .name", has_text="demo").wait_for(timeout=10000)
     check("127.77.0.0/16" in page.text_content("#view"), "Networks tab shows the user network")
+    check("not enforced isolation" in page.text_content("#view") and "Unsupported" in page.text_content("#view"), "Networks tab states the limits")
     page.click("button[data-tab=events]")
     check("stop" in page.text_content("#view"), "live events received over the Wi-Fi link")
     check(not [m for m in problems if "Content Security" in m], "no CSP violation")

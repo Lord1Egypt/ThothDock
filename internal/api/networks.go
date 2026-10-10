@@ -17,13 +17,24 @@ func (s *Server) networkJSON(n network.Network, withContainers bool) map[string]
 	if !n.Builtin {
 		ipam["Config"] = []map[string]string{{"Subnet": network.Subnet, "Gateway": network.Gateway}}
 	}
+	info := network.Describe(n)
+	members := s.Engine.NetworkMembers(n)
 	containers := map[string]any{}
 	if withContainers {
-		for _, r := range s.Engine.NetworkUsers(n.ID) {
+		for _, r := range members {
+			if n.Builtin {
+				// Device-network containers have no address of their own to report.
+				containers[r.ID] = map[string]string{"Name": r.Name, "EndpointID": "", "MacAddress": "", "IPv4Address": "", "IPv6Address": ""}
+				continue
+			}
 			ep := r.Networks[n.ID]
 			containers[r.ID] = map[string]string{"Name": r.Name, "EndpointID": ep.EndpointID, "MacAddress": "",
 				"IPv4Address": r.NetIP + "/16", "IPv6Address": ""}
 		}
+	}
+	labels := nonNilMap(n.Labels)
+	for k, v := range info.Labels() {
+		labels[k] = v
 	}
 	created := n.Created
 	if created.IsZero() {
@@ -33,7 +44,11 @@ func (s *Server) networkJSON(n network.Network, withContainers bool) map[string]
 		"Name": n.Name, "Id": n.ID, "Created": created.Format(time.RFC3339Nano), "Scope": "local", "Driver": n.Driver,
 		"EnableIPv6": false, "IPAM": ipam, "Internal": false, "Attachable": n.Attachable, "Ingress": false,
 		"ConfigFrom": map[string]string{"Network": ""}, "ConfigOnly": false, "Containers": containers,
-		"Options": nonNilMap(n.Options), "Labels": nonNilMap(n.Labels),
+		"Options": nonNilMap(n.Options), "Labels": labels,
+		// ThothDock's own, truthful description; stock clients ignore it.
+		"ThothDock": map[string]any{"Kind": info.Kind, "Builtin": info.Builtin, "Supported": info.Supported,
+			"Summary": info.Summary, "Isolation": info.Isolation, "Subnet": info.Subnet,
+			"Attached": len(members), "Operations": info.Operations},
 	}
 }
 
@@ -216,7 +231,12 @@ func (s *Server) pruneNetworks(w http.ResponseWriter, r *http.Request) {
 // container on the device network.
 func containerNetworks(r engine.Record) map[string]any {
 	if r.NetIP == "" || len(r.Networks) == 0 {
-		return map[string]any{"host": map[string]any{"NetworkID": "host"}}
+		// The device network, under the built-in name the container asked for.
+		name := engine.DeviceMode(r)
+		return map[string]any{name: map[string]any{
+			"IPAMConfig": nil, "Links": nil, "Aliases": nil, "NetworkID": network.BuiltinID(name), "EndpointID": "",
+			"Gateway": "", "IPAddress": "", "IPPrefixLen": 0, "IPv6Gateway": "", "GlobalIPv6Address": "",
+			"GlobalIPv6PrefixLen": 0, "MacAddress": "", "DriverOpts": nil}}
 	}
 	out := map[string]any{}
 	for id, ep := range r.Networks {
@@ -235,7 +255,10 @@ func containerNetworks(r engine.Record) map[string]any {
 
 func networkMode(r engine.Record) string {
 	if r.NetIP == "" || len(r.Networks) == 0 {
-		return "host"
+		if r.HostConfig.NetworkMode == "" {
+			return "default"
+		}
+		return r.HostConfig.NetworkMode
 	}
 	return r.HostConfig.NetworkMode
 }

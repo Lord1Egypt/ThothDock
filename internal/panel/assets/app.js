@@ -162,7 +162,7 @@ async function summary() {
   $("tiles").replaceChildren(
     tile(s.containers.running, "Running", "running"), tile(s.containers.stopped, "Stopped"),
     tile(s.images, "Images", "cyan"), tile(s.volumes, "Volumes", "blue"),
-    tile(s.stacks, "Stacks"), tile(s.networks, "Networks"));
+    tile(s.stacks, "Stacks"), tile(s.userNetworks, "User networks"));
   const h = s.host || {};
   const parts = [];
   const fig = (label, value) => el("span", null, label + " ", el("b", { text: value }));
@@ -259,13 +259,39 @@ async function volumesView() {
     el("div", { class: "meta dim", text: (v.project ? "stack " + v.project + " · " : "") + "created " + v.created }))));
 }
 
+const NETWORK_TYPE = {
+  "device-bridge": ["Built-in · compatibility", ""],
+  "device-host": ["Built-in", ""],
+  unsupported: ["Unsupported", "off"],
+  "user-defined": ["User-defined", "ok"],
+};
+
+function networkRow(n) {
+  const [label, tone] = NETWORK_TYPE[n.kind] || [n.kind || "Unknown", ""];
+  const range = n.subnet ? "Address range " + n.subnet
+    : n.supported ? "No address range of its own: shares the phone's network" : "No address range";
+  const count = n.supported ? n.attached + (n.attached === 1 ? " container attached" : " containers attached") : "";
+  return el("div", { class: "row network" + (n.supported ? "" : " off") },
+    el("div", { class: "head" }, el("span", { class: "name", text: n.name }),
+      el("span", { class: "state " + tone, text: label })),
+    el("div", { class: "meta dim", text: n.summary }),
+    el("div", { class: "meta", text: [range, count].filter(Boolean).join(" · ") + (n.project ? " · stack " + n.project : "") }),
+    n.supported && n.operations.length
+      ? el("div", { class: "ops" }, el("span", { class: "dim", text: "docker network " }),
+        ...n.operations.map((o) => el("code", { text: o })))
+      : null,
+    n.isolation ? el("div", { class: "note" + (n.kind === "user-defined" ? " warn" : ""), text: n.isolation }) : null);
+}
+
 async function networksView() {
   const nets = await api("GET", "/api/networks");
-  return el("div", { class: "list" }, ...nets.map((n) => el("div", { class: "row" },
-    el("div", { class: "head" }, el("span", { class: "name", text: n.name }), el("span", { class: "state", text: n.builtin ? "device network" : n.subnet })),
-    el("div", { class: "meta dim", text: n.builtin
-      ? "Built in: containers here share the phone's network"
-      : "Own loopback address per container; names resolve inside the network" + (n.project ? " · stack " + n.project : "") }))));
+  const section = (title, items) => items.length
+    ? el("div", { class: "group" }, el("h3", { text: title }), el("div", { class: "list" }, ...items.map(networkRow))) : null;
+  return el("div", null,
+    section("User-defined networks", nets.filter((n) => !n.builtin)),
+    section("Built-in networks", nets.filter((n) => n.builtin)),
+    nets.some((n) => !n.builtin) ? null
+      : el("div", { class: "hint", text: "No user-defined networks yet. Create one with docker network create NAME, or use Docker Compose." }));
 }
 
 async function eventsView() {

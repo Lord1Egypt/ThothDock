@@ -98,6 +98,58 @@ check "after network connect it does" "$(retry_get iso http://web/)" from-web
 docker network disconnect demo iso
 check "after network disconnect it no longer does" "$(docker exec iso sh -c 'getent hosts web || echo none')" none
 
+# What the built-in networks are, as the stock CLI sees it (labels carry the truth).
+check "bridge is reported as the device network" "$(docker network inspect -f '{{index .Labels "io.thothdock.network.kind"}}' bridge)" device-bridge
+check "host is reported as the device network" "$(docker network inspect -f '{{index .Labels "io.thothdock.network.kind"}}' host)" device-host
+check "none is reported as unsupported" "$(docker network inspect -f '{{index .Labels "io.thothdock.network.supported"}}' none)" false
+check "built-in networks claim no address range" "$(docker network inspect -f '{{len .IPAM.Config}}' bridge host none | tr '\n' ' ')" "0 0 0 "
+check "the user network claims its range" "$(docker network inspect -f '{{len .IPAM.Config}}' demo)" 1
+
+# Unsupported modes fail loudly, never fall back to the device network, and leave nothing behind.
+before=$(docker ps -aq | wc -l)
+if out=$(docker run --rm --network none "$IMAGE" true 2>&1); then fail "--network none ran"; else
+    echo "$out" | grep -q -- "--network none" && pass "--network none is refused explicitly" || fail "--network none refusal text: $out"
+fi
+check "the refused run left no container" "$(docker ps -aq | wc -l)" "$before"
+if docker run -d --network nosuchnet "$IMAGE" true >/dev/null 2>&1; then fail "an unknown network was accepted"; else pass "an unknown network is refused"; fi
+if docker run -d --network container:web "$IMAGE" true >/dev/null 2>&1; then fail "container: network mode was accepted"; else pass "--network container: is refused"; fi
+
+# Invalid membership is rejected, with an honest reason.
+refused() { # NAME PATTERN CMD...
+    n=$1 pat=$2; shift 2
+    if out=$("$@" 2>&1); then fail "$n (succeeded)"; else echo "$out" | grep -qi -- "$pat" && pass "$n" || fail "$n: $out"; fi
+}
+refused "connect to an unknown network" "not found" docker network connect nosuchnet iso
+refused "connect to none" "not implemented" docker network connect none iso
+refused "connect to bridge" "Android device network" docker network connect bridge iso
+refused "connect to host" "Android device network" docker network connect host iso
+refused "connect twice" "already exists in network" docker network connect other iso
+refused "disconnect from a network never joined" "is not connected" docker network disconnect demo iso
+refused "connect an unknown container" "No such container" docker network connect demo ghostcontainer
+refused "create a network named like a built-in" "pre-defined" docker network create bridge
+refused "remove a built-in network" "pre-defined" docker network rm none
+
+# An alias given at connect resolves for the other members, and stops when the container leaves.
+docker network connect --alias backend demo iso
+check "an alias given at connect resolves on that network" "$(docker exec cli sh -c 'getent hosts backend | cut -d" " -f1 | head -c3')" 127
+# An alias on another network does not shadow a name on this one.
+docker run -d --name iso2 --network other --network-alias web "$IMAGE" sleep 100000 >/dev/null
+check "an alias on another network does not shadow web" "$(docker exec cli getent hosts web | awk '{print $1}')" "$ip"
+# KNOWN LIMITATION (docs/nextgen/SECURITY_MODEL.md): addresses are separation, not isolation.
+check "KNOWN LIMITATION: a container that knows web's address reaches it from another network" "$(docker network disconnect demo iso && retry_get iso "http://$ip/")" from-web
+check "an alias stops resolving after disconnect" "$(docker exec cli sh -c 'getent hosts backend || echo none')" none
+docker rm -f iso2 >/dev/null
+ss -Hltn | awk '{print $4}' | sort > "$WORK.after2"
+new=$(comm -13 "$WORK.before" "$WORK.after2")
+echo "$new" | grep -Eq '^(0\.0\.0\.0|\*|\[::\]):' && fail "a new wildcard listener after the network operations: $(echo "$new" | tr '\n' ' ')" || pass "no wildcard listener after connect/disconnect/alias operations"
+
+# network prune removes only unused user-defined networks.
+docker network create spare >/dev/null
+out=$(docker network prune -f 2>&1)
+echo "$out" | grep -qx spare && pass "prune removed the unused user network" || fail "prune output: $out"
+check "prune kept networks in use and the built-in ones" "$(docker network ls --format '{{.Name}}' | sort | tr '\n' ' ')" "bridge demo host none other "
+case "$out" in *demo*|*other*|*bridge*|*host*|*none*) fail "prune touched something in use or built in: $out" ;; *) pass "prune named only the unused network" ;; esac
+
 docker network rm demo >/dev/null 2>&1 && fail "removed a network in use" || pass "a network in use cannot be removed"
 
 # A device-network container keeps v0.1.1 behaviour.
