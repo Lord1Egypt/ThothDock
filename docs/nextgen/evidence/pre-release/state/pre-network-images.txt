@@ -1,0 +1,91 @@
+[
+    {
+        "Attachable": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7": {
+                "EndpointID": "8f58a3f230d65334abada7b7b6f0aa635c17178b8c3fffaa9a2596bbaa7987ce",
+                "IPv4Address": "127.77.0.2/16",
+                "IPv6Address": "",
+                "MacAddress": "",
+                "Name": "web1"
+            }
+        },
+        "Created": "2026-10-10T15:43:21.510290464Z",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Config": [
+                {
+                    "Gateway": "127.77.0.1",
+                    "Subnet": "127.77.0.0/16"
+                }
+            ],
+            "Driver": "default",
+            "Options": {}
+        },
+        "Id": "e54aafe26efaa2195979ca264fec9113f4319c9dd43c20982850d97b30968f35",
+        "Ingress": false,
+        "Internal": false,
+        "Labels": {},
+        "Name": "demo",
+        "Options": {},
+        "Scope": "local"
+    },
+    {
+        "Attachable": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685": {
+                "EndpointID": "086cd8d9c91860f088dc7076cabebb497cb069c731e3180e5092a7df2bd8bb22",
+                "IPv4Address": "127.77.0.4/16",
+                "IPv6Address": "",
+                "MacAddress": "",
+                "Name": "tonapi-explorer-1"
+            }
+        },
+        "Created": "2026-10-10T16:38:13.653391198Z",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Config": [
+                {
+                    "Gateway": "127.77.0.1",
+                    "Subnet": "127.77.0.0/16"
+                }
+            ],
+            "Driver": "default",
+            "Options": {}
+        },
+        "Id": "087b7ae3c7174d58fa13e41774ca94bad51de38966442f77f8780bc0e134319c",
+        "Ingress": false,
+        "Internal": false,
+        "Labels": {
+            "com.docker.compose.network": "default",
+            "com.docker.compose.project": "tonapi",
+            "com.docker.compose.version": "2.26.1"
+        },
+        "Name": "tonapi_default",
+        "Options": {},
+        "Scope": "local"
+    }
+]
+Error response from daemon: network 5526b6bba1d1 not found
+Error response from daemon: network e7a63386979d not found
+Error response from daemon: network 7305056411cf not found
+REPOSITORY                    TAG       DIGEST                                                                    IMAGE ID       CREATED        SIZE
+akim92/egyptianarmyapi        v58       sha256:7a2de3de23a3129f9e7df97310fc650bf50c848749bb3dd8a31fd095f28ca90e   933f83300047   3 days ago     332MB
+akim92/egyptianarmyexplorer   v1        sha256:fae6c3718147492654fd88bf8e2a39973dce174e6f5d345fbd40c572ff347971   d38b91f13653   3 days ago     61.9MB
+alpine                        3.20      sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc   ab3fe4defd29   5 months ago   8.82MB
+DRIVER    VOLUME NAME
+CONTAINER ID   NAMES               STATUS          PORTS
+d4372a89fcc9   EgyptArmyAPI        Up 26 minutes   127.0.0.1:4000->3000/tcp
+c1185a6e81b5   tonapi-explorer-1   Up 28 minutes   127.0.0.1:8080->80/tcp
+e695b3a7911f   keep                Up 31 minutes   
+a864685d1bc9   web1                Up 55 minutes   

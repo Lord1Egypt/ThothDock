@@ -1,0 +1,38 @@
+--- /tmp/claude-1000/-home-lordegypt-AndroidThothTerm/55b6e41a-b845-4961-8140-dc0ef9932aad/scratchpad/net_ip.c.orig	2026-10-10 20:28:52.727753259 +0300
++++ /tmp/claude-1000/-home-lordegypt-AndroidThothTerm/55b6e41a-b845-4961-8140-dc0ef9932aad/scratchpad/proot-fix/proot/src/extension/net_ip/net_ip.c	2026-10-10 20:29:03.777391309 +0300
+@@ -9,7 +9,9 @@
+  * syscall entry:
+  *
+  *   bind     0.0.0.0 / 127.0.0.0/8 / :: / ::1 -> its own address
+- *            (a V6ONLY IPv6 wildcard becomes an inert [::1]:0)
++ *            (a V6ONLY IPv6 wildcard becomes an inert [::1]:0), except a
++ *            wildcard bind to port 0, which is a client choosing its source
++ *            port and is left alone (see rewrite4)
+  *   connect, 127.77.0.1 (the gateway)         -> the device's 127.0.0.1
+  *   sendto   other loopback / 0.0.0.0 / ::1   -> its own address
+  *            another 127.77.0.0/16 address    -> kept
+@@ -103,6 +105,14 @@
+ 	if (is_bind) {
+ 		if (a != INADDR_ANY && !is_loopback4(a))
+ 			return false;
++		/* bind(0.0.0.0:0) is how a client socket picks its source port
++		 * (musl's resolver, HTTP clients).  Moving it to the container's
++		 * loopback address would make its connect() to any outside
++		 * address fail with EINVAL, because a loopback source cannot
++		 * reach one: outbound DNS and TCP would break.  A server does
++		 * not bind port 0 to be found, so leaving it is harmless.  */
++		if (a == INADDR_ANY && p == 0)
++			return false;
+ 		*addr = own;
+ 		*port = shift_port(p);
+ 		return true;
+@@ -241,6 +251,9 @@
+ 				return 0;
+ 			map_v4(a6, a);
+ 		}
++		else if (is_bind && IN6_IS_ADDR_UNSPECIFIED(a6) && p == 0) {
++			return 0; /* A client picking its source port, as for IPv4.  */
++		}
+ 		else if (IN6_IS_ADDR_UNSPECIFIED(a6) || IN6_IS_ADDR_LOOPBACK(a6)) {
+ 			if (is_bind && socket_is_v6only(tracee, (int) peek_reg(tracee, CURRENT, SYSARG_1))) {
+ 				/* A V6ONLY wildcard cannot carry the IPv4

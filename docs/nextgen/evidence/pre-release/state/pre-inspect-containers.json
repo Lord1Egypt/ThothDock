@@ -1,0 +1,609 @@
+[
+    {
+        "AppArmorProfile": "",
+        "Args": [
+            "node",
+            "dist/index.js"
+        ],
+        "Config": {
+            "Hostname": "d4372a89fcc9",
+            "Domainname": "",
+            "User": "node",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "3000/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=16.20.2",
+                "YARN_VERSION=1.22.19",
+                "NODE_ENV=production",
+                "PORT=3000",
+                "TON_CONFIG=https://ton.org/global-config.json"
+            ],
+            "Cmd": [
+                "node",
+                "dist/index.js"
+            ],
+            "Image": "akim92/egyptianarmyapi:v58",
+            "Volumes": {},
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "docker-entrypoint.sh"
+            ],
+            "OnBuild": null,
+            "Labels": {}
+        },
+        "Created": "2026-10-10T16:39:58.773443282Z",
+        "Driver": "thothdock-copy",
+        "ExecIDs": null,
+        "GraphDriver": {
+            "Data": {
+                "RootDir": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb/rootfs"
+            },
+            "Name": "thothdock-copy"
+        },
+        "HostConfig": {
+            "Binds": null,
+            "NetworkMode": "default",
+            "PortBindings": {
+                "3000/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "4000"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumesFrom": null,
+            "CapAdd": null,
+            "CapDrop": null,
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "",
+            "Links": null,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "LogConfig": {
+                "Type": "",
+                "Config": {}
+            },
+            "ConsoleSize": [
+                54,
+                232
+            ],
+            "CpuShares": 0,
+            "Memory": 0,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "NanoCpus": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "PidsLimit": 0,
+            "BlkioWeight": 0,
+            "OomKillDisable": false,
+            "Devices": [],
+            "Ulimits": null,
+            "CgroupParent": "",
+            "ShmSize": 0
+        },
+        "HostnamePath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb/hostname",
+        "HostsPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb/hosts",
+        "Id": "d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb",
+        "Image": "sha256:933f833000476685bc14f97cf00c0174afd46461b9586f68cf78b53701cf889d",
+        "LogPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb/container.log",
+        "MountLabel": "",
+        "Mounts": [],
+        "Name": "/EgyptArmyAPI",
+        "NetworkSettings": {
+            "Bridge": "",
+            "HairpinMode": false,
+            "Networks": {
+                "host": {
+                    "NetworkID": "host"
+                }
+            },
+            "Ports": {
+                "3000/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "4000"
+                    }
+                ]
+            },
+            "SandboxID": "",
+            "SandboxKey": ""
+        },
+        "Path": "docker-entrypoint.sh",
+        "Platform": "linux",
+        "ProcessLabel": "",
+        "ResolvConfPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/d4372a89fcc9a2a81b4fb87fe27bcf792047d78478f6ef2a8c8552b852497dbb/resolv.conf",
+        "RestartCount": 0,
+        "State": {
+            "Dead": false,
+            "Error": "",
+            "ExitCode": 0,
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "OOMKilled": false,
+            "Paused": false,
+            "Pid": 19496,
+            "Restarting": false,
+            "Running": true,
+            "StartedAt": "2026-10-10T16:40:14.063718052Z",
+            "Status": "running"
+        }
+    },
+    {
+        "AppArmorProfile": "",
+        "Args": [
+            "nginx",
+            "-g",
+            "daemon off;"
+        ],
+        "Config": {
+            "Hostname": "c1185a6e81b5",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "80/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NGINX_VERSION=1.29.8",
+                "PKG_RELEASE=1",
+                "DYNPKG_RELEASE=1",
+                "NJS_VERSION=0.9.6",
+                "NJS_RELEASE=1",
+                "ACME_VERSION=0.3.1"
+            ],
+            "Cmd": [
+                "nginx",
+                "-g",
+                "daemon off;"
+            ],
+            "Image": "akim92/egyptianarmyexplorer:v1",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "/docker-entrypoint.sh"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "41287e0eb4362aa1e02821f795d58a4d5c3f2e47178bb81a05f6f6badb821c2f",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:d38b91f136539616b3c221783b203936d3a324d44f5ba38317a9e0858c9316f8",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "tonapi",
+                "com.docker.compose.project.config_files": "/home/thoth/TonAPi/docker-compose.yaml",
+                "com.docker.compose.project.working_dir": "/home/thoth/TonAPi",
+                "com.docker.compose.service": "explorer",
+                "com.docker.compose.version": "2.26.1",
+                "maintainer": "NGINX Docker Maintainers \u003cdocker-maint@nginx.com\u003e"
+            },
+            "StopSignal": "SIGQUIT"
+        },
+        "Created": "2026-10-10T16:38:13.686249429Z",
+        "Driver": "thothdock-copy",
+        "ExecIDs": null,
+        "GraphDriver": {
+            "Data": {
+                "RootDir": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685/rootfs"
+            },
+            "Name": "thothdock-copy"
+        },
+        "HostConfig": {
+            "Binds": null,
+            "NetworkMode": "tonapi_default",
+            "PortBindings": {
+                "80/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "8080"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumesFrom": null,
+            "CapAdd": null,
+            "CapDrop": null,
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "",
+            "Links": null,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "LogConfig": {
+                "Type": "",
+                "Config": null
+            },
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CpuShares": 0,
+            "Memory": 0,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "NanoCpus": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "PidsLimit": null,
+            "BlkioWeight": 0,
+            "OomKillDisable": false,
+            "Devices": null,
+            "Ulimits": null,
+            "CgroupParent": "",
+            "ShmSize": 0
+        },
+        "HostnamePath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685/hostname",
+        "HostsPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685/hosts",
+        "Id": "c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685",
+        "Image": "sha256:d38b91f136539616b3c221783b203936d3a324d44f5ba38317a9e0858c9316f8",
+        "LogPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685/container.log",
+        "MountLabel": "",
+        "Mounts": [],
+        "Name": "/tonapi-explorer-1",
+        "NetworkSettings": {
+            "Bridge": "",
+            "HairpinMode": false,
+            "Networks": {
+                "tonapi_default": {
+                    "Aliases": [
+                        "tonapi-explorer-1",
+                        "explorer"
+                    ],
+                    "DriverOpts": null,
+                    "EndpointID": "086cd8d9c91860f088dc7076cabebb497cb069c731e3180e5092a7df2bd8bb22",
+                    "Gateway": "127.77.0.1",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "IPAMConfig": null,
+                    "IPAddress": "127.77.0.4",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "Links": null,
+                    "MacAddress": "",
+                    "NetworkID": "087b7ae3c7174d58fa13e41774ca94bad51de38966442f77f8780bc0e134319c"
+                }
+            },
+            "Ports": {
+                "80/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "8080"
+                    }
+                ]
+            },
+            "SandboxID": "",
+            "SandboxKey": ""
+        },
+        "Path": "/docker-entrypoint.sh",
+        "Platform": "linux",
+        "ProcessLabel": "",
+        "ResolvConfPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/c1185a6e81b5107a10c9ba8cf3708ea48200fe44bdb7a1821bc4e8de6469d685/resolv.conf",
+        "RestartCount": 0,
+        "State": {
+            "Dead": false,
+            "Error": "",
+            "ExitCode": 0,
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "OOMKilled": false,
+            "Paused": false,
+            "Pid": 18947,
+            "Restarting": false,
+            "Running": true,
+            "StartedAt": "2026-10-10T16:38:24.226898968Z",
+            "Status": "running"
+        }
+    },
+    {
+        "AppArmorProfile": "",
+        "Args": [
+            "100000"
+        ],
+        "Config": {
+            "Hostname": "e695b3a7911f",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "sleep",
+                "100000"
+            ],
+            "Image": "alpine:3.20",
+            "Volumes": {},
+            "WorkingDir": "/",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {}
+        },
+        "Created": "2026-10-10T15:43:22.255881156Z",
+        "Driver": "thothdock-copy",
+        "ExecIDs": null,
+        "GraphDriver": {
+            "Data": {
+                "RootDir": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de/rootfs"
+            },
+            "Name": "thothdock-copy"
+        },
+        "HostConfig": {
+            "Binds": null,
+            "NetworkMode": "default",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumesFrom": null,
+            "CapAdd": null,
+            "CapDrop": null,
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "",
+            "Links": null,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "LogConfig": {
+                "Type": "",
+                "Config": {}
+            },
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CpuShares": 0,
+            "Memory": 0,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "NanoCpus": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "PidsLimit": 0,
+            "BlkioWeight": 0,
+            "OomKillDisable": false,
+            "Devices": [],
+            "Ulimits": null,
+            "CgroupParent": "",
+            "ShmSize": 0
+        },
+        "HostnamePath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de/hostname",
+        "HostsPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de/hosts",
+        "Id": "e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de",
+        "Image": "sha256:ab3fe4defd29ba6231229a4d41440ac8bde8218e85870e53876277faa24b35c4",
+        "LogPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de/container.log",
+        "MountLabel": "",
+        "Mounts": [],
+        "Name": "/keep",
+        "NetworkSettings": {
+            "Bridge": "",
+            "HairpinMode": false,
+            "Networks": {
+                "host": {
+                    "NetworkID": "host"
+                }
+            },
+            "Ports": {},
+            "SandboxID": "",
+            "SandboxKey": ""
+        },
+        "Path": "sleep",
+        "Platform": "linux",
+        "ProcessLabel": "",
+        "ResolvConfPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/e695b3a7911fd96c36329bea81dbcedb7f503433f401cd4131dd2c2c180e93de/resolv.conf",
+        "RestartCount": 1,
+        "State": {
+            "Dead": false,
+            "Error": "",
+            "ExitCode": 0,
+            "FinishedAt": "2026-10-10T16:35:02.515743495Z",
+            "OOMKilled": false,
+            "Paused": false,
+            "Pid": 17943,
+            "Restarting": false,
+            "Running": true,
+            "StartedAt": "2026-10-10T16:35:02.537713418Z",
+            "Status": "running"
+        }
+    },
+    {
+        "AppArmorProfile": "",
+        "Args": [
+            "-c",
+            "while true; do printf \"HTTP/1.0 200 OK\\r\\n\\r\\nweb1\\n\" | nc -l -p 80; done"
+        ],
+        "Config": {
+            "Hostname": "a864685d1bc9",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "sh",
+                "-c",
+                "while true; do printf \"HTTP/1.0 200 OK\\r\\n\\r\\nweb1\\n\" | nc -l -p 80; done"
+            ],
+            "Image": "alpine:3.20",
+            "Volumes": {},
+            "WorkingDir": "/",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {}
+        },
+        "Created": "2026-10-10T15:43:21.671120848Z",
+        "Driver": "thothdock-copy",
+        "ExecIDs": null,
+        "GraphDriver": {
+            "Data": {
+                "RootDir": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7/rootfs"
+            },
+            "Name": "thothdock-copy"
+        },
+        "HostConfig": {
+            "Binds": null,
+            "NetworkMode": "demo",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumesFrom": null,
+            "CapAdd": null,
+            "CapDrop": null,
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "",
+            "Links": null,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "LogConfig": {
+                "Type": "",
+                "Config": {}
+            },
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CpuShares": 0,
+            "Memory": 0,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "NanoCpus": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "PidsLimit": 0,
+            "BlkioWeight": 0,
+            "OomKillDisable": false,
+            "Devices": [],
+            "Ulimits": null,
+            "CgroupParent": "",
+            "ShmSize": 0
+        },
+        "HostnamePath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7/hostname",
+        "HostsPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7/hosts",
+        "Id": "a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7",
+        "Image": "sha256:ab3fe4defd29ba6231229a4d41440ac8bde8218e85870e53876277faa24b35c4",
+        "LogPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7/container.log",
+        "MountLabel": "",
+        "Mounts": [],
+        "Name": "/web1",
+        "NetworkSettings": {
+            "Bridge": "",
+            "HairpinMode": false,
+            "Networks": {
+                "demo": {
+                    "Aliases": [],
+                    "DriverOpts": null,
+                    "EndpointID": "8f58a3f230d65334abada7b7b6f0aa635c17178b8c3fffaa9a2596bbaa7987ce",
+                    "Gateway": "127.77.0.1",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "IPAMConfig": null,
+                    "IPAddress": "127.77.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "Links": null,
+                    "MacAddress": "",
+                    "NetworkID": "e54aafe26efaa2195979ca264fec9113f4319c9dd43c20982850d97b30968f35"
+                }
+            },
+            "Ports": {},
+            "SandboxID": "",
+            "SandboxKey": ""
+        },
+        "Path": "sh",
+        "Platform": "linux",
+        "ProcessLabel": "",
+        "ResolvConfPath": "/data/user/0/com.thothterm.debian.qa.nextgen/files/thothdock/containers/a864685d1bc984dc8a9db459eb400cb8d2fae7888888a9595184dcf09eb3e7b7/resolv.conf",
+        "RestartCount": 0,
+        "State": {
+            "Dead": false,
+            "Error": "",
+            "ExitCode": 0,
+            "FinishedAt": "2026-10-10T16:11:22.051074256Z",
+            "OOMKilled": false,
+            "Paused": false,
+            "Pid": 32141,
+            "Restarting": false,
+            "Running": true,
+            "StartedAt": "2026-10-10T16:11:23.338388333Z",
+            "Status": "running"
+        }
+    }
+]

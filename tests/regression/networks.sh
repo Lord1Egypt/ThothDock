@@ -22,8 +22,17 @@ fails=0
 pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
 check() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1: got '$2', want '$3'"; fi; }
+# Outbound-connection probe (needs gcc and a default route; skipped otherwise). 192.0.2.1 is TEST-NET-1:
+# routable through the default route, never answered, and not a local address (a connect to one of
+# the machine's own addresses succeeds even from a loopback source, which would hide the defect).
+PROBE_IP=192.0.2.1
+mkdir -p "$WORK.probe"
+BINDS=
+if command -v gcc >/dev/null && gcc -static -O1 -o "$WORK.probe/netprobe" "$(dirname "$0")/netprobe.c" 2>/dev/null; then
+    BINDS="--allow-bind $WORK.probe"
+fi
 start_daemon() {
-    "$TD" serve --root "$WORK" --proot "$PROOT" >> "$WORK.log" 2>&1 &
+    "$TD" serve --root "$WORK" --proot "$PROOT" $BINDS >> "$WORK.log" 2>&1 &
     PID=$!
     for _ in $(seq 100); do docker version >/dev/null 2>&1 && return 0; sleep 0.1; done
     echo "daemon did not start"; cat "$WORK.log"; exit 1
@@ -32,7 +41,7 @@ orphans() { ps -eo args | grep -c "^$PROOT --rootfs=$WORK/" || true; }
 cleanup() {
     [ -n "$PID" ] && { kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; }
     [ -n "$HOSTSRV" ] && kill "$HOSTSRV" 2>/dev/null
-    case "$WORK" in /tmp/tdnet.*) rm -rf "$WORK" "$WORK.log" "$WORK.before" "$WORK.after" ;; esac
+    case "$WORK" in /tmp/tdnet.*) rm -rf "$WORK" "$WORK.log" "$WORK.before" "$WORK.after" "$WORK.after2" "$WORK.probe" ;; esac
 }
 trap cleanup EXIT
 # A tiny HTTP server: answers every connection on PORT with BODY.
@@ -97,6 +106,18 @@ docker network connect demo iso
 check "after network connect it does" "$(retry_get iso http://web/)" from-web
 docker network disconnect demo iso
 check "after network disconnect it no longer does" "$(docker exec iso sh -c 'getent hosts web || echo none')" none
+
+# Outbound connections. A client that binds the wildcard before it connects (musl's resolver) must
+# still reach an address outside loopback; PRoot --net-ip once broke it with EINVAL, which made
+# every DNS lookup from a container on a user network fail.
+if [ -x "$WORK.probe/netprobe" ] && docker run --rm -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 | grep -q "udp, connect only: ok"; then
+    out=$(docker run --rm --network demo -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 || true)
+    echo "$out" | grep -q "Invalid argument" && fail "outbound from a user network: $(echo "$out" | grep "Invalid argument" | tr '\n' ';')" || pass "bind-then-connect to an outside address works on a user network (udp, tcp, dual-stack)"
+    control=$(docker run --rm -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 || true)
+    echo "$control" | grep -q "Invalid argument" && fail "the probe itself fails on the device network" || pass "the same probe on the device network (control)"
+else
+    echo "SKIP: outbound probe (needs gcc and a default route)"
+fi
 
 # What the built-in networks are, as the stock CLI sees it (labels carry the truth).
 check "bridge is reported as the device network" "$(docker network inspect -f '{{index .Labels "io.thothdock.network.kind"}}' bridge)" device-bridge

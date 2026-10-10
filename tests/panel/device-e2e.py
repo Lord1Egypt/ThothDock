@@ -40,6 +40,7 @@ with sync_playwright() as p:
     page.wait_for_selector("#app:not([hidden])", timeout=15000)
     page.locator(".row .name", has_text=name).first.wait_for(timeout=15000)
     check(True, "paired with the code from the phone; containers listed")
+    page.locator(".tile").nth(5).wait_for(timeout=15000)  # the summary arrives after the first list
     tiles = dict(zip(page.locator(".tile .l").all_text_contents(), page.locator(".tile .n").all_text_contents()))
     check(int(tiles["Running"]) >= 1, f"dashboard {tiles}")
     check("Memory" in page.text_content("#host"), "device figures shown: " + page.text_content("#host")[:90])

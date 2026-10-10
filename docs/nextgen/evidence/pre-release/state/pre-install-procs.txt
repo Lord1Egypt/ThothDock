@@ -1,0 +1,14 @@
+12277 7764 kB thr=12 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+17943 13596 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+18541 13740 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+18947 13604 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+19496 13852 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+28754 3680 kB thr=1 /system/bin/sh -c for p in $(ls /proc | grep -E "^[0-9]+$"); do c=$(tr "" " " </proc/$p/c
+31682 172436 kB thr=61 com.thothterm.debian.qa.nextgen                                                           
+31896 13008 kB thr=17 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+32076 13096 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+32141 13128 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB
+
+web1
+" | nc -l -p 80; done 
+7112 13300 kB thr=1 /data/app/~~rMnR1aLyL1kJdGcvS-ohcQ==/com.thothterm.debian.qa.nextgen-5nA5T7828eUujfrqY6LqB

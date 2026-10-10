@@ -1,0 +1,8 @@
+-- after
+    Native Heap 25022 25000 4 11638 26132 44372 40646 3725
+    TOTAL PSS: 130802 TOTAL RSS: 216153 TOTAL SWAP PSS: 23909
+    Views: 158 ViewRootImpl: 2
+    AppContexts: 8 Activities: 2
+    Death Recipients: 0 WebViews: 0
+   engine pid=32375 rss=11808 kB threads=17
+   app procs of package: 8  containers running: 4
