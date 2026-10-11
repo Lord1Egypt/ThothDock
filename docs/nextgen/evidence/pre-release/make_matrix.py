@@ -10,8 +10,8 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ENGINE = "ThothDock be197c5"
-APP = "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+ENGINE = "ThothDock feature/nextgen (final hardening; Process Guard 013ae9f, release candidate pending)"
+APP = "AndroidThothTerm feature/thothdock-nextgen (final hardening; 324df86, pins ThothDock 013ae9f, PRoot patch 0009 c6c15b6)"
 E = "docs/nextgen/evidence/pre-release/"
 
 rows = [
@@ -37,7 +37,7 @@ rows = [
     ("D-02", "Web Panel unauthenticated, CSRF, Origin, Host, cookie flags, allow list, sign-out", "device", "refused without session/CSRF/Origin/Host; HttpOnly Secure Strict", "20/20", "PASS", E + "sec-session.log", APP),
     ("D-03", "Web Panel code rate limit and exhaustion", "device", "429 within 1 s; dead after 5 wrong", "429; right code refused afterwards; app shows 'No active code'", "PASS", E + "sec-exhaust.log", APP),
     ("D-04", "Web Panel Wi-Fi mode, HTTP->HTTPS, browser flow", "device", "HTTPS 200 on Wi-Fi, http redirected, panel functions", "200; 307 to https; device browser e2e 12/12", "PASS", E + "tabs/9-webpanel-wifi.png", APP),
-    ("D-05", "Pairing-code expiry (10 min) and session idle expiry (30 days)", "host", "expired code and idle session refused", "unit tests with a fake clock; not waited out on the device", "PASS", "internal/panel panel_test.go", ENGINE),
+    ("D-05", "Pairing-code expiry (10 min) and session idle expiry (12 h, since 2026-10-11; was 30 days)", "host", "expired code and idle session refused", "unit tests with a fake clock; not waited out on the device", "PASS", "internal/panel panel_test.go", ENGINE),
     ("D-06", "Web Panel browser e2e (functional, CSP, phone width)", "host", "30 checks", "30/30", "PASS", "tests/panel/e2e.sh", ENGINE),
     ("E-01", "TON stack failure root cause", "device", "classify DNS/TCP/TLS/HTTP/app", "DNS: getaddrinfo EAI_AGAIN only on user networks; PRoot --net-ip moved bind(0.0.0.0:0) to 127.77.x.y -> EINVAL; fixed in patch 0009", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md", APP),
     ("E-02", "TON stack: config, pull, up -d, ps, logs, restart, down", "device", "2/2 running, scoped cleanup", "project tonqa 2/2; down removed only its containers and network", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md", APP),
@@ -56,17 +56,33 @@ rows = [
     ("I-01", "Idle engine cost with the four workloads", "device", "no material regression", "10.9 MB RSS, 16 threads, 70 ms CPU and 279 switches per minute (TON API logs every second)", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md", APP),
     ("I-02", "Container startup and exec latency", "device", "sub-second to ~1 s", "run: 0.6-1.3 s; on a user network 0.6-1.0 s; exec 0.57 s", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md", APP),
     ("I-03", "Host perf comparison against the NextGen baseline", "host", "no material regression", "idle 0/0, RSS +-1%, startup -8%", "PASS", "tests/perf/compare.py", ENGINE),
-    ("I-04", "Phantom-process budget", "device", "stay under the cap", "owner workload = 22 processes; +5 test containers got the engine killed (Trimming phantom processes)", "FAIL", E + "phantom/", APP),
+    ("I-04", "Phantom-process budget", "device", "stay under the cap", "owner workload = 22 processes; +5 test containers got the engine killed (Trimming phantom processes)", "FAIL", E + "phantom/", APP),  # see L-04..L-07: the failure is a platform limit, mitigated not removed
     ("I-05", "1 h soak, four workloads, screen off", "device", "no restarts, API/explorer answer, no kills", "61/61 samples: one engine pid, 4 running, API answered 61/61 (8,722 blocks, in order), explorer 200 61/61, 0 phantom kills, RSS 11.6->6.6 MB, 16 threads, 28.8-29.1 C", "PASS", E + "soak/soak-1h-2026-10-11.csv", APP),
-    ("I-06", "6 h / 24 h / 48 h soak", "device", "real elapsed time", "not run in this session", "PENDING", "tests/device/soak.sh", APP),
-    ("I-07", "Gaming coexistence (Wild Rift)", "owner", "owner plays with 4 containers running", "not done in this session", "PENDING", "", APP),
+    ("I-06", "6 h / 24 h / 48 h soak", "device", "real elapsed time", "WAIVED by the owner 2026-10-11 and not run. Reliability beyond the verified one-hour soak remains unverified in controlled endurance testing.", "SKIPPED_BY_OWNER", "tests/device/soak.sh", APP),
+    ("I-07", "Gaming coexistence (Wild Rift)", "owner", "owner plays with 4 containers running", "owner reports phone and game behaved normally; duration, frame rate, battery, temperature and container uptime were not measured", "PASS_OWNER_REPORTED", "owner statement 2026-10-11", APP),
     ("I-08", "Battery and thermal", "device", "observe, not a power measurement", "the phone was charging; temperature recorded in the soak only", "PARTIAL", E + "soak/", APP),
     ("J-01", "Event stream ordering, pulls, networks", "device", "create/start/die/destroy order; pull; network events", "recorded in the restart test", "PASS", E + "restart-device.log", APP),
     ("J-02", "Bounded history, slow clients, reconnect", "host", "ring of 1024, live-only without since, reconnect", "go test -race (events, api, panel)", "PASS", "internal/events, internal/panel", ENGINE),
     ("K-01", "Go tests, race detector, vet", "host", "all pass", "all packages ok", "PASS", "go test -race ./...", ENGINE),
-    ("K-02", "Android unit tests", "android-unit", "all pass", "garden-common 375/375, garden-debian 33/33", "PASS", "Gradle test results", APP),
+    ("K-02", "Android unit tests", "android-unit", "all pass", "408 tests, 0 failures (garden-common and garden-debian, 2026-10-11 final round)", "PASS", "Gradle test results", APP),
     ("K-03", "Docker CLI smoke and lifecycle", "host", "all pass", "smoke 6/6, lifecycle 12/12", "PASS", "tests/smoke, tests/regression/lifecycle.sh", ENGINE),
     ("K-04", "Reproducibility preflight (guard packages under umask 022/002)", "host", "identical", "identical (Engine Guard round)", "PASS", "engine-guard/build.sh", ENGINE),
+    # ---- final hardening round, 2026-10-11 ----
+    ("L-01", "P1: Web Panel sessions end with the panel process (Go, race detector)", "host", "old cookie/CSRF/actions 401 after restart; legacy file purged; fail closed", "internal/panel tests: restart, legacy file, undeletable file refuses start, two browsers, revoke-all, logout, 12 h idle, concurrency", "PASS", "internal/panel/panel_test.go", ENGINE),
+    ("L-02", "P1: session lifecycle with the real binary (SIGUSR2, SIGKILL, SIGTERM, legacy file)", "host", "old sessions dead; certificate kept", "21/21", "PASS", "tests/panel/lifecycle.sh", ENGINE),
+    ("L-03", "QA-07: Process Guard unit and integration tests", "host", "low/high/unknown/stale/hysteresis/burst/concurrent/no goroutines/no state change", "internal/procguard, engine pressure_test, api, panel summary: all pass with -race", "PASS", "internal/procguard, internal/engine/pressure_test.go", ENGINE),
+    ("L-04", "QA-07: root cause of the engine kill", "device", "mechanism from logs", "AMS 'Trimming phantom processes' killed libthothdock.so; 22 phantom records, all this uid; cap value unreadable (AOSP default 32 presumed)", "PASS", E + "phantom/", APP),
+    ("L-05", "QA-07: Process Guard on the phone (live warning, Containers screen, panel summary, endpoint)", "device", "warning at elevated count, truthful values, no refusal", "docker create printed the warning at 22+1; screen banner at 24; endpoint JSON; nothing refused or stopped", "PASS", "docs/nextgen/evidence/final-release/", APP),
+    ("L-06", "QA-07: recovery report after force-stop", "device", "unclean exit, interrupted and restored containers, no invented cause", "unclean; 4 interrupted, 4 restored, last pressure recorded, reasonKnown false", "PASS", E.replace("pre-release","final-release") + "recovery-after-force-stop.json", APP),
+    ("L-07", "QA-07 disposition", "owner", "documented", "MITIGATED - RESIDUAL ANDROID PLATFORM RISK: Android can still end the engine; Process Guard cannot prevent it", "PARTIAL", "docs/nextgen/ANDROID_LIFECYCLE.md", APP),
+    ("L-08", "P1 on the phone: pair, Stop, Start, old browser, Disconnect all devices", "device", "old session 401 on every action; fresh pairing works; fingerprint unchanged", "24/24 through the Android UI with two browsers and an event stream", "PASS", E.replace("pre-release","final-release") + "session-lifecycle/device-lifecycle.log", APP),
+    ("L-09", "Web Panel security suite again on the final build", "device", "22 checks", "session 20/20 + exhaust 2/2", "PASS", E.replace("pre-release","final-release") + "panel-security-session.log", APP),
+    ("L-10", "Network semantics, restart policies on the final build", "device", "26 and 16 checks", "26/26; restart 16/16 on the rerun (the first run read a 'docker events' window that closed in the crash's own second: 15/16; window widened; both logs kept)", "PASS", E.replace("pre-release","final-release"), APP),
+    ("L-11", "Engine Guard hardening (48) and LAN Mode on the final build", "device", "re-run", "not re-run: no guard or LAN file changed since the passing runs; doctor --guard clean", "NOT_RERUN", "", APP),
+    ("L-12", "Upgrade from a real v0.1.1 data root", "host", "containers, image, named volume with data kept; no container starts by itself; old containers run", "pass", "PASS", "tests/regression/upgrade-from-v0.1.1.sh", ENGINE),
+    ("L-13", "In-place upgrade of the QA app on the phone (data kept, four containers restored by policy)", "device", "no data loss", "three in-place installs; /home/thoth and containers intact; 4/4 restored each time", "PASS", E.replace("pre-release","final-release") + "pre-install-containers.txt", APP),
+    ("L-14", "Idle cost before and after Process Guard", "device", "no meaningful regression", "@@PERFROW@@", "@@PERFSTATUS@@", E.replace("pre-release","final-release") + "perf/", APP),
+    ("L-15", "Targeted Critical/High security audit", "host", "no open Critical/High", "one P1 (sessions) fixed; no other Critical/High found; targeted review, not a proof of absence", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md section 4", ENGINE),
 ]
 
 fields = ["test_id", "feature", "environment", "expected", "actual", "status", "evidence", "commit"]

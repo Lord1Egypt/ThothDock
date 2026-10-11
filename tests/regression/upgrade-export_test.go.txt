@@ -1,0 +1,43 @@
+package engine
+
+// Run inside a checkout of v0.1.1 (see upgrade-from-v0.1.1.sh): writes a real
+// v0.1.1 data root (image, two containers, a named volume with data) to $EXPORT_DIR.
+
+import (
+	"context"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/Lord1Egypt/ThothDock/internal/runtime"
+)
+
+func TestExportV011Root(t *testing.T) {
+	dir := os.Getenv("EXPORT_DIR")
+	if dir == "" {
+		t.Skip("EXPORT_DIR not set")
+	}
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
+		for _, b := range s.Binds {
+			if b.Target == "/vol" {
+				os.WriteFile(filepath.Join(b.Source, "legacy.txt"), []byte("kept"), 0o644)
+			}
+		}
+		return 3
+	})
+	if _, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}}, "legacy-a", ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: f.image}, HostConfig: volumeHC("legvol:/vol")}, "legacy-b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.e.Start(b)
+	waitFor(t, f.e, b, "")
+	if out, err := exec.Command("cp", "-a", f.layout.Root+"/.", dir).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+}

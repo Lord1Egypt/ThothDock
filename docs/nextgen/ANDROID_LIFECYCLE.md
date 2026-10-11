@@ -67,6 +67,55 @@ is how Android treats a force-stopped app. Measured: all four
 `unless-stopped` containers were running 4 s after the next launch, and the
 stale pid file left behind was handled.
 
+## QA-07: what killed the engine, and Process Guard (2026-10-11)
+
+**Established from the logs** (`evidence/pre-release/phantom/logcat-2026-10-11-0635.txt`):
+at 06:35:15 `ActivityManager` logged `Killing PhantomProcessRecord ...
+libthothdock.so/u0a770: Trimming phantom processes`, then killed the PRoot,
+shell and nginx records of the same uid; ThothTerm logged `ThothDock exited
+unexpectedly exit=137`. So the mechanism is Android's phantom-process trim
+(PhantomProcessList), not the low-memory killer or a crash. `dumpsys activity
+processes` on the same phone lists "All Active App Child Processes": 22
+records, all of the app's uid and no other app's, matching the 22 counted from
+`/proc` and the earlier measurement. The cap itself is a `device_config` value
+(`max_phantom_processes`, null on this phone, so the firmware default applies)
+that an app cannot read; **32 is AOSP's default, not a value read from this
+Samsung**, and whether other apps' children count toward it on this firmware
+was not measured. Not established: the exact count at which Android trimmed.
+
+**What was built** (ThothDock `internal/procguard`, no new process or timer):
+
+- The engine counts the processes of its own uid that Android would track (all
+  processes of the uid except the roots of its trees, i.e. the app process), by
+  reading `/proc`, at container create/start and when a status page is read
+  (cached for 30 s). Cost: about 1000 `stat` calls once per event; nothing
+  runs while nothing happens.
+- Levels against the reference cap 32: `ok`, `elevated` from 24 (75 %), `high`
+  from 29 (90 %), with a hysteresis of 2; `unknown` when the count cannot be
+  read (never shown as a number). 22 processes, which the owner's four
+  workloads held for hours, is `ok`.
+- Created-but-not-started containers are projected at 3 processes each
+  (estimate, labelled as such), so a Compose burst is warned about before it
+  starts.
+- Surfaces: `docker info` `Warnings`; `docker create` `Warnings` (printed by the
+  CLI for Compose too); a `Warning` HTTP header on start (the body stays
+  Docker's); `GET /thothdock/process-guard`; the Android Containers screen; the
+  Web Panel dashboard. The text says what can happen and what to do and never
+  states a remaining budget.
+- Nothing is refused and nothing is stopped.
+- Recovery: a daemon-owned marker file shows an unclean previous exit (the
+  Android app deletes the pid file of a dead daemon, so that cannot be used).
+  The report lists the containers that were running, those a restart policy
+  started again, the exit code the app saw if it was alive to record it, and
+  the last process count; the reason text never claims a cause
+  (`reasonKnown` is always false). After a force-stop Android gives the app no
+  reason at all, and a force-stop is final until the app is opened again.
+
+**Remaining platform risk:** Android can still trim the engine whenever the
+device-wide count passes its cap, with or without a warning (other apps, many
+terminal sessions, `docker exec` bursts). Prefer fewer processes per workload
+(`worker_processes 1`, `-w 1`) and `--restart unless-stopped`.
+
 ## Rules this design keeps
 
 - **No wake locks** are taken by the engine or the panel. Long-running work

@@ -369,9 +369,8 @@ func TestAutoRemove(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("not removed")
 	}
-	if len(f.e.List()) != 0 {
-		t.Fatal("still listed")
-	}
+	// "removed" is released a moment before the container leaves the list.
+	eventually(t, "unlisted", func() bool { return len(f.e.List()) == 0 })
 }
 
 func TestEntrypointCmdMerge(t *testing.T) {

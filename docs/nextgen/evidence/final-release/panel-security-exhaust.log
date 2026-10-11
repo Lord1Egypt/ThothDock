@@ -1,0 +1,3 @@
+PASS: a second try within a second is refused (429)
+PASS: after five wrong codes the right code no longer pairs (401 b'{"error":"no pairing code is active: create a new one where ')
+device panel security (exhaust): 0 failure(s)

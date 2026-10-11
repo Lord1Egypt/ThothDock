@@ -492,9 +492,13 @@ its views are the reference for the screens.
 | QA-04 | Underscores in network aliases and `--add-host` names (Compose service names) | DONE (c879878) |
 | QA-05 | An explicit `docker restart` is not a policy restart (RestartCount, measured against Docker 29.8.1) | DONE (be197c5) |
 | QA-06 | A container command inside a bind mount or volume (`docker run -v ./bin:/mnt img /mnt/prog`) | DONE (64202ff) |
-| QA-07 | Phantom-process budget: count the app's processes and warn in `docker info`/the app before Android kills the engine; document per-image settings (nginx workers) | PLANNED |
+| QA-07 | Phantom-process budget: count the app's processes and warn in `docker info`/the app before Android kills the engine; document per-image settings (nginx workers) | DONE — MITIGATED, RESIDUAL ANDROID PLATFORM RISK (Process Guard, ThothDock 3b51c53..013ae9f; `ANDROID_LIFECYCLE.md`) |
 | QA-08 | Web Panel Host-header allow list (DNS rebinding, defence in depth) | DONE (040c84c) |
-| QA-09 | 6 h, 24 h and 48 h soak with the TON stack (`tests/device/soak.sh`) | PENDING (1 h run recorded) |
-| QA-10 | Gaming coexistence (Wild Rift with four containers), owner-assisted | PENDING (owner) |
+| QA-09 | 6 h, 24 h and 48 h soak with the TON stack (`tests/device/soak.sh`) | SKIPPED_BY_OWNER 2026-10-11 (1 h run recorded and passed). Reliability beyond one hour is unverified in controlled endurance testing. |
+| QA-10 | Gaming coexistence (Wild Rift with four containers), owner-assisted | DONE by the owner, no problem reported; duration, frame rate, battery and container uptime not measured |
 | QA-11 | Networks and Stacks on the phone screen (today in the Web Panel only) | PLANNED |
+| QA-13 | **P1** Web Panel sessions survived Stop → Start for 30 days (a paired browser kept full control after the owner stopped the panel) | DONE (ThothDock 4616b10: in-memory sessions, 12 h idle, SIGUSR2 revoke; app 324df86: Disconnect all devices; device 24/24) |
+| QA-14 | "Disconnect all devices" in the Android Web Panel tab, distinct from Stop, Start and New code | DONE |
+| QA-15 | Recovery report after an unclean daemon exit | DONE (013ae9f) |
 | QA-12 | Explorer image hard-codes the API at port 4000 (image issue, not ThothDock) | NOTED |
+| QA-16 | Minor, known: `wait --condition=removed` is released a few microseconds before the container leaves the engine's list (two tests polled around it); not user-visible | NOTED |

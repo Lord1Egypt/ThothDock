@@ -56,7 +56,7 @@ docker rm -f qa_runless >/dev/null
 docker run -d --name qa_rlive --restart unless-stopped "$IMAGE" sh -c 'sleep 2; kill -9 $$' >/dev/null
 for _ in $(seq 40); do [ "$(rc qa_rlive)" -ge 1 ] 2>/dev/null && break; sleep 0.5; done
 # a running container reports exit code 0, so read the crash from its die event
-code=$(docker events --since "$T0" --until "$(date +%s)" --filter container=qa_rlive --filter event=die --format '{{.Actor.Attributes.exitCode}}' | head -1)
+code=$(docker events --since "$T0" --until "$(( $(date +%s) + 2 ))" --filter container=qa_rlive --filter event=die --format '{{.Actor.Attributes.exitCode}}' | head -1)
 check "unless-stopped: a crashed container (SIGKILL, exit 137) is restarted" "$([ "$(rc qa_rlive)" -ge 1 ] && echo yes) $code" "yes 137"
 docker rm -f qa_rlive >/dev/null
 
@@ -66,14 +66,14 @@ sleep 8; n1=$(rc qa_rloop); sleep 8; n2=$(rc qa_rloop)
 docker rm -f qa_rloop >/dev/null
 
 # Events: lifecycle order for one container, a pull, a network.
-docker events --since "$T0" --until "$(date +%s)" --filter type=container --format '{{.Actor.Attributes.name}} {{.Action}}' > /tmp/qa-events.txt 2>&1
+docker events --since "$T0" --until "$(( $(date +%s) + 2 ))" --filter type=container --format '{{.Actor.Attributes.name}} {{.Action}}' > /tmp/qa-events.txt 2>&1
 seq_rfail=$(grep '^qa_rfail ' /tmp/qa-events.txt | awk '{print $2}' | tr '\n' ' ')
 case "$seq_rfail" in "create start die start die start die destroy "*|"create start die start die start die "*) ok "events: create, start/die x3 for on-failure:2 (${seq_rfail% })" ;; *) bad "events for qa_rfail: '$seq_rfail'" ;; esac
 grep -q '^qa_runless kill' /tmp/qa-events.txt || grep -q '^qa_runless die' /tmp/qa-events.txt && ok "events: kill/die recorded" || bad "events: no die for qa_runless"
 T1=$(date +%s)
 docker pull -q "$IMAGE" >/dev/null; docker network create qa_evnet >/dev/null; docker network rm qa_evnet >/dev/null
 sleep 1
-ev=$(docker events --since "$T1" --until "$(date +%s)" --format '{{.Type}} {{.Action}}' | sort -u | tr '\n' ';')
+ev=$(docker events --since "$T1" --until "$(( $(date +%s) + 2 ))" --format '{{.Type}} {{.Action}}' | sort -u | tr '\n' ';')
 case "$ev" in *"image pull"*) ok "events: image pull" ;; *) bad "events: no image pull in '$ev'" ;; esac
 case "$ev" in *"network create"*"network destroy"*|*"network destroy"*"network create"*) ok "events: network create and destroy" ;; *) bad "events: networks in '$ev'" ;; esac
 

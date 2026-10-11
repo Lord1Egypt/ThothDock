@@ -1,6 +1,6 @@
 # Roadmap
 
-State on 2026-10-10. "Host" means proven on the Linux host and in CI; device
+State on 2026-10-11. "Host" means proven on the Linux host and in CI; device
 work needs the SM-A165F with ADB (wireless debugging) enabled.
 
 | Phase | Scope | State |
@@ -11,9 +11,9 @@ work needs the SM-A165F with ADB (wireless debugging) enabled.
 | 3 | Restart policies, restore | host done; device lifecycle pending |
 | 4 | Compose v2 | host done with three Compose builds; healthchecks next |
 | 5 | Android Images/Volumes/Networks/Stacks screens | Images, Volumes, Web Panel as in-place tabs done; Networks/Stacks planned (QA-11) |
-| 6 | Web Panel | host done (browser-tested); Android control implemented; device pending |
+| 6 | Web Panel | done and device-verified; sessions end with the panel process (2026-10-11 P1 fix) |
 | 7 | Server Mode | planned |
-| 8 | Security and compatibility hardening | in progress |
+| 8 | Security and compatibility hardening | targeted Critical/High audit done 2026-10-11 (no open Critical/High); Process Guard (QA-07) mitigates, does not remove, Android's process cap |
 
 ## Next, in order
 

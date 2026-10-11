@@ -1,0 +1,35 @@
+PASS: bridge reported as the device network
+PASS: host reported as the device network
+PASS: none reported as unsupported
+PASS: --network none refused
+PASS: user network range
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 21 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 24 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 27 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 30 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+PASS: two services on port 80, reached by name
+PASS: the second one by name
+PASS: network alias
+PASS: localhost is the container's own
+PASS: container address 127.77.0.3
+PASS: published port reaches the right container
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 26 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+PASS: another network does not resolve qa_web
+PASS: KNOWN LIMITATION: qa_web reachable by address from another network
+PASS: connect to an unknown network
+PASS: connect to none
+PASS: connect to bridge
+PASS: connect twice
+PASS: alias given at connect resolves
+PASS: alias stops resolving after disconnect
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 28 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+PASS: device-network containers do not see qa names
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 24 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+PASS: DNS from a user network
+WARNING: Android process pressure may cause background containers or the engine to be terminated. Consider stopping unused workloads before starting additional containers. ThothTerm currently has 24 processes; Android's default limit on such processes is 32 (this device's value cannot be read, and other apps' processes may count too). 1 created container(s) have not started yet; estimated at least 3 more processes (about 3 each).
+PASS: HTTPS from a user network
+PASS: prune removed the unused network
+PASS: prune spared the network in use and the built-in ones
+PASS: networks without the label untouched by prune
+PASS: only this script's resources were removed
+networks-device: 26 passed, 0 failed (log: /root/networks-device.log)

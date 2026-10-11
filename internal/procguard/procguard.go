@@ -52,7 +52,7 @@ const (
 	hysteresis = 2
 	// MaxAge is how old a cached observation may be when a status page
 	// reads it before sampling again.
-	MaxAge = 10 * time.Second
+	MaxAge = 30 * time.Second
 )
 
 // Counter reports the number of processes Android would track for the app.

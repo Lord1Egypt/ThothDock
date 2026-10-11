@@ -1,0 +1,6 @@
+old rss_kb=11740 threads=10 cpu_ticks_20s=0 ctxt_20s=0
+new rss_kb=11968 threads=9 cpu_ticks_20s=0 ctxt_20s=0
+old rss_kb=11764 threads=9 cpu_ticks_20s=0 ctxt_20s=0
+new rss_kb=11740 threads=9 cpu_ticks_20s=0 ctxt_20s=0
+old rss_kb=11724 threads=9 cpu_ticks_20s=0 ctxt_20s=0
+new rss_kb=11784 threads=9 cpu_ticks_20s=0 ctxt_20s=0
