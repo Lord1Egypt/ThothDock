@@ -7,10 +7,10 @@ work needs the SM-A165F with ADB (wireless debugging) enabled.
 |---|---|---|
 | 0 | Audit, baseline, gates | host done; device baseline blocked on ADB |
 | 1 | State machine, events, recovery | done |
-| 2 | User networks, own addresses, names, PRoot `--net-ip` | host done; device pending |
+| 2 | User networks, own addresses, names, PRoot `--net-ip` | host and device verified (2026-10-11); outbound fix in patch 0009 |
 | 3 | Restart policies, restore | host done; device lifecycle pending |
 | 4 | Compose v2 | host done with three Compose builds; healthchecks next |
-| 5 | Android Images/Volumes/Networks/Stacks screens | planned |
+| 5 | Android Images/Volumes/Networks/Stacks screens | Images, Volumes, Web Panel as in-place tabs done; Networks/Stacks planned (QA-11) |
 | 6 | Web Panel | host done (browser-tested); Android control implemented; device pending |
 | 7 | Server Mode | planned |
 | 8 | Security and compatibility hardening | in progress |

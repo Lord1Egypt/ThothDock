@@ -481,3 +481,20 @@ its views are the reference for the screens.
 | EG-04 | `doctor --guard` checks the hook, its configuration and the pin | DONE |
 | EG-05 | Regression tests: `engine-guard/test.sh` (115), `internal/guard`, `tests/device/guard-hardening.sh` (48 on device) | DONE |
 | EG-06 | Arch-based editions have no dpkg hook; decide whether pacman needs an equivalent (`IgnorePkg`/hook) | PLANNED |
+
+## Pre-release QA closure (2026-10-10/11)
+
+| ID | Item | Status |
+|---|---|---|
+| QA-01 | Network semantics: engine-described built-in networks (labels + `ThothDock` object), `none` unsupported, `User networks` counter, panel Networks tab | DONE (ThothDock 16fffab) |
+| QA-02 | Android management screen: in-place Containers / Images / Volumes / Web Panel tabs | DONE (app e2622a1) |
+| QA-03 | PRoot `--net-ip`: DNS and outbound connections from user networks (wildcard bind to port 0) — root cause of the TON API failing under Compose | DONE (app c6c15b6, test 0d3d09e) |
+| QA-04 | Underscores in network aliases and `--add-host` names (Compose service names) | DONE (c879878) |
+| QA-05 | An explicit `docker restart` is not a policy restart (RestartCount, measured against Docker 29.8.1) | DONE (be197c5) |
+| QA-06 | A container command inside a bind mount or volume (`docker run -v ./bin:/mnt img /mnt/prog`) | DONE (64202ff) |
+| QA-07 | Phantom-process budget: count the app's processes and warn in `docker info`/the app before Android kills the engine; document per-image settings (nginx workers) | PLANNED |
+| QA-08 | Web Panel Host-header allow list (DNS rebinding, defence in depth) | DONE (040c84c) |
+| QA-09 | 6 h, 24 h and 48 h soak with the TON stack (`tests/device/soak.sh`) | PENDING (1 h run recorded) |
+| QA-10 | Gaming coexistence (Wild Rift with four containers), owner-assisted | PENDING (owner) |
+| QA-11 | Networks and Stacks on the phone screen (today in the Web Panel only) | PLANNED |
+| QA-12 | Explorer image hard-codes the API at port 4000 (image issue, not ThothDock) | NOTED |

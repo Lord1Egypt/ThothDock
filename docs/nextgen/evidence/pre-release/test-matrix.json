@@ -1,0 +1,517 @@
+{
+ "generated_by": "make_matrix.py",
+ "engine": "ThothDock be197c5",
+ "app": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)",
+ "tests": [
+  {
+   "test_id": "A-01",
+   "feature": "Device and baseline facts",
+   "environment": "device",
+   "expected": "SM-A165F, Android 16, arm64, Debian 13, ThothDock 0.1.1",
+   "actual": "confirmed from adb and the guest",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/state/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "A-02",
+   "feature": "Pre/post-test container state recorded",
+   "environment": "device",
+   "expected": "configs saved before changes",
+   "actual": "4 owner containers' inspect saved; all 4 running at the end",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/state/pre-inspect-containers.json",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-01",
+   "feature": "In-place tabs: Containers > Images > Volumes > Web Panel > Containers",
+   "environment": "device",
+   "expected": "no new Activity, correct highlight",
+   "actual": "task size stays 2, one chip selected each step, 4 containers running",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/tabs/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-02",
+   "feature": "Back navigation",
+   "environment": "device",
+   "expected": "one Back leaves the screen; no stacked screens",
+   "actual": "one Back -> Terminal (task size 1); drawer entries reuse the screen",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/tabs/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-03",
+   "feature": "Recreation (rotation) and background/foreground",
+   "environment": "device",
+   "expected": "tab and panel state survive, no crash",
+   "actual": "Web Panel tab kept through landscape and Settings round trip; 0 crashes",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/tabs/7-landscape.png",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-04",
+   "feature": "Scroll-state restoration",
+   "environment": "device",
+   "expected": "per-tab scroll restored",
+   "actual": "implemented (saved per tab, restored on recreation); not measured on the device",
+   "status": "PARTIAL",
+   "evidence": "garden-debian ContainersActivity",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-05",
+   "feature": "Tab stress: 120 switches",
+   "environment": "device",
+   "expected": "no growth in activities, views, memory or processes",
+   "actual": "Activities 2, ViewRootImpl 2, PSS 142->131 MB, engine threads 17, processes unchanged",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/state/tabs-stress-after.txt",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "B-06",
+   "feature": "Web Panel lifecycle independent of the tab",
+   "environment": "device",
+   "expected": "server keeps running across tab switches; off by default",
+   "actual": "same panel pid through every switch; no panel process after a fresh install",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/tabs/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-01",
+   "feature": "LAN Mode off by default; transport warning",
+   "environment": "device",
+   "expected": "Off; says traffic is unencrypted",
+   "actual": "Status: Off; warning shown",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-1-off.png",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-02",
+   "feature": "LAN pairing, terminal I/O, Debian guest",
+   "environment": "device",
+   "expected": "PIN pairs; typing and output work",
+   "actual": "paired; echo round trip; Debian guest",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-pair.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-03",
+   "feature": "LAN terminal resize",
+   "environment": "device",
+   "expected": "guest size follows the browser",
+   "actual": "40x135 -> 25x93",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-pair.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-04",
+   "feature": "LAN file and folder upload",
+   "environment": "device",
+   "expected": "files arrive intact; nothing overwritten",
+   "actual": "2 files + folder, SHA-256 identical; existing names kept as '(n)'",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-pair.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-05",
+   "feature": "LAN reconnect, sign-out",
+   "environment": "device",
+   "expected": "new tab reconnects without PIN; sign-out kills the token",
+   "actual": "reconnected; old token 401",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-pair.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-06",
+   "feature": "LAN Host/Origin checks",
+   "environment": "device",
+   "expected": "foreign Host and Origin refused",
+   "actual": "421 / 403",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-pair.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-07",
+   "feature": "LAN PIN single use, lockout, expiry",
+   "environment": "device",
+   "expected": "used PIN dead; locked after 5; dead after 2 min",
+   "actual": "'Used'; 423 locked; 410 expired at 129 s",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-08",
+   "feature": "LAN Mode and Web Panel coexistence",
+   "environment": "device",
+   "expected": "neither credential opens the other",
+   "actual": "LAN token 401 on panel; panel session 401 on LAN",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-coexist.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "C-09",
+   "feature": "LAN and panel Stop",
+   "environment": "device",
+   "expected": "listeners closed, no orphans",
+   "actual": "both ports closed; panel process gone; no extra shells",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/lan/lan-4-stopped.png",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "D-01",
+   "feature": "Web Panel loopback mode and certificate",
+   "environment": "device",
+   "expected": "LAN address unreachable; served cert = fingerprint in app",
+   "actual": "Wi-Fi address not reachable; fingerprint matches",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/sec-session.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "D-02",
+   "feature": "Web Panel unauthenticated, CSRF, Origin, Host, cookie flags, allow list, sign-out",
+   "environment": "device",
+   "expected": "refused without session/CSRF/Origin/Host; HttpOnly Secure Strict",
+   "actual": "20/20",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/sec-session.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "D-03",
+   "feature": "Web Panel code rate limit and exhaustion",
+   "environment": "device",
+   "expected": "429 within 1 s; dead after 5 wrong",
+   "actual": "429; right code refused afterwards; app shows 'No active code'",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/sec-exhaust.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "D-04",
+   "feature": "Web Panel Wi-Fi mode, HTTP->HTTPS, browser flow",
+   "environment": "device",
+   "expected": "HTTPS 200 on Wi-Fi, http redirected, panel functions",
+   "actual": "200; 307 to https; device browser e2e 12/12",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/tabs/9-webpanel-wifi.png",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "D-05",
+   "feature": "Pairing-code expiry (10 min) and session idle expiry (30 days)",
+   "environment": "host",
+   "expected": "expired code and idle session refused",
+   "actual": "unit tests with a fake clock; not waited out on the device",
+   "status": "PASS",
+   "evidence": "internal/panel panel_test.go",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "D-06",
+   "feature": "Web Panel browser e2e (functional, CSP, phone width)",
+   "environment": "host",
+   "expected": "30 checks",
+   "actual": "30/30",
+   "status": "PASS",
+   "evidence": "tests/panel/e2e.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "E-01",
+   "feature": "TON stack failure root cause",
+   "environment": "device",
+   "expected": "classify DNS/TCP/TLS/HTTP/app",
+   "actual": "DNS: getaddrinfo EAI_AGAIN only on user networks; PRoot --net-ip moved bind(0.0.0.0:0) to 127.77.x.y -> EINVAL; fixed in patch 0009",
+   "status": "PASS",
+   "evidence": "docs/nextgen/QA-CLOSURE-2026-10-10.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "E-02",
+   "feature": "TON stack: config, pull, up -d, ps, logs, restart, down",
+   "environment": "device",
+   "expected": "2/2 running, scoped cleanup",
+   "actual": "project tonqa 2/2; down removed only its containers and network",
+   "status": "PASS",
+   "evidence": "docs/nextgen/QA-CLOSURE-2026-10-10.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "E-03",
+   "feature": "TON API /block/latest, explorer, WebSockets",
+   "environment": "device",
+   "expected": "valid JSON, HTTP 200, WS data",
+   "actual": "seqno JSON; 200 (62 KB); /block/watch and /block/watch/changed 101 + data",
+   "status": "PASS",
+   "evidence": "docs/nextgen/QA-CLOSURE-2026-10-10.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "E-04",
+   "feature": "Deterministic Compose fixture in CI",
+   "environment": "host",
+   "expected": "two-service stack passes",
+   "actual": "compose.sh 26/26",
+   "status": "PASS",
+   "evidence": "tests/regression/compose.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "F-01",
+   "feature": "Network semantics on the phone",
+   "environment": "device",
+   "expected": "built-ins truthful, none refused, names, aliases, -p, membership, outbound DNS/HTTPS, prune",
+   "actual": "26/26",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/networks-device.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "F-02",
+   "feature": "Networking regression (host)",
+   "environment": "host",
+   "expected": "all checks incl. outbound probe",
+   "actual": "51/51; probe fails on the old PRoot, passes on the fixed one",
+   "status": "PASS",
+   "evidence": "tests/regression/networks.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "F-03",
+   "feature": "Logical membership vs isolation",
+   "environment": "device",
+   "expected": "documented limitation measured",
+   "actual": "another network reaches a container by address (KNOWN LIMITATION)",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/networks-device.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "G-01",
+   "feature": "Restart policies, crash restart, backoff, events, liveness",
+   "environment": "device",
+   "expected": "Docker semantics",
+   "actual": "16/16",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/restart-device.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "G-02",
+   "feature": "Restart-policy regression with SIGKILLed daemon",
+   "environment": "host",
+   "expected": "Docker semantics after daemon kill",
+   "actual": "21/21",
+   "status": "PASS",
+   "evidence": "tests/regression/restart-policies.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "G-03",
+   "feature": "Force-stop and recovery",
+   "environment": "device",
+   "expected": "everything stops; restored on next launch",
+   "actual": "0 processes after force-stop; 4 containers back 4 s after launch",
+   "status": "PASS",
+   "evidence": "docs/nextgen/ANDROID_LIFECYCLE.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "G-04",
+   "feature": "Screen off",
+   "environment": "device",
+   "expected": "workloads keep serving",
+   "actual": "see the 1 h soak (screen off from minute 2)",
+   "status": "PENDING",
+   "evidence": "docs/nextgen/evidence/pre-release/soak/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "G-05",
+   "feature": "Network disconnection",
+   "environment": "device",
+   "expected": "recover after Wi-Fi loss",
+   "actual": "not run: ADB reaches the phone over Wi-Fi, so cutting Wi-Fi ends the test session",
+   "status": "SKIP",
+   "evidence": "",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "H-01",
+   "feature": "Engine Guard host suite",
+   "environment": "host",
+   "expected": "115 checks",
+   "actual": "115/115",
+   "status": "PASS",
+   "evidence": "engine-guard/test.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "H-02",
+   "feature": "Engine Guard on the phone",
+   "environment": "device",
+   "expected": "48 checks; doctor --guard clean",
+   "actual": "48/48; 0 WARN/FAIL",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/guard-hardening-final.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-01",
+   "feature": "Idle engine cost with the four workloads",
+   "environment": "device",
+   "expected": "no material regression",
+   "actual": "10.9 MB RSS, 16 threads, 70 ms CPU and 279 switches per minute (TON API logs every second)",
+   "status": "PASS",
+   "evidence": "docs/nextgen/QA-CLOSURE-2026-10-10.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-02",
+   "feature": "Container startup and exec latency",
+   "environment": "device",
+   "expected": "sub-second to ~1 s",
+   "actual": "run: 0.6-1.3 s; on a user network 0.6-1.0 s; exec 0.57 s",
+   "status": "PASS",
+   "evidence": "docs/nextgen/QA-CLOSURE-2026-10-10.md",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-03",
+   "feature": "Host perf comparison against the NextGen baseline",
+   "environment": "host",
+   "expected": "no material regression",
+   "actual": "idle 0/0, RSS +-1%, startup -8%",
+   "status": "PASS",
+   "evidence": "tests/perf/compare.py",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "I-04",
+   "feature": "Phantom-process budget",
+   "environment": "device",
+   "expected": "stay under the cap",
+   "actual": "owner workload = 22 processes; +5 test containers got the engine killed (Trimming phantom processes)",
+   "status": "FAIL",
+   "evidence": "docs/nextgen/evidence/pre-release/phantom/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-05",
+   "feature": "1 h soak, four workloads, screen off",
+   "environment": "device",
+   "expected": "no restarts, API/explorer answer, no kills",
+   "actual": "see soak CSV",
+   "status": "PENDING",
+   "evidence": "docs/nextgen/evidence/pre-release/soak/soak-1h-2026-10-11.csv",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-06",
+   "feature": "6 h / 24 h / 48 h soak",
+   "environment": "device",
+   "expected": "real elapsed time",
+   "actual": "not run in this session",
+   "status": "PENDING",
+   "evidence": "tests/device/soak.sh",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-07",
+   "feature": "Gaming coexistence (Wild Rift)",
+   "environment": "owner",
+   "expected": "owner plays with 4 containers running",
+   "actual": "not done in this session",
+   "status": "PENDING",
+   "evidence": "",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "I-08",
+   "feature": "Battery and thermal",
+   "environment": "device",
+   "expected": "observe, not a power measurement",
+   "actual": "the phone was charging; temperature recorded in the soak only",
+   "status": "PARTIAL",
+   "evidence": "docs/nextgen/evidence/pre-release/soak/",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "J-01",
+   "feature": "Event stream ordering, pulls, networks",
+   "environment": "device",
+   "expected": "create/start/die/destroy order; pull; network events",
+   "actual": "recorded in the restart test",
+   "status": "PASS",
+   "evidence": "docs/nextgen/evidence/pre-release/restart-device.log",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "J-02",
+   "feature": "Bounded history, slow clients, reconnect",
+   "environment": "host",
+   "expected": "ring of 1024, live-only without since, reconnect",
+   "actual": "go test -race (events, api, panel)",
+   "status": "PASS",
+   "evidence": "internal/events, internal/panel",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "K-01",
+   "feature": "Go tests, race detector, vet",
+   "environment": "host",
+   "expected": "all pass",
+   "actual": "all packages ok",
+   "status": "PASS",
+   "evidence": "go test -race ./...",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "K-02",
+   "feature": "Android unit tests",
+   "environment": "android-unit",
+   "expected": "all pass",
+   "actual": "garden-common 375/375, garden-debian 33/33",
+   "status": "PASS",
+   "evidence": "Gradle test results",
+   "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
+  },
+  {
+   "test_id": "K-03",
+   "feature": "Docker CLI smoke and lifecycle",
+   "environment": "host",
+   "expected": "all pass",
+   "actual": "smoke 6/6, lifecycle 12/12",
+   "status": "PASS",
+   "evidence": "tests/smoke, tests/regression/lifecycle.sh",
+   "commit": "ThothDock be197c5"
+  },
+  {
+   "test_id": "K-04",
+   "feature": "Reproducibility preflight (guard packages under umask 022/002)",
+   "environment": "host",
+   "expected": "identical",
+   "actual": "identical (Engine Guard round)",
+   "status": "PASS",
+   "evidence": "engine-guard/build.sh",
+   "commit": "ThothDock be197c5"
+  }
+ ]
+}

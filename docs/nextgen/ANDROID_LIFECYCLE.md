@@ -42,6 +42,31 @@ Mitigations, in order of preference (tickets P3-05, P7-03):
 4. engine-side: fewer processes per container is not possible under PRoot
    (loader + tracee); the engine will report its process count to the panel.
 
+### The budget, measured again on 2026-10-11
+
+| State | Processes of the app's uid |
+|---|---|
+| The owner's four containers (TON API, TON explorer, two small fixtures), engine, one terminal | **22** (nginx alone: 9 = master + 8 workers, one per CPU) |
+| The same plus five small test containers and their `docker exec`/`run --rm` helpers | over the cap: Android logged `Killing PhantomProcessRecord … libthothdock.so: Trimming phantom processes` at 06:35:15 and the engine died with exit 137; the last terminal session ended and the app process exited (`evidence/pre-release/phantom/`) |
+
+Recovery: opening the app restarted the engine and restored every
+`unless-stopped` container within seconds; containers without a policy stayed
+exited, as in Docker. What this means for users, until ThothDock warns by
+itself (ticket QA-07):
+
+- a workload's own process count matters more than its memory: prefer
+  `worker_processes 1` (nginx), `-w 1` (gunicorn) and similar settings;
+- about 30 processes is the practical ceiling for the whole app, terminal
+  sessions included;
+- device tests stop disposable fixtures first and remove test containers as
+  soon as their checks are done (`tests/device/networks-device.sh`).
+
+Force-stop (Settings > Force stop, or `am force-stop`) kills the engine and
+every container at once; nothing runs again until the app is opened, which
+is how Android treats a force-stopped app. Measured: all four
+`unless-stopped` containers were running 4 s after the next launch, and the
+stale pid file left behind was handled.
+
 ## Rules this design keeps
 
 - **No wake locks** are taken by the engine or the panel. Long-running work
