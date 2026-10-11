@@ -43,6 +43,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("HEAD /_ping", s.ping)
 	m.HandleFunc("GET /version", s.version)
 	m.HandleFunc("GET /info", s.info)
+	m.HandleFunc("GET /thothdock/process-guard", s.processGuard)
 
 	m.HandleFunc("GET /containers/json", s.listContainers)
 	m.HandleFunc("POST /containers/create", s.createContainer)

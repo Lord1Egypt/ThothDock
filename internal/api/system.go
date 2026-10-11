@@ -13,6 +13,7 @@ import (
 
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procguard"
 	"github.com/Lord1Egypt/ThothDock/internal/version"
 )
 
@@ -137,8 +138,49 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		"RuncCommit":       map[string]string{"ID": "", "Expected": ""},
 		"InitCommit":       map[string]string{"ID": "", "Expected": ""},
 		"SecurityOptions":  []string{},
-		"Warnings":         infoWarnings,
+		"Warnings":         s.infoWarnings(),
 	})
+}
+
+// infoWarnings adds the live process-pressure warning, when there is one, to
+// the fixed differences from Docker Engine.
+func (s *Server) infoWarnings() []string {
+	w := append([]string{}, infoWarnings...)
+	if m := s.Engine.Pressure(); m != nil {
+		if msg := procguard.Message(m.Recent(procguard.MaxAge), s.Engine.PendingCount()); msg != "" {
+			w = append(w, "WARNING: "+msg)
+		}
+	}
+	return w
+}
+
+// guardView is the JSON of GET /thothdock/process-guard, which the Android
+// app and the Web Panel read. It is a ThothDock extension, not Docker API.
+type guardView struct {
+	Level      string  `json:"level"`
+	Count      *int    `json:"count"`
+	Cap        *int    `json:"cap"`
+	CapSource  string  `json:"capSource"`
+	ObservedAt *string `json:"observedAt"`
+	AgeSeconds *int    `json:"ageSeconds"`
+	Pending    int     `json:"pendingContainers"`
+	Message    string  `json:"message"`
+	Reason     string  `json:"unknownReason,omitempty"`
+}
+
+func (s *Server) processGuard(w http.ResponseWriter, r *http.Request) {
+	v := guardView{Level: "unknown", CapSource: "Android's default (AOSP max_phantom_processes); this device's value cannot be read by an app", Pending: s.Engine.PendingCount()}
+	snap := s.Engine.Pressure().Recent(procguard.MaxAge)
+	v.Level = snap.Level.String()
+	if snap.Level == procguard.Unknown {
+		v.Reason = snap.Err
+	} else {
+		at := snap.At.UTC().Format(time.RFC3339)
+		age := int(time.Since(snap.At).Seconds())
+		v.Count, v.Cap, v.ObservedAt, v.AgeSeconds = &snap.Count, &snap.Cap, &at, &age
+		v.Message = procguard.Message(snap, v.Pending)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"guard": v, "recovery": s.Engine.Recovery()})
 }
 
 func countFDs() int {

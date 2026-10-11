@@ -39,6 +39,7 @@ type options struct {
 	allowPublish  bool
 	devTCP        string
 	debug         bool
+	processCap    int
 	limits        image.Limits
 }
 
@@ -62,6 +63,7 @@ func (o *options) register(fs *flag.FlagSet) {
 	fs.Int64Var(&o.limits.MaxExtractedBytes, "max-extracted-bytes", dl.MaxExtractedBytes, "stop an image that writes more than this many bytes when extracted (-1: no limit)")
 	fs.Int64Var(&o.limits.MaxEntries, "max-entries", dl.MaxEntries, "stop an image with more tar entries than this (-1: no limit)")
 	fs.Int64Var(&o.limits.MinFreeBytes, "min-free-bytes", dl.MinFreeBytes, "keep at least this much storage free while pulling (-1: do not check)")
+	fs.IntVar(&o.processCap, "process-cap", -1, "reference limit for Android process pressure warnings (default 32, Android's own default, when running as an Android app; 0 turns the guard off)")
 	fs.BoolVar(&o.debug, "debug", false, "log every request")
 }
 

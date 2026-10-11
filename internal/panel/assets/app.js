@@ -170,7 +170,18 @@ async function summary() {
   if (h.storageTotal) parts.push(fig("Storage", bytes(h.storageFree) + " free of " + bytes(h.storageTotal)));
   if (h.load) parts.push(fig("Load", h.load.join(" ")));
   parts.push(fig("Engine", s.engine.version + " · " + s.engine.arch + " · " + s.engine.cpus + " CPUs"));
+  const pg = (s.processGuard || {}).guard;
+  if (pg && pg.count != null) parts.push(fig("App processes", pg.count + " (Android's default limit " + pg.cap + ")"));
   $("host").replaceChildren(...parts);
+  const rec = (s.processGuard || {}).recovery;
+  const notes = [];
+  if (pg && pg.message) notes.push(el("p", { class: "warn", text: pg.message }));
+  if (rec && rec.previousExit === "unclean") {
+    const names = (rec.restored || []).length ? " Restarted by restart policy: " + rec.restored.join(", ") + "." : "";
+    notes.push(el("p", { class: "dim", text: rec.reason + names }));
+  }
+  $("pressure").replaceChildren(...notes);
+  $("pressure").hidden = notes.length === 0;
 }
 
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {

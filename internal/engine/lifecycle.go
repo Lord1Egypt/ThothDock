@@ -112,6 +112,7 @@ func (e *Engine) startLocked(c *Container, mode startMode) error {
 	e.log.Info("container started", "id", c.rec.ID[:12], "pid", st.Pid)
 	e.containerEvent(c, "start")
 	go e.monitor(c, proc, c.runDone)
+	go e.observePressure()
 	return nil
 }
 

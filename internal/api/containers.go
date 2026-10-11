@@ -198,9 +198,15 @@ func nonNilSlice(s []string) []string {
 }
 
 func (s *Server) startContainer(w http.ResponseWriter, r *http.Request) {
+	warning := s.Engine.PressureWarning()
 	if err := s.Engine.Start(r.PathValue("id")); err != nil {
 		writeError(w, err)
 		return
+	}
+	if warning != "" {
+		// An HTTP Warning header cannot break any client; the Docker CLI
+		// shows warnings only for create, which carries them in its body.
+		w.Header().Set("Warning", `199 ThothDock `+strconv.Quote(warning))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

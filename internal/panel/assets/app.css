@@ -123,3 +123,8 @@ pre.cmd { color: var(--primary-hi); font-size: 14px; }
 .row .note { font-size: 12.5px; color: var(--text-2); border-left: 2px solid var(--border); padding-left: 10px; margin-top: 4px; }
 .row .note.warn { border-left-color: var(--warning); }
 .hint { color: var(--text-2); font-size: 13px; margin: 4px 2px; }
+
+.pressure { margin: 8px 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--warning) 10%, var(--surface)); }
+.pressure p { margin: 0; line-height: 1.4; }
+.pressure p + p { margin-top: 6px; }
+.pressure .dim { color: var(--dim); font-size: 0.9em; }

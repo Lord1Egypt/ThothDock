@@ -327,6 +327,9 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if warnings == nil {
 		warnings = []string{}
 	}
+	if w := e.PressureWarning(); w != "" {
+		warnings = append(warnings, w)
+	}
 	return id, warnings, nil
 }
 

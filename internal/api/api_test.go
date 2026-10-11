@@ -21,6 +21,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/image"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procguard"
 	"github.com/Lord1Egypt/ThothDock/internal/registry"
 	"github.com/Lord1Egypt/ThothDock/internal/registry/registrytest"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
@@ -33,7 +34,9 @@ type apiFixture struct {
 	image string
 }
 
-func newAPI(t *testing.T) *apiFixture {
+func newAPI(t *testing.T) *apiFixture { return newAPIWith(t, engine.Config{}) }
+
+func newAPIWith(t *testing.T, cfg engine.Config) *apiFixture {
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	l := platform.Layout{Root: t.TempDir()}
 	l.Ensure()
@@ -47,7 +50,7 @@ func newAPI(t *testing.T) *apiFixture {
 	}
 	p := &image.Puller{Store: is, Client: registry.NewClient(reg.Server.Client(), "t")}
 	rt := runtime.NewFake()
-	e, err := engine.New(l, is, p, rt, engine.Config{}, quiet)
+	e, err := engine.New(l, is, p, rt, cfg, quiet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,4 +412,63 @@ func TestHostileRequestBodies(t *testing.T) {
 	// The daemon still answers.
 	resp, body := f.do(t, "GET", "/_ping", "")
 	expect(t, resp, body, 200, "OK")
+}
+
+type countingFake struct{ n int }
+
+func (c *countingFake) Count() (int, error) { return c.n, nil }
+
+func TestProcessGuardSurfaces(t *testing.T) {
+	c := &countingFake{n: 30}
+	f := newAPIWith(t, engine.Config{Pressure: procguard.New(c, 32, nil)})
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+strings.TrimSuffix(f.image, ":1")+"&tag=1", "")
+	// docker info warns, in the format the CLI prints.
+	resp, body := f.do(t, "GET", "/info", "")
+	expect(t, resp, body, 200, "WARNING: Android process pressure may cause background containers or the engine to be terminated")
+	// create carries the warning in Warnings, as dockerd does.
+	resp, body = f.do(t, "POST", "/containers/create?name=pg-a", `{"Image":"`+f.image+`"}`)
+	expect(t, resp, body, 201, "Android process pressure")
+	var created struct{ Id string }
+	json.Unmarshal([]byte(body), &created)
+	// start succeeds and says so in a header; the body stays Docker's (empty).
+	resp, body = f.do(t, "POST", "/containers/"+created.Id+"/start", "")
+	if resp.StatusCode != 204 || body != "" || !strings.HasPrefix(resp.Header.Get("Warning"), "199 ThothDock ") {
+		t.Fatalf("start: %d %q %q", resp.StatusCode, body, resp.Header.Get("Warning"))
+	}
+	// the extension endpoint
+	resp, body = f.do(t, "GET", "/thothdock/process-guard", "")
+	expect(t, resp, body, 200, `"level":"high"`)
+	var v struct {
+		Guard struct {
+			Count *int   `json:"count"`
+			Cap   *int   `json:"cap"`
+			Note  string `json:"capSource"`
+		} `json:"guard"`
+	}
+	json.Unmarshal([]byte(body), &v)
+	if v.Guard.Count == nil || *v.Guard.Count != 30 || *v.Guard.Cap != 32 || !strings.Contains(v.Guard.Note, "cannot be read") {
+		t.Fatalf("%s", body)
+	}
+	if strings.Contains(body, "remaining") || strings.Contains(body, "available") {
+		t.Fatalf("the endpoint invents a budget: %s", body)
+	}
+	f.do(t, "POST", "/containers/"+created.Id+"/kill", "")
+}
+
+func TestProcessGuardUnknownIsTruthfulAndInfoStaysQuiet(t *testing.T) {
+	f := newAPI(t) // no monitor
+	f.do(t, "POST", "/v1.41/images/create?fromImage="+strings.TrimSuffix(f.image, ":1")+"&tag=1", "")
+	resp, body := f.do(t, "GET", "/thothdock/process-guard", "")
+	expect(t, resp, body, 200, `"level":"unknown"`)
+	if strings.Contains(body, `"count":0`) || strings.Contains(body, `"count":1`) {
+		t.Fatalf("an unknown count was reported as a number: %s", body)
+	}
+	resp, body = f.do(t, "GET", "/info", "")
+	if strings.Contains(body, "process pressure") {
+		t.Fatalf("info warned without information: %s", body)
+	}
+	resp, body = f.do(t, "POST", "/containers/create", `{"Image":"`+f.image+`"}`)
+	if resp.StatusCode != 201 || strings.Contains(body, "process pressure") {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
 }

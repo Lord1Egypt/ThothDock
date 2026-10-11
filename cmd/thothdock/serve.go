@@ -21,6 +21,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/engine"
 	"github.com/Lord1Egypt/ThothDock/internal/image"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procguard"
 	"github.com/Lord1Egypt/ThothDock/internal/registry"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
@@ -112,11 +113,57 @@ func build(o *options, log *slog.Logger) (*stack, error) {
 		}
 		roots = append(roots, c)
 	}
-	eng, err := engine.New(l, images, puller, rt, engine.Config{AllowedBindRoots: roots, ResolvConf: o.resolvConf, AllowNonLoopbackPublish: o.allowPublish}, log)
+	eng, err := engine.New(l, images, puller, rt, engine.Config{AllowedBindRoots: roots, ResolvConf: o.resolvConf, AllowNonLoopbackPublish: o.allowPublish,
+		Pressure: o.pressureMonitor()}, log)
 	if err != nil {
 		return nil, err
 	}
+	if m := eng.Pressure(); m != nil {
+		m.OnChange(eng.RecordPressure)
+	}
 	return &stack{layout: l, engine: eng, runtime: rt}, nil
+}
+
+// pressureMonitor returns Process Guard's monitor: on only for an Android
+// app (or when --process-cap says so), because the count is only meaningful
+// against Android's phantom-process limit.
+func (o *options) pressureMonitor() *procguard.Monitor {
+	cap := o.processCap
+	if cap < 0 {
+		cap = 0
+		if _, err := os.Stat("/system/build.prop"); err == nil {
+			cap = procguard.DefaultCap
+		}
+	}
+	if cap == 0 {
+		return procguard.New(nil, 0, nil)
+	}
+	return procguard.New(procguard.NewProcCounter(), cap, nil)
+}
+
+// lastExit is what the Android app writes when it sees the daemon die.
+type lastExit struct {
+	Code int       `json:"code"`
+	At   time.Time `json:"at"`
+}
+
+// recoveryReport compares this start with the previous run. The pid file is
+// removed only by a clean shutdown, so finding it means the previous daemon
+// was killed or crashed.
+func recoveryReport(l platform.Layout, unclean bool) engine.Recovery {
+	r := engine.Recovery{At: time.Now().UTC(), PreviousExit: "clean"}
+	r.LastPressure = engine.ReadLastPressure(filepath.Join(l.Run(), "pressure.json"))
+	if unclean {
+		r.PreviousExit = "unclean"
+		var le lastExit
+		exitFile := filepath.Join(l.Root, "last-exit.json")
+		if err := store.ReadJSON(exitFile, &le); err == nil {
+			r.PreviousExitCode = &le.Code
+		}
+	}
+	os.Remove(filepath.Join(l.Root, "last-exit.json"))
+	r.Reason = engine.DescribeRecovery(unclean, r.PreviousExitCode, r.LastPressure)
+	return r
 }
 
 func serve(args []string) error {
@@ -161,6 +208,8 @@ func serve(args []string) error {
 		return err
 	}
 	defer lock.Close()
+	_, errPid := os.Stat(pidFile(l))
+	unclean := errPid == nil
 	if err := writePidFile(l); err != nil {
 		return err
 	}
@@ -215,7 +264,16 @@ func serve(args []string) error {
 	}
 	// Containers whose restart policy asks for it start again now that the
 	// API answers (ADR-0004).
+	rec := recoveryReport(l, unclean)
+	st.engine.SetRecovery(rec)
+	if unclean {
+		log.Warn("the previous daemon did not shut down cleanly", "reason", rec.Reason, "interrupted", st.engine.Recovery().Interrupted)
+	}
 	st.engine.RestoreRestartPolicies()
+	if rec.PreviousExit == "unclean" {
+		// Sample once the restored containers have had time to start.
+		time.AfterFunc(15*time.Second, func() { st.engine.Pressure().Observe() })
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

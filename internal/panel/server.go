@@ -701,7 +701,14 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request, _ string, _ ses
 			}
 		}
 	}
+	var pg struct {
+		Guard    json.RawMessage `json:"guard"`
+		Recovery json.RawMessage `json:"recovery"`
+	}
+	// An older engine has no Process Guard: the dashboard then shows none.
+	_ = s.eng.getJSON(r.Context(), "/thothdock/process-guard", &pg)
 	jsonOK(w, map[string]any{
+		"processGuard": pg,
 		"engine": map[string]any{"version": info.ServerVersion, "os": info.OperatingSystem, "kernel": info.KernelVersion,
 			"arch": info.Architecture, "cpus": info.NCPU},
 		"containers": map[string]int{"total": info.Containers, "running": info.ContainersRunning, "stopped": info.ContainersStopped},

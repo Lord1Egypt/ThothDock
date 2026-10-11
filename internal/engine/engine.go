@@ -28,6 +28,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
 	"github.com/Lord1Egypt/ThothDock/internal/portmap"
+	"github.com/Lord1Egypt/ThothDock/internal/procguard"
 	"github.com/Lord1Egypt/ThothDock/internal/procid"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
@@ -47,6 +48,8 @@ type Config struct {
 	// AllowNonLoopbackPublish lets -p name a host address other than
 	// loopback. Off by default: published ports are not exposed to the LAN.
 	AllowNonLoopbackPublish bool
+	// Pressure watches the app's process count (Process Guard); nil: off.
+	Pressure *procguard.Monitor
 }
 
 // Engine manages containers.
@@ -74,6 +77,9 @@ type Engine struct {
 	restore []string
 	// shuttingDown stops restart policies while the daemon stops containers.
 	shuttingDown atomic.Bool
+	// interrupted names the containers a previous daemon left running.
+	interrupted []string
+	press       pressureState
 }
 
 // Container is a live container object.
@@ -182,6 +188,7 @@ func (e *Engine) reconcile(c *Container) error {
 	default:
 		return nil
 	}
+	e.interrupted = append(e.interrupted, c.rec.Name)
 	if st.Pid > 0 && procid.KillGroup(st.Pid, st.PidStart) {
 		e.log.Warn("killed container process left by a previous daemon", "id", c.rec.ID, "pid", st.Pid)
 	}
@@ -243,6 +250,7 @@ func (e *Engine) RestoreRestartPolicies() {
 	e.mu.Unlock()
 	sort.Slice(byCreated, func(i, j int) bool { return byCreated[i].rec.Created.Before(byCreated[j].rec.Created) })
 	go func() {
+		defer e.doneRestoring()
 		for _, c := range byCreated {
 			if e.shuttingDown.Load() {
 				return
@@ -250,6 +258,8 @@ func (e *Engine) RestoreRestartPolicies() {
 			e.log.Info("restoring container by restart policy", "id", c.rec.ID[:12], "policy", c.rec.HostConfig.RestartPolicy.Name)
 			if err := e.start(c, startPolicy); err != nil && errdefs.KindOf(err) != errdefs.KindNotModified {
 				e.log.Warn("restart-policy restore failed", "id", c.rec.ID[:12], "err", err)
+			} else {
+				e.noteRestored(c.rec.Name)
 			}
 		}
 	}()

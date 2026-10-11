@@ -27,11 +27,19 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/network"
 	"github.com/Lord1Egypt/ThothDock/internal/oci"
 	"github.com/Lord1Egypt/ThothDock/internal/platform"
+	"github.com/Lord1Egypt/ThothDock/internal/procguard"
 	"github.com/Lord1Egypt/ThothDock/internal/registry"
 	"github.com/Lord1Egypt/ThothDock/internal/registry/registrytest"
 	"github.com/Lord1Egypt/ThothDock/internal/runtime"
 	"github.com/Lord1Egypt/ThothDock/internal/store"
 )
+
+// testPressure, when set before newFixture, becomes the engine's Process Guard.
+var testPressure *procguard.Monitor
+
+type fixedCount int
+
+func (c fixedCount) Count() (int, error) { return int(c), nil }
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -62,7 +70,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	p := &image.Puller{Store: is, Client: registry.NewClient(reg.Server.Client(), "t")}
-	if f.eng, err = engine.New(l, is, p, f.rt, engine.Config{}, quiet); err != nil {
+	if f.eng, err = engine.New(l, is, p, f.rt, engine.Config{Pressure: testPressure}, quiet); err != nil {
 		t.Fatal(err)
 	}
 	f.image = reg.Host() + "/library/tiny:1"
@@ -773,5 +781,28 @@ func TestHostHeaderMustNameThePanel(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("Host %q: got %d, want 200", h, resp.StatusCode)
 		}
+	}
+}
+
+func TestSummaryCarriesProcessGuard(t *testing.T) {
+	f := newFixture(t) // no monitor: truthful "unknown", no number
+	f.pair()
+	_, sum := f.req("GET", "/api/summary", "", nil)
+	g := sum["processGuard"].(map[string]any)["guard"].(map[string]any)
+	if g["level"] != "unknown" || g["count"] != nil {
+		t.Fatalf("%v", g)
+	}
+	testPressure = procguard.New(fixedCount(30), 32, nil)
+	defer func() { testPressure = nil }()
+	h := newFixture(t)
+	h.pair()
+	_, sum = h.req("GET", "/api/summary", "", nil)
+	pg := sum["processGuard"].(map[string]any)
+	g = pg["guard"].(map[string]any)
+	if g["level"] != "high" || g["count"].(float64) != 30 || !strings.Contains(g["message"].(string), "Android process pressure") {
+		t.Fatalf("%v", g)
+	}
+	if pg["recovery"] == nil {
+		t.Fatal("no recovery report")
 	}
 }
