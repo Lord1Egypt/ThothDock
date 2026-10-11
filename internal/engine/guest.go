@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -80,7 +81,9 @@ func resolveUser(root *securefs.Root, spec string) (guestUser, error) {
 // lookPath finds the executable the way runc does: a name with a slash is
 // taken as a path (relative to cwd), otherwise PATH is searched. Error
 // texts follow Docker's, which the CLI turns into exit codes 127/126.
-func lookPath(root *securefs.Root, name, cwd string, env []string) (string, error) {
+// mounts are the container's binds and volumes: a path under one of them is
+// looked up in its source, as the process will see it, not in the image.
+func lookPath(root *securefs.Root, mounts []BindRecord, name, cwd string, env []string) (string, error) {
 	if name == "" {
 		return "", errdefs.Invalid("no command specified")
 	}
@@ -89,7 +92,7 @@ func lookPath(root *securefs.Root, name, cwd string, env []string) (string, erro
 		if !strings.HasPrefix(p, "/") {
 			p = path.Join(cwd, p)
 		}
-		if err := checkExec(root, p); err != nil {
+		if err := checkExec(root, mounts, p); err != nil {
 			return "", errdefs.Invalid("exec: %q: %v", name, err)
 		}
 		return path.Clean(p), nil
@@ -108,22 +111,32 @@ func lookPath(root *securefs.Root, name, cwd string, env []string) (string, erro
 			dir = path.Join(cwd, dir)
 		}
 		p := path.Join(dir, name)
-		if checkExec(root, p) == nil {
+		if checkExec(root, mounts, p) == nil {
 			return p, nil
 		}
 	}
 	return "", errdefs.Invalid("exec: %q: executable file not found in $PATH", name)
 }
 
-func checkExec(root *securefs.Root, p string) error {
-	f, err := root.OpenFile(p)
-	if err != nil {
-		return fmt.Errorf("stat %s: no such file or directory", p)
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return err
+func checkExec(root *securefs.Root, mounts []BindRecord, p string) error {
+	var fi os.FileInfo
+	if src, ok := mountedPath(mounts, p); ok {
+		// The source is a daemon-approved host path (or a volume) the
+		// container sees anyway; this only checks that the file exists.
+		st, err := os.Stat(src)
+		if err != nil {
+			return fmt.Errorf("stat %s: no such file or directory", p)
+		}
+		fi = st
+	} else {
+		f, err := root.OpenFile(p)
+		if err != nil {
+			return fmt.Errorf("stat %s: no such file or directory", p)
+		}
+		defer f.Close()
+		if fi, err = f.Stat(); err != nil {
+			return err
+		}
 	}
 	if fi.IsDir() {
 		return fmt.Errorf("permission denied")
@@ -132,6 +145,33 @@ func checkExec(root *securefs.Root, p string) error {
 		return fmt.Errorf("permission denied")
 	}
 	return nil
+}
+
+// mountedPath maps a container path to its host source when it lies under a
+// bind or volume target; the deepest target wins, as it does in the container.
+func mountedPath(mounts []BindRecord, p string) (string, bool) {
+	p = path.Clean(p)
+	best := -1
+	var rel string
+	for i, m := range mounts {
+		t := path.Clean(m.Target)
+		var r string
+		switch {
+		case p == t:
+			r = ""
+		case strings.HasPrefix(p, strings.TrimSuffix(t, "/")+"/"):
+			r = strings.TrimPrefix(p, strings.TrimSuffix(t, "/")+"/")
+		default:
+			continue
+		}
+		if best < 0 || len(t) > len(path.Clean(mounts[best].Target)) {
+			best, rel = i, r
+		}
+	}
+	if best < 0 {
+		return "", false
+	}
+	return filepath.Join(mounts[best].Source, filepath.FromSlash(rel)), true
 }
 
 // mergeEnv overlays override on base by variable name.

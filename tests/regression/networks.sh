@@ -113,6 +113,8 @@ check "after network disconnect it no longer does" "$(docker exec iso sh -c 'get
 if [ -x "$WORK.probe/netprobe" ] && docker run --rm -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 | grep -q "udp, connect only: ok"; then
     out=$(docker run --rm --network demo -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 || true)
     echo "$out" | grep -q "Invalid argument" && fail "outbound from a user network: $(echo "$out" | grep "Invalid argument" | tr '\n' ';')" || pass "bind-then-connect to an outside address works on a user network (udp, tcp, dual-stack)"
+    # A program that exists only in a bind mount runs directly, as with Docker (it once gave 127).
+    if docker run --rm -v "$WORK.probe:/mnt" "$IMAGE" /mnt/netprobe "$PROBE_IP" 9 >/dev/null 2>&1; then pass "a program inside a bind mount runs as the container command"; else fail "a program inside a bind mount runs as the container command"; fi
     control=$(docker run --rm -v "$WORK.probe:/mnt" "$IMAGE" sh -c "/mnt/netprobe $PROBE_IP 9" 2>&1 || true)
     echo "$control" | grep -q "Invalid argument" && fail "the probe itself fails on the device network" || pass "the same probe on the device network (control)"
 else

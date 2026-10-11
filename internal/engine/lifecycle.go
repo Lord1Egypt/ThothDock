@@ -213,7 +213,11 @@ func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) 
 	if len(p.Argv) == 0 {
 		return runtime.Spec{}, errdefs.Invalid("no command specified")
 	}
-	exe, err := lookPath(root, p.Argv[0], cwd, env)
+	mounts, err := e.bindSources(c.rec.Binds)
+	if err != nil {
+		return runtime.Spec{}, err
+	}
+	exe, err := lookPath(root, mounts, p.Argv[0], cwd, env)
 	if err != nil {
 		return runtime.Spec{}, err
 	}
@@ -221,10 +225,6 @@ func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) 
 		{Source: filepath.Join(c.dir, "hosts"), Target: "/etc/hosts"},
 		{Source: filepath.Join(c.dir, "hostname"), Target: "/etc/hostname"},
 		{Source: filepath.Join(c.dir, "resolv.conf"), Target: "/etc/resolv.conf"},
-	}
-	mounts, err := e.bindSources(c.rec.Binds)
-	if err != nil {
-		return runtime.Spec{}, err
 	}
 	for _, b := range mounts {
 		binds = append(binds, runtime.Bind{Source: b.Source, Target: b.Target})
