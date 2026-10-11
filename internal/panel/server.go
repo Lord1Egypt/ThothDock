@@ -37,7 +37,7 @@ const (
 // Config is how the panel is started.
 type Config struct {
 	Socket   string // the engine's API socket
-	StateDir string // certificate, key and sessions (owner-only)
+	StateDir string // certificate and key (owner-only)
 	DataRoot string // the engine's data root, for the storage figures
 	Listen   string // host:port of the HTTPS listener
 	Version  string
@@ -166,6 +166,10 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 	return nil
 }
+
+// RevokeAll ends every browser session now and cancels the active pairing
+// code; their open streams stop. Callers announce a new code afterwards.
+func (s *Server) RevokeAll() { s.auth.revokeAll() }
 
 // Handler is the panel's HTTP surface.
 func (s *Server) Handler() http.Handler {
@@ -323,7 +327,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 		s.CodeChanged() // the code is single use
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, Secure: true,
-		SameSite: http.SameSiteStrictMode, MaxAge: int(sessionIdle / time.Second)})
+		SameSite: http.SameSiteStrictMode})
 	jsonOK(w, map[string]string{"csrf": csrf})
 }
 
@@ -332,10 +336,7 @@ func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request, _ string, s
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, token string, _ session) {
-	if err := s.auth.logout(token); err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	s.auth.logout(token)
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	jsonOK(w, map[string]bool{"ok": true})
 }
@@ -711,7 +712,7 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request, _ string, _ ses
 
 // events streams engine events to the browser (server-sent events), so the
 // page refreshes on change instead of polling.
-func (s *Server) events(w http.ResponseWriter, r *http.Request, _ string, _ session) {
+func (s *Server) events(w http.ResponseWriter, r *http.Request, _ string, sess session) {
 	filters := url.QueryEscape(`{"type":["container","image","network","volume"]}`)
 	resp, err := s.eng.do(r.Context(), http.MethodGet, "/events?filters="+filters, nil)
 	if err != nil {
@@ -719,6 +720,16 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ string, _ sess
 		return
 	}
 	defer resp.Body.Close()
+	// The stream ends the moment its session does.
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
+		select {
+		case <-sess.done:
+			resp.Body.Close()
+		case <-stopWatch:
+		}
+	}()
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		jsonError(w, http.StatusInternalServerError, "streaming unsupported")

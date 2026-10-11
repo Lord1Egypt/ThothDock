@@ -10,10 +10,9 @@ import (
 	"fmt"
 	"io/fs"
 	"math/big"
+	"os"
 	"sync"
 	"time"
-
-	"github.com/Lord1Egypt/ThothDock/internal/store"
 )
 
 const (
@@ -21,10 +20,9 @@ const (
 	codeLifetime    = 10 * time.Minute
 	codeAttempts    = 5
 	attemptInterval = time.Second
-	sessionIdle     = 30 * 24 * time.Hour
-	// lastSeenGranularity limits how often a session's last use is written
-	// back to disk: the panel must not write on every request.
-	lastSeenGranularity = time.Hour
+	// sessionIdle ends a browser session that made no request for this long.
+	// Sessions live in memory only: they never outlive the panel process.
+	sessionIdle = 12 * time.Hour
 )
 
 var (
@@ -35,22 +33,20 @@ var (
 )
 
 type session struct {
-	Created  time.Time `json:"created"`
-	LastSeen time.Time `json:"lastSeen"`
-	CSRF     string    `json:"csrf"`
+	Created  time.Time
+	LastSeen time.Time
+	CSRF     string
+	// done is closed when the session ends (logout, revoke-all, idle
+	// expiry), so a long-lived stream of that browser can stop at once.
+	done chan struct{}
 }
 
-type sessionFile struct {
-	// Sessions are keyed by the SHA-256 of the cookie token, so the file
-	// never holds a usable credential.
-	Sessions map[string]*session `json:"sessions"`
-}
-
-// auth holds the pairing code and the sessions.
+// auth holds the pairing code and the sessions. Sessions exist only in
+// memory: a new panel process starts with none, so no credential from an
+// earlier process can ever be valid again.
 type auth struct {
 	mu          sync.Mutex
-	path        string
-	sessions    map[string]*session
+	sessions    map[string]*session // keyed by SHA-256 of the cookie token
 	code        string
 	codeExpires time.Time
 	attempts    int
@@ -71,22 +67,35 @@ func tokenKey(token string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func openAuth(path string) (*auth, error) {
-	a := &auth{path: path, sessions: map[string]*session{}, lastTry: map[string]time.Time{}, now: time.Now}
-	var f sessionFile
-	if err := store.ReadJSON(path, &f); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
+// openAuth starts a fresh authentication lifecycle. Versions up to 0.1.x of
+// the panel persisted sessions in legacyPath; that file is deleted, and if it
+// cannot be deleted the panel refuses to start rather than leave a store that
+// an older binary would honour.
+func openAuth(legacyPath string) (*auth, error) {
+	if err := os.Remove(legacyPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("cannot discard old panel sessions: %w", err)
 	}
-	for k, s := range f.Sessions {
-		if s != nil && len(k) == 64 && s.CSRF != "" && a.now().Sub(s.LastSeen) < sessionIdle {
-			a.sessions[k] = s
-		}
-	}
-	return a, nil
+	return &auth{sessions: map[string]*session{}, lastTry: map[string]time.Time{}, now: time.Now}, nil
 }
 
-func (a *auth) saveLocked() error {
-	return store.WriteJSONAtomic(a.path, &sessionFile{Sessions: a.sessions})
+// endLocked drops a session and wakes its streams.
+func (a *auth) endLocked(key string) {
+	if s, ok := a.sessions[key]; ok {
+		close(s.done)
+		delete(a.sessions, key)
+	}
+}
+
+// revokeAll ends every session and the active pairing code, in memory,
+// before returning.
+func (a *auth) revokeAll() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k := range a.sessions {
+		a.endLocked(k)
+	}
+	a.code = ""
+	a.attempts = 0
 }
 
 // newCode replaces the pairing code: 8 random digits, valid 10 minutes or
@@ -138,11 +147,7 @@ func (a *auth) pair(code, remote string) (token, csrf string, err error) {
 	if csrf, err = randomToken(32); err != nil {
 		return "", "", err
 	}
-	a.sessions[tokenKey(token)] = &session{Created: now, LastSeen: now, CSRF: csrf}
-	if err := a.saveLocked(); err != nil {
-		delete(a.sessions, tokenKey(token))
-		return "", "", err
-	}
+	a.sessions[tokenKey(token)] = &session{Created: now, LastSeen: now, CSRF: csrf, done: make(chan struct{})}
 	return token, csrf, nil
 }
 
@@ -167,14 +172,10 @@ func (a *auth) check(token string) (session, bool) {
 		return session{}, false
 	}
 	if now.Sub(s.LastSeen) >= sessionIdle {
-		delete(a.sessions, key)
-		a.saveLocked()
+		a.endLocked(key)
 		return session{}, false
 	}
-	if now.Sub(s.LastSeen) >= lastSeenGranularity {
-		s.LastSeen = now
-		a.saveLocked()
-	}
+	s.LastSeen = now
 	return *s, true
 }
 
@@ -183,14 +184,16 @@ func csrfOK(s session, header string) bool {
 	return header != "" && subtle.ConstantTimeCompare([]byte(header), []byte(s.CSRF)) == 1
 }
 
-func (a *auth) logout(token string) error {
+func (a *auth) logout(token string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	delete(a.sessions, tokenKey(token))
-	return a.saveLocked()
+	a.endLocked(tokenKey(token))
 }
 
-// RevokeAll ends every session stored at path.
-func RevokeAll(path string) error {
-	return store.WriteJSONAtomic(path, &sessionFile{Sessions: map[string]*session{}})
+// RemoveLegacySessions deletes the session file older versions wrote.
+func RemoveLegacySessions(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }

@@ -27,8 +27,8 @@ func panelCmd(args []string) error {
 	root := fs.String("root", def, "the engine's data root (env THOTHDOCK_ROOT)")
 	socket := fs.String("socket", "", "the engine's API socket (default <root>/run/thothdock.sock)")
 	listen := fs.String("listen", "127.0.0.1:"+panelPort, "HTTPS address; any address but loopback exposes the panel to that network")
-	stateDir := fs.String("state", "", "certificate and sessions (default <root>/panel)")
-	revoke := fs.Bool("revoke-all", false, "end every paired browser session, then exit")
+	stateDir := fs.String("state", "", "certificate and pairing state (default <root>/panel)")
+	revoke := fs.Bool("revoke-all", false, "delete session files left by older versions, then exit (sessions of a running panel end with SIGUSR2 or when it stops)")
 	exitWithParent := fs.Bool("exit-with-parent", false, "stop when the parent process exits (for the Android app)")
 	debug := fs.Bool("debug", false, "log more")
 	if err := fs.Parse(args); err != nil {
@@ -48,10 +48,10 @@ func panelCmd(args []string) error {
 		if err := os.MkdirAll(*stateDir, 0o700); err != nil {
 			return err
 		}
-		if err := panel.RevokeAll(filepath.Join(*stateDir, "sessions.json")); err != nil {
+		if err := panel.RemoveLegacySessions(filepath.Join(*stateDir, "sessions.json")); err != nil {
 			return err
 		}
-		fmt.Println("All Web Panel sessions ended; browsers must pair again.")
+		fmt.Println("Old session files removed. Sessions only live in a running panel's memory: send it SIGUSR2 to end them and print a new pairing code, or stop it.")
 		return nil
 	}
 	host, port, err := net.SplitHostPort(*listen)
@@ -119,10 +119,15 @@ func panelCmd(args []string) error {
 	defer os.Remove(pairingFile)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	usr1 := make(chan os.Signal, 1)
-	signal.Notify(usr1, syscall.SIGUSR1)
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, syscall.SIGUSR1, syscall.SIGUSR2)
 	go func() {
-		for range usr1 {
+		for sig := range sigs {
+			// SIGUSR2 disconnects every browser first; SIGUSR1 only replaces the code.
+			if sig == syscall.SIGUSR2 {
+				srv.RevokeAll()
+				log.Info("all Web Panel sessions ended")
+			}
 			if err := announce(); err != nil {
 				log.Error("new pairing code", "err", err)
 			}

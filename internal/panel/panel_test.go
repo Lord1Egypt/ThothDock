@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,6 +47,7 @@ type fixture struct {
 	srv    *httptest.Server
 	client *http.Client
 	csrf   string
+	skew   time.Duration
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -220,43 +222,224 @@ func TestPairingRules(t *testing.T) {
 	}
 }
 
-func TestSessionsAreHashedPersistedAndRevocable(t *testing.T) {
-	f := newFixture(t)
-	f.pair()
-	var token string
+// nextAttempt moves the panel's clock past the per-address pairing rate limit.
+func (f *fixture) nextAttempt() {
+	f.skew += 2 * time.Second
+	skew := f.skew
+	f.panel.auth.mu.Lock()
+	f.panel.auth.now = func() time.Time { return time.Now().Add(skew) }
+	f.panel.auth.mu.Unlock()
+}
+
+func (f *fixture) cookie() string {
 	for _, c := range f.client.Jar.Cookies(mustURL(f.srv.URL)) {
 		if c.Name == cookieName {
-			token = c.Value
+			return c.Value
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(f.state, "sessions.json"))
-	if err != nil || token == "" || strings.Contains(string(b), token) {
-		t.Fatalf("session file holds the raw token (or none): %v", err)
+	return ""
+}
+
+func TestSessionsNeverTouchDisk(t *testing.T) {
+	f := newFixture(t)
+	f.pair()
+	if f.cookie() == "" {
+		t.Fatal("no session cookie")
 	}
-	if fi, _ := os.Stat(filepath.Join(f.state, "sessions.json")); fi.Mode().Perm() != 0o600 {
-		t.Fatalf("sessions.json mode %v", fi.Mode().Perm())
+	if _, err := os.Stat(filepath.Join(f.state, "sessions.json")); !os.IsNotExist(err) {
+		t.Fatalf("a session file exists: %v", err)
 	}
 	if fi, _ := os.Stat(filepath.Join(f.state, "key.pem")); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("key.pem mode %v", fi.Mode().Perm())
 	}
-	fp := f.panel.Fingerprint()
-	// A restarted panel keeps the certificate and the session.
-	jar := f.client.Jar
-	f.start()
-	f.client.Jar = jar
-	if f.panel.Fingerprint() != fp {
-		t.Fatal("certificate changed across a restart")
+	// Refresh and navigation inside one server lifetime keep the session.
+	for _, p := range []string{"/api/session", "/api/containers", "/api/images", "/api/volumes"} {
+		if resp, _ := f.req("GET", p, "", nil); resp.StatusCode != 200 {
+			t.Fatalf("%s: %d", p, resp.StatusCode)
+		}
 	}
-	if resp, _ := f.req("GET", "/api/session", "", nil); resp.StatusCode != 200 {
-		t.Fatalf("session lost across a restart: %d", resp.StatusCode)
-	}
-	if err := RevokeAll(filepath.Join(f.state, "sessions.json")); err != nil {
+}
+
+func TestRestartRejectsEveryOldCredentialButKeepsTheCertificate(t *testing.T) {
+	f := newFixture(t)
+	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int { <-ctx.Done(); return 0 })
+	id, _, err := f.eng.Create(engine.CreateRequest{ContainerConfig: engine.ContainerConfig{Image: f.image}}, "survivor", "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	f.start()
+	f.pair()
+	oldCSRF, jar, fp := f.csrf, f.client.Jar, f.panel.Fingerprint()
+	oldToken := f.cookie()
+	// A panel of the previous generation left its session file behind.
+	legacy := fmt.Sprintf(`{"sessions":{"%s":{"created":"%s","lastSeen":"%s","csrf":"%s"}}}`,
+		tokenKey(oldToken), time.Now().Format(time.RFC3339), time.Now().Format(time.RFC3339), oldCSRF)
+	if err := os.WriteFile(filepath.Join(f.state, "sessions.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.start() // Stop -> Start, crash recovery and SIGKILL all look like this: a new process.
 	f.client.Jar = jar
+	if f.panel.Fingerprint() != fp {
+		t.Fatal("the certificate changed")
+	}
+	if _, err := os.Stat(filepath.Join(f.state, "sessions.json")); !os.IsNotExist(err) {
+		t.Fatalf("the legacy session file survived: %v", err)
+	}
 	if resp, _ := f.req("GET", "/api/session", "", nil); resp.StatusCode != 401 {
-		t.Fatalf("revoked session still works: %d", resp.StatusCode)
+		t.Fatalf("old cookie after restart: %d", resp.StatusCode)
+	}
+	old := f.origin()
+	old[csrfHeader] = oldCSRF
+	for _, c := range []struct{ method, path string }{
+		{"POST", "/api/containers/" + id + "/start"}, {"POST", "/api/containers/" + id + "/stop"},
+		{"POST", "/api/containers/" + id + "/restart"}, {"DELETE", "/api/containers/" + id}} {
+		if resp, _ := f.req(c.method, c.path, "", old); resp.StatusCode != 401 {
+			t.Fatalf("old session %s %s: %d", c.method, c.path, resp.StatusCode)
+		}
+	}
+	if resp, _ := f.req("GET", "/api/events", "", nil); resp.StatusCode != 401 {
+		t.Fatalf("old session opened the event stream: %d", resp.StatusCode)
+	}
+	// Nothing happened to the container the old session tried to delete.
+	if len(f.eng.List()) != 1 {
+		t.Fatalf("container gone: %d records", len(f.eng.List()))
+	}
+	// A fresh pairing works and gets its own credentials.
+	f.client.Jar, _ = cookiejar.New(nil)
+	f.pair()
+	if f.cookie() == oldToken || f.csrf == oldCSRF {
+		t.Fatal("credentials reused")
+	}
+	if resp, body := f.req("POST", "/api/containers/"+id+"/start", "", f.authed()); resp.StatusCode != 200 {
+		t.Fatalf("new session start: %d %v", resp.StatusCode, body)
+	}
+}
+
+func TestPanelRefusesToStartIfOldSessionsCannotBeDiscarded(t *testing.T) {
+	f := newFixture(t)
+	// A directory with content cannot be removed like a file.
+	d := filepath.Join(f.state, "sessions.json")
+	if err := os.MkdirAll(filepath.Join(d, "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := New(Config{Socket: f.socket, StateDir: f.state, DataRoot: f.root, Listen: "127.0.0.1:0", Version: "test"}, quiet)
+	if err == nil {
+		t.Fatal("started although old sessions could not be discarded")
+	}
+}
+
+func TestRevokeAllEndsEveryBrowserAndStreamAtOnce(t *testing.T) {
+	f := newFixture(t)
+	f.pair()
+	csrfA, jarA := f.csrf, f.client.Jar
+	f.client.Jar, _ = cookiejar.New(nil)
+	f.nextAttempt()
+	f.pair() // browser B has its own pairing
+	csrfB, jarB := f.csrf, f.client.Jar
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", f.srv.URL+"/api/events", nil)
+	resp, err := f.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	bufio.NewScanner(resp.Body).Scan() // ": connected"
+	code, _, _ := f.panel.NewCode()    // a pending code is cancelled too
+	f.panel.RevokeAll()
+	done := make(chan struct{})
+	go func() { io.Copy(io.Discard, resp.Body); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the event stream outlived its session")
+	}
+	for _, b := range []struct {
+		jar  http.CookieJar
+		csrf string
+	}{{jarA, csrfA}, {jarB, csrfB}} {
+		f.client.Jar, f.csrf = b.jar, b.csrf
+		if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 401 {
+			t.Fatalf("session after revoke-all: %d", r.StatusCode)
+		}
+		if r, _ := f.req("POST", "/api/containers/x/start", "", f.authed()); r.StatusCode != 401 {
+			t.Fatalf("action after revoke-all: %d", r.StatusCode)
+		}
+	}
+	f.client.Jar, _ = cookiejar.New(nil)
+	f.nextAttempt()
+	if r, _ := f.req("POST", "/pair", `{"code":"`+code+`"}`, f.origin()); r.StatusCode != 401 {
+		t.Fatalf("pre-revoke pairing code still works: %d", r.StatusCode)
+	}
+	f.nextAttempt()
+	f.pair() // the new code works
+	if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 200 {
+		t.Fatalf("fresh session: %d", r.StatusCode)
+	}
+}
+
+func TestLogoutEndsOnlyThatSession(t *testing.T) {
+	f := newFixture(t)
+	f.pair()
+	jarA := f.client.Jar
+	f.client.Jar, _ = cookiejar.New(nil)
+	f.nextAttempt()
+	f.pair()
+	if r, _ := f.req("POST", "/api/logout", "", f.authed()); r.StatusCode != 200 {
+		t.Fatalf("logout: %d", r.StatusCode)
+	}
+	if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 401 {
+		t.Fatalf("after logout: %d", r.StatusCode)
+	}
+	f.client.Jar = jarA
+	if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 200 {
+		t.Fatalf("other browser lost its session: %d", r.StatusCode)
+	}
+}
+
+func TestSessionsExpireWhenIdleAndCookieIsPerBrowserSession(t *testing.T) {
+	f := newFixture(t)
+	now := time.Now()
+	f.panel.auth.now = func() time.Time { return now }
+	code, _, _ := f.panel.NewCode()
+	resp, _ := f.req("POST", "/pair", `{"code":"`+code+`"}`, f.origin())
+	if strings.Contains(strings.ToLower(resp.Header.Get("Set-Cookie")), "max-age") || strings.Contains(strings.ToLower(resp.Header.Get("Set-Cookie")), "expires") {
+		t.Fatalf("the cookie outlives the browser session: %q", resp.Header.Get("Set-Cookie"))
+	}
+	now = now.Add(sessionIdle - time.Minute)
+	if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 200 {
+		t.Fatalf("active session expired early: %d", r.StatusCode)
+	}
+	now = now.Add(sessionIdle + time.Minute)
+	if r, _ := f.req("GET", "/api/session", "", nil); r.StatusCode != 401 {
+		t.Fatalf("idle session still valid: %d", r.StatusCode)
+	}
+}
+
+func TestConcurrentPairRevokeAndCheckCannotResurrectASession(t *testing.T) {
+	a, err := openAuth(filepath.Join(t.TempDir(), "sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.now = func() time.Time { return time.Now().Add(time.Hour) } // defeat the per-address rate limit
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				code, _, _ := a.newCode()
+				if tok, _, err := a.pair(code, fmt.Sprint(i, j)); err == nil {
+					a.check(tok)
+				}
+				a.revokeAll()
+				a.logout("x")
+			}
+		}()
+	}
+	wg.Wait()
+	a.revokeAll()
+	if len(a.sessions) != 0 {
+		t.Fatalf("%d sessions after revoke-all", len(a.sessions))
 	}
 }
 
