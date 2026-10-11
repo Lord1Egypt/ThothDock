@@ -1,0 +1,26 @@
+PASS: bridge reported as the device network
+PASS: host reported as the device network
+PASS: none reported as unsupported
+PASS: --network none refused
+PASS: user network range
+PASS: two services on port 80, reached by name
+PASS: the second one by name
+PASS: network alias
+PASS: localhost is the container's own
+PASS: container address 127.77.0.3
+PASS: published port reaches the right container
+PASS: another network does not resolve qa_web
+PASS: KNOWN LIMITATION: qa_web reachable by address from another network
+PASS: connect to an unknown network
+PASS: connect to none
+PASS: connect to bridge
+PASS: connect twice
+PASS: alias given at connect resolves
+PASS: alias stops resolving after disconnect
+PASS: device-network containers do not see qa names
+PASS: DNS from a user network
+PASS: HTTPS from a user network
+PASS: prune removed the unused network
+PASS: prune spared the network in use and the built-in ones
+PASS: networks without the label untouched by prune
+PASS: only this script's resources were removed

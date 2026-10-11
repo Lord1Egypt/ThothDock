@@ -1,0 +1,107 @@
+10-11 06:34:28.563 I/ActivityManager( 1786): Process PhantomProcessRecord {ea59505 29846:26729:libproot.so/u0a770} died
+10-11 06:34:28.600 I/ActivityManager( 1786): Process PhantomProcessRecord {6c6295a 29832:26729:libproot.so/u0a770} died
+10-11 06:34:41.087 I/ActivityManager( 1786): Process PhantomProcessRecord {1795d9c 27766:26729:nc/u0a770} died
+10-11 06:34:41.451 I/ActivityManager( 1786): Process PhantomProcessRecord {dda93a5 27697:26729:nc/u0a770} died
+10-11 06:35:04.140 I/ActivityManager( 1786): Process PhantomProcessRecord {c8a0085 30097:26729:libproot.so/u0a770} died
+10-11 06:35:15.740 I/ActivityManager( 1786): Killing PhantomProcessRecord {5f41fd 26972:26729:libthothdock.so/u0a770}: Trimming phantom processes
+10-11 06:35:15.743 I/ActivityManager( 1786): Killing PhantomProcessRecord {5585ef2 27052:26729:libproot.so/u0a770}: Trimming phantom processes
+10-11 06:35:15.749 I/ActivityManager( 1786): Process PhantomProcessRecord {4ba5943 30556:26729:libproot.so/u0a770} died
+10-11 06:35:15.759 I/ActivityManager( 1786): Process PhantomProcessRecord {75c9bc0 30558:26729:sh/u0a770} died
+10-11 06:35:15.759 I/ActivityManager( 1786): Process PhantomProcessRecord {6300f9 30559:26729:getent/u0a770} died
+10-11 06:35:15.760 I/ActivityManager( 1786): Process PhantomProcessRecord {e09783e 27708:26729:libproot.so/u0a770} died
+10-11 06:35:15.760 I/ActivityManager( 1786): Process PhantomProcessRecord {a9f469f 27650:26729:libproot.so/u0a770} died
+10-11 06:35:15.760 I/ActivityManager( 1786): Process PhantomProcessRecord {b4fb3ec 27666:26729:sh/u0a770} died
+10-11 06:35:15.760 I/ActivityManager( 1786): Process PhantomProcessRecord {e49b3b5 30006:26729:nc/u0a770} died
+10-11 06:35:15.766 I/ActivityManager( 1786): Process PhantomProcessRecord {d20da4a 27737:26729:sleep/u0a770} died
+10-11 06:35:15.767 I/ActivityManager( 1786): Process PhantomProcessRecord {8bbadbb 27055:26729:libproot.so/u0a770} died
+10-11 06:35:15.767 I/ActivityManager( 1786): Process PhantomProcessRecord {7a22d8 27106:26729:sleep/u0a770} died
+10-11 06:35:15.767 I/ActivityManager( 1786): Process PhantomProcessRecord {5aed631 27065:26729:libproot.so/u0a770} died
+10-11 06:35:15.773 W/ThothTerm(26729): RUNTIME: ThothDock exited unexpectedly exit=137; log: daemon.log
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {5f41fd 26972:26729:libthothdock.so/u0a770} died
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {b9a5116 27057:26729:libproot.so/u0a770} died
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {26d6a97 27082:26729:nginx: master process nginx -g daemon off;/u0a770} died
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {5585ef2 27052:26729:libproot.so/u0a770} died
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {6da9484 27081:26729:su/u0a770} died
+10-11 06:35:15.776 I/ActivityManager( 1786): Process PhantomProcessRecord {669a46d 27113:26729:bash/u0a770} died
+10-11 06:35:15.778 W/ThothTerm(26729): SHELL: Shell exited code=9
+10-11 06:35:15.786 I/ActivityManager( 1786): Process PhantomProcessRecord {46268a2 27053:26729:libproot.so/u0a770} died
+10-11 06:35:15.786 I/ActivityManager( 1786): Process PhantomProcessRecord {9141933 27078:26729:sh/u0a770} died
+10-11 06:35:15.787 I/ActivityManager( 1786): Process PhantomProcessRecord {dae74f0 27094:26729:nc/u0a770} died
+10-11 06:35:15.790 I/ActivityManager( 1786): Process PhantomProcessRecord {c891a69 27678:26729:libproot.so/u0a770} died
+10-11 06:35:15.792 I/ActivityManager( 1786): Process PhantomProcessRecord {2a26cee 29954:26729:nc/u0a770} died
+10-11 06:35:15.792 I/ActivityManager( 1786): Process PhantomProcessRecord {a6d158f 27691:26729:sh/u0a770} died
+10-11 06:35:15.796 I/ActivityManager( 1786): Process PhantomProcessRecord {c0ff425 29966:26729:libproot.so/u0a770} died
+10-11 06:35:15.797 I/ActivityManager( 1786): Process PhantomProcessRecord {8cc69fa 29982:26729:sleep/u0a770} died
+10-11 06:35:15.802 I/ThothTerm(26729): SESSION: Session closed; active=0
+10-11 06:35:15.814 I/ImeTracker(26729): com.thothterm.debian.qa.nextgen:6c1fe78f: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT fromUser false
+10-11 06:35:15.815 I/InputMethodManager_LC(26729): hsifw() - flag : 0
+10-11 06:35:15.816 I/InputMethodManager_LC(26729): hsifw() - mService.hideSoftInput
+10-11 06:35:15.817 D/CompatChangeReporter(26729): Compat change id reported: 395521150; UID 10770; state: ENABLED
+10-11 06:35:15.831 I/ActivityManager( 1786): Process PhantomProcessRecord {8af7bab 27152:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.832 I/ActivityManager( 1786): Process PhantomProcessRecord {ba7f208 27154:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.832 I/ActivityManager( 1786): Process PhantomProcessRecord {c70ada1 27147:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.832 I/ActivityManager( 1786): Process PhantomProcessRecord {c672bc6 27157:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.833 I/ActivityManager( 1786): Process PhantomProcessRecord {8682787 27140:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.833 I/ActivityManager( 1786): Process PhantomProcessRecord {9ce26b4 27156:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.833 I/ActivityManager( 1786): Process PhantomProcessRecord {fc982dd 27142:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.836 I/ActivityManager( 1786): Process PhantomProcessRecord {29a3e52 27149:26729:nginx: worker process/u0a770} died
+10-11 06:35:15.839 I/ActivityManager( 1786): Process PhantomProcessRecord {280fa20 27096:26729:node/u0a770} died
+10-11 06:35:15.851 D/InsetsController(26729): hide(ime())
+10-11 06:35:15.855 D/WindowOnBackDispatcher(26729): setTopOnBackInvokedCallback (unwrapped): androidx.activity.OnBackPressedDispatcher$Api34Impl$createOnBackAnimationCallback$1@5d01f9a
+10-11 06:35:15.857 D/InsetsController(26729): Setting requestedVisibleTypes to 503 (was 511)
+10-11 06:35:15.857 I/InsetsController(26729): setRequestedVisibleTypes: visible=false, mask=ime, host=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity, from=android.view.InsetsController.con
+10-11 06:35:15.865 D/SurfaceFlinger( 1234):        DEVICE |          114800180854784 | 00002102 | RGBA_8888    |    0.0    0.0 1080.0 2340.0 |    0    0 1080 2340 | com.thothterm.debian.qa.nextgen/com
+10-11 06:35:15.873 D/VRI[TermActivity]@6cef978(26729): WindowInsets changed: ime:null 
+10-11 06:35:15.880 I/BLASTBufferQueue_Java(26729): update, w= 1080 h= 2340 mName = VRI[TermActivity]@6cef978 mNativeObject= 0xb400007692c06000 sc.mNativeObject= 0xb400007692c0cb00 format= -1 caller= a
+10-11 06:35:15.882 I/VRI[TermActivity]@6cef978(26729): Relayout returned: old=(0,0,1080,2340) new=(0,0,1080,2340) relayoutAsync=true req=(1080,2340)0 dur=0 res=0x0 s={true 0xb400007692c27400} ch=false
+10-11 06:35:15.888 I/VRI[TermActivity]@6cef978(26729): registerCallbackForPendingTransactions
+10-11 06:35:15.897 I/ImeFocusController(26729): onPreWindowFocus: skipped hasWindowFocus=false mHasImeFocus=true
+10-11 06:35:15.897 I/VRI[TermActivity]@6cef978(26729): mWNT: t=0xb40000769ad17400 mBlastBufferQueue=0xb400007692c06000 fn= 9 HdrRenderState mRenderHdrSdrRatio=1.0 caller= android.view.ViewRootImpl$10.
+10-11 06:35:15.902 I/ImeFocusController(26729): onPostWindowFocus: skipped hasWindowFocus=false mHasImeFocus=true
+10-11 06:35:15.916 I/BufferQueueProducer( 1234): [com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985](this:0xb4000078307e56b0,id:-1,api:0,p:-1,c:1234) queueBuffer: fps=0.00 dur=3
+10-11 06:35:15.923 I/InsetsController(26729): onStateChanged: host=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity, from=android.view.ViewRootImpl.onInsetsStateChanged:3038, state=InsetsSta
+10-11 06:35:15.924 I/InsetsSourceConsumer(26729): applyRequestedVisibilityToControl: visible=true, type=navigationBars, host=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity
+10-11 06:35:15.931 I/ImeTracker(26729): system_server:d1243e33: onCancelled at PHASE_CLIENT_ON_CONTROLS_CHANGED
+10-11 06:35:15.973 I/InsetsController(26729): onStateChanged: host=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity, from=android.view.ViewRootImpl.onInsetsStateChanged:3038, state=InsetsSta
+10-11 06:35:15.974 I/ImeTracker(26729): system_server:e0dc5fe5: onCancelled at PHASE_CLIENT_ON_CONTROLS_CHANGED
+10-11 06:35:16.063 I/SurfaceFlinger( 1234): Capture layer list: 	 com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985(preserveDisplayColors:0)
+10-11 06:35:16.191 V/InputMethodManagerService( 1786): Disabling: SessionState{uid=10770 pid=26729 method=e2ba1bc session=d1c0823 channel=ClientState{6105d4f mUid=10770 mPid=26729 mSelfReportedDisplay
+10-11 06:35:16.192 D/InputTransport(26729): Input channel destroyed: 'ClientS', fd=164
+10-11 06:35:16.232 I/InsetsController(26729): onStateChanged: host=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity, from=android.view.ViewRootImpl.onInsetsStateChanged:3038, state=InsetsSta
+10-11 06:35:16.240 D/VRI[TermActivity]@6cef978(26729): WindowInsets changed: ime:[0,0,0,667] 
+10-11 06:35:16.615 I/VRI[TermActivity]@6cef978(26729): handleAppVisibility mAppVisible = true visible = false
+10-11 06:35:16.615 D/VRI[TermActivity]@6cef978(26729): visibilityChanged oldVisibility=true newVisibility=false
+10-11 06:35:16.627 I/SurfaceFlinger( 1234): RequestedLayer [com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985] hidden!! flag  from(0) --> to(1)
+10-11 06:35:16.627 D/BBA2    ( 1786): updateWindowVisible for pid : 26729, visible : 0
+10-11 06:35:16.637 D/PkgPredictorService-SecIpmManagerServiceImpl( 1786): bg information pid:26729 uid:10770 pkgName:com.thothterm.debian.qa.nextgen
+10-11 06:35:16.637 D/HWUI    (26729): CacheManager::trimMemory(20)
+10-11 06:35:16.645 I/WindowManager( 1786): Relayout hash=9199137, pid=26729, syncId=-1: mAttrs={(0,0)(fillxfill) sim={state=always_visible adjust=resize forwardNavigation} layoutInDisplayCutoutMode=al
+10-11 06:35:16.648 I/BLASTBufferQueue(26729): [VRI[TermActivity]@6cef978#0](f:0,a:1,s:0) destructor()
+10-11 06:35:16.649 D/BufferQueueConsumer(26729): [VRI[TermActivity]@6cef978#0(BLAST Consumer)0](id:686900000000,api:0,p:-1,c:26729) disconnect
+10-11 06:35:16.654 I/VRI[TermActivity]@6cef978(26729): Relayout returned: old=(0,0,1080,2340) new=(0,0,1080,2340) relayoutAsync=false req=(1080,2340)8 dur=9 res=0x2 s={false 0x0} ch=true seqId=0
+10-11 06:35:16.654 D/VRI[TermActivity]@6cef978(26729): Not drawing due to not visible. Reason=!mAppVisible && !mForceDecorViewVisibility
+10-11 06:35:16.655 D/WindowOnBackDispatcher(26729): setTopOnBackInvokedCallback (unwrapped): android.app.Activity$$ExternalSyntheticLambda0@6e07c45
+10-11 06:35:16.656 I/VRI[TermActivity]@6cef978(26729): stopped(true) old = false
+10-11 06:35:16.657 D/VRI[TermActivity]@6cef978(26729): WindowStopped on com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity set to true
+10-11 06:35:16.657 D/HWUI    (26729): CacheManager::trimMemory(20)
+10-11 06:35:16.674 D/WindowOnBackDispatcher(26729): setTopOnBackInvokedCallback (unwrapped): null
+10-11 06:35:16.691 D/HWUI    (26729): CacheManager::trimMemory(20)
+10-11 06:35:16.692 D/ViewRootImpl(26729): Skipping stats log for color mode
+10-11 06:35:16.692 I/VRI[TermActivity]@6cef978(26729): dispatchDetachedFromWindow
+10-11 06:35:16.693 V/WindowManager( 1786): Remove Window{9199137 u0 com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity}: mSurfaceControl=Surface(name=com.thothterm.debian.qa.nextgen/com.thotht
+10-11 06:35:16.697 D/InputTransport(26729): Input channel destroyed: '9199137', fd=122
+10-11 06:35:16.702 D/BBA2    (26729): setIsFg isFg = false; delayValue 3999ms
+10-11 06:35:16.716 I/SurfaceFlinger( 1234): [LayerHierarchy{RequestedLayerState{com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985} no children}] reparent to OffscreenRoot
+10-11 06:35:16.716 I/SurfaceFlinger( 1234): [LayerHierarchy{RequestedLayerState{com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985} no children}] RelativeParent to null
+10-11 06:35:16.716 I/SurfaceFlinger( 1234): onHandleDestroyed: layerId=235985, name=com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985
+10-11 06:35:16.716 I/SurfaceFlinger( 1234): id=235985 Removed com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985 (145)
+10-11 06:35:16.726 I/ThothTerm(26729): APP: Terminal service stopped
+10-11 06:35:16.727 I/SurfaceFlinger( 1234): destroyed com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985
+10-11 06:35:16.728 I/SurfaceFlinger( 1234): id=235985 Destroyed com.thothterm.debian.qa.nextgen/com.thothterm.TermActivity$_26729#235985
+10-11 06:35:16.736 I/bian.qa.nextgen(26729): System.exit called, status: 0
+10-11 06:35:16.736 I/AndroidRuntime(26729): VM exiting with result code 0, cleanup skipped.
+10-11 06:35:16.893 I/ActivityManager( 1786): Process com.thothterm.debian.qa.nextgen (pid 26729) has died: fg  SVC (152,2731)
+10-11 06:35:16.897 I/Zygote  ( 1165): Process 26729 exited cleanly (0)
+10-11 06:35:16.932 I/libprocessgroup( 1786): Removed cgroup /sys/fs/cgroup/apps/uid_10770/pid_26729
+10-11 06:35:21.893 I/NotificationManager(28736): com.github.android: notify(-1644146534, null, Notification(channel=ci_activity shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=
+10-11 06:35:21.900 I/NotificationManager(28736): com.github.android: notify(180651711, null, Notification(channel=ci_activity shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=AU

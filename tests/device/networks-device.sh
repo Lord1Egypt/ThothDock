@@ -3,6 +3,11 @@
 # harness). Creates and removes only its own qa_* networks and containers; existing
 # workloads are left alone. Needs the network for the outbound checks.
 #
+# Android kills an app's child processes beyond a device-wide cap (about 32 "phantom
+# processes"), and the engine with them. Each container here is 2-3 processes, so test
+# containers are removed as soon as their checks are done; check the headroom first
+# (docs/nextgen/ANDROID_LIFECYCLE.md).
+#
 #   bash networks-device.sh [LOGFILE]        # exit 1 on any FAIL
 LOG=${1:-$HOME/networks-device.log}; : > "$LOG"
 IMAGE=${TEST_IMAGE:-alpine:3.20}
@@ -16,6 +21,7 @@ get() { for _ in $(seq 30); do o=$(docker exec "$1" wget -q -T 5 -O- "$2" 2>/dev
 cleanup() { docker rm -f qa_web qa_web2 qa_cli qa_iso qa_pub >/dev/null 2>&1; docker network rm qa_n1 qa_n2 qa_spare >/dev/null 2>&1; }
 cleanup
 BEFORE=$(docker ps -aq | sort | tr '\n' ' ')
+UNLABELLED=$(docker network ls --format '{{.Name}}' | grep -vcE '^(bridge|host|none)$')
 docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull -q "$IMAGE" >/dev/null
 
 # Built-in networks say what they are; none is not usable.
@@ -38,6 +44,7 @@ ip=$(docker inspect -f '{{.NetworkSettings.Networks.qa_n1.IPAddress}}' qa_web)
 case "$ip" in 127.77.*) ok "container address $ip" ;; *) bad "container address '$ip'" ;; esac
 pub=""; for _ in $(seq 30); do pub=$(wget -q -T 3 -O- http://127.0.0.1:18081/ 2>/dev/null || curl -s -m 3 http://127.0.0.1:18081/ 2>/dev/null); [ -n "$pub" ] && break; sleep 0.3; done
 check "published port reaches the right container" "$pub" from-pub
+docker rm -f qa_pub qa_web2 >/dev/null
 
 # Membership: names follow it; addresses do not (documented limitation).
 docker run -d --name qa_iso --network qa_n2 "$IMAGE" sleep 100000 >/dev/null
@@ -52,17 +59,22 @@ check "alias given at connect resolves" "$(docker exec qa_cli sh -c 'getent host
 docker network disconnect qa_n1 qa_iso
 check "alias stops resolving after disconnect" "$(docker exec qa_cli sh -c 'getent hosts qa_backend >/dev/null && echo yes || echo no')" no
 check "device-network containers do not see qa names" "$(docker run --rm "$IMAGE" sh -c 'getent hosts qa_web || echo none')" none
+docker rm -f qa_iso qa_cli >/dev/null
 
 # Outbound from a user network (once broken: PRoot moved bind(0.0.0.0:0) to 127.77.x.y).
 check "DNS from a user network" "$(docker run --rm --network qa_n1 "$IMAGE" sh -c 'nslookup ton.org >/dev/null 2>&1 && echo ok || echo fail')" ok
-check "HTTPS from a user network" "$(docker run --rm --network qa_n1 "$IMAGE" sh -c 'wget -q -T 15 -O- https://ton.org/global-config.json | grep -c config.global')" 1
+check "HTTPS from a user network" "$(docker run --rm --network qa_n1 "$IMAGE" sh -c 'wget -q -T 15 -O- https://ton.org/global-config.json | grep -q config.global && echo ok')" ok
 
 # Prune removes only unused user networks (filtered to this script's label, so the owner's
 # unused networks are never touched).
 docker network create --label qa.networks=1 qa_spare >/dev/null
 out=$(docker network prune -f --filter label=qa.networks=1 2>&1)
 echo "$out" | grep -qx qa_spare && ok "prune removed the unused network" || bad "prune: $out"
-case "$out" in *qa_n1*|*qa_n2*|*bridge*|*host*|*none*) bad "prune touched a network in use or built in" ;; *) ok "prune spared networks in use and built-in ones" ;; esac
+# qa_n1 is in use (qa_web); the built-in networks and everything without the label must remain.
+left=$(docker network ls --format '{{.Name}}' | sort | tr '\n' ' ')
+missing=""; for n in bridge host none qa_n1; do echo " $left " | grep -q " $n " || missing="$missing $n"; done
+[ -z "$missing" ] && ok "prune spared the network in use and the built-in ones" || bad "prune removed:$missing"
+check "networks without the label untouched by prune" "$(echo "$left" | tr ' ' '\n' | grep -vcE '^(qa_n1|qa_n2|bridge|host|none|)$')" "$UNLABELLED"
 
 cleanup
 check "only this script's resources were removed" "$(docker ps -aq | sort | tr '\n' ' ')" "$BEFORE"
