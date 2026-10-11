@@ -2,8 +2,11 @@ package procguard
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -147,27 +150,49 @@ func TestConcurrentObservationsAreSafe(t *testing.T) {
 	}
 }
 
-func TestProcCounterCountsDescendantsOfOurUIDNotTheRoot(t *testing.T) {
-	c := NewProcCounter()
-	before, err := c.Count()
-	if err != nil {
-		t.Skip("no /proc:", err)
-	}
-	cmds := make([]*exec.Cmd, 3)
-	for i := range cmds {
-		cmds[i] = exec.Command("sleep", "5")
-		if err := cmds[i].Start(); err != nil {
+// fakeProc builds a /proc with the given pid -> "ppid" for this uid.
+func fakeProc(t *testing.T, ppids map[int]int) *ProcCounter {
+	t.Helper()
+	root := t.TempDir()
+	for pid, pp := range ppids {
+		dir := filepath.Join(root, strconv.Itoa(pid))
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// comm holds spaces and parentheses on purpose.
+		stat := fmt.Sprintf("%d (we ird) name) S %d 1 1 0 -1\n", pid, pp)
+		if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	defer func() {
-		for _, c := range cmds {
-			c.Process.Kill()
-			c.Wait()
-		}
-	}()
-	after, _ := c.Count()
-	if after-before != 3 {
-		t.Fatalf("count went from %d to %d with 3 children (this test's own pid %d)", before, after, os.Getpid())
+	os.Mkdir(filepath.Join(root, "self"), 0o755) // not a pid
+	return &ProcCounter{Root: root, UID: uint32(os.Getuid())}
+}
+
+func TestProcCounterCountsTheUIDsTreeNotItsRoot(t *testing.T) {
+	// 100 is the app process (parent 1 is another uid's); 101..105 are its descendants.
+	c := fakeProc(t, map[int]int{100: 1, 101: 100, 102: 101, 103: 101, 104: 100, 105: 104})
+	if n, err := c.Count(); err != nil || n != 5 {
+		t.Fatalf("count %d, err %v", n, err)
+	}
+	// Another uid's processes are not counted.
+	c.UID++
+	if _, err := c.Count(); err == nil {
+		t.Fatal("a uid with no processes should be an error, not zero")
+	}
+}
+
+func TestProcCounterOnTheRealProcAtLeastSeesChildren(t *testing.T) {
+	c := NewProcCounter()
+	if _, err := c.Count(); err != nil {
+		t.Skip("no /proc:", err)
+	}
+	cmd := exec.Command("sleep", "5")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	if n, _ := c.Count(); n < 1 {
+		t.Fatalf("count %d", n)
 	}
 }

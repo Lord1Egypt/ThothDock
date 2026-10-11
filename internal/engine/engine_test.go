@@ -634,8 +634,16 @@ func TestNamedVolumePersistsAcrossContainers(t *testing.T) {
 	if !f.e.Volumes.Has("goldenvol") {
 		t.Fatal("--rm deleted a named volume")
 	}
-	if err := f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); err != nil {
-		t.Fatalf("unused volume not removable: %v", err)
+	// The --rm container leaves the registry just after "removed" is reported.
+	var rmErr error
+	for i := 0; i < 50; i++ {
+		if rmErr = f.e.Volumes.Remove("goldenvol", f.e.VolumeUsers); rmErr == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if rmErr != nil {
+		t.Fatalf("unused volume not removable: %v", rmErr)
 	}
 	// An image removal never touches volumes (they are not image data).
 	if _, err := os.Stat(f.e.Volumes.DataPath("goldenvol")); !os.IsNotExist(err) {
