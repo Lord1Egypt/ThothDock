@@ -10,7 +10,7 @@
 | Sequence | owner starts it on the phone → URL, fingerprint, code → browser checks fingerprint, enters code → cookie + CSRF → actions through the engine socket → events stream refreshes the page |
 | Dependencies | Phase 1 (events) |
 | API changes | panel HTTP surface (allow list) |
-| Data model | `<root>/panel/{cert.pem,key.pem,sessions.json,pairing.json}` (0600 where secret) |
+| Data model | `<root>/panel/{cert.pem,key.pem,pairing.json}` (0600 where secret); sessions are in memory only |
 | Android | `WebPanel.java`, Containers menu; Wi-Fi/Ethernet IPv4 only; stopped with the engine; `--exit-with-parent` from a dedicated thread |
 | Security | `../SECURITY_MODEL.md` N–S |
 | Performance budget | separate process: nothing in the engine; +0.72 MB stripped binary |

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -147,9 +148,24 @@ type lastExit struct {
 	At   time.Time `json:"at"`
 }
 
-// recoveryReport compares this start with the previous run. The pid file is
-// removed only by a clean shutdown, so finding it means the previous daemon
-// was killed or crashed.
+// runningMarker exists while a daemon runs and is removed by its clean
+// shutdown. The Android app deletes the pid file of a dead daemon at launch,
+// so the pid file cannot tell a crash from a clean stop; this file is the
+// daemon's own and nothing else touches it.
+func runningMarker(l platform.Layout) string { return filepath.Join(l.Run(), "engine.running") }
+
+// markRunning reports whether the previous daemon left its marker behind
+// (it was killed or crashed) and writes the marker for this one.
+func markRunning(l platform.Layout) (unclean bool, err error) {
+	if _, statErr := os.Stat(runningMarker(l)); statErr == nil {
+		unclean = true
+	}
+	return unclean, store.WriteFileAtomic(runningMarker(l), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
+}
+
+// recoveryReport compares this start with the previous run. The running marker
+// is removed only by a clean shutdown, so finding it means the previous
+// daemon was killed or crashed.
 func recoveryReport(l platform.Layout, unclean bool) engine.Recovery {
 	r := engine.Recovery{At: time.Now().UTC(), PreviousExit: "clean"}
 	r.LastPressure = engine.ReadLastPressure(filepath.Join(l.Run(), "pressure.json"))
@@ -208,8 +224,11 @@ func serve(args []string) error {
 		return err
 	}
 	defer lock.Close()
-	_, errPid := os.Stat(pidFile(l))
-	unclean := errPid == nil
+	unclean, err := markRunning(l)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(runningMarker(l))
 	if err := writePidFile(l); err != nil {
 		return err
 	}

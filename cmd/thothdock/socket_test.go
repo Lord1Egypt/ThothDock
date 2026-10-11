@@ -115,3 +115,38 @@ func TestPidFileRecordsIdentity(t *testing.T) {
 		t.Fatalf("pid file %q", b)
 	}
 }
+
+func TestRunningMarkerTellsACrashFromACleanStop(t *testing.T) {
+	l := platform.Layout{Root: t.TempDir()}
+	if err := l.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if unclean, err := markRunning(l); err != nil || unclean {
+		t.Fatalf("first start: unclean=%v err=%v", unclean, err)
+	}
+	// The daemon is killed: the marker stays. The Android app also deletes the
+	// pid file of a dead daemon at launch, which must not matter.
+	os.Remove(pidFile(l))
+	if unclean, err := markRunning(l); err != nil || !unclean {
+		t.Fatalf("after a kill: unclean=%v err=%v", unclean, err)
+	}
+	os.Remove(runningMarker(l)) // a clean shutdown
+	if unclean, _ := markRunning(l); unclean {
+		t.Fatal("clean stop reported as unclean")
+	}
+	// Recovery report: exit code consumed once, never invented.
+	os.WriteFile(filepath.Join(l.Root, "last-exit.json"), []byte(`{"code":137,"at":"2026-10-11T00:00:00Z"}`), 0o600)
+	r := recoveryReport(l, true)
+	if r.PreviousExit != "unclean" || r.PreviousExitCode == nil || *r.PreviousExitCode != 137 || r.ReasonKnown {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(l.Root, "last-exit.json")); !os.IsNotExist(err) {
+		t.Fatal("last-exit.json not consumed")
+	}
+	if r := recoveryReport(l, true); r.PreviousExitCode != nil {
+		t.Fatalf("an exit code was invented: %+v", r)
+	}
+	if r := recoveryReport(l, false); r.PreviousExit != "clean" {
+		t.Fatalf("%+v", r)
+	}
+}

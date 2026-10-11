@@ -214,7 +214,7 @@ State directory `<data root>/panel/` (0700):
 | File | Content |
 |---|---|
 | `cert.pem`, `key.pem` (0600) | self-signed ECDSA P-256, SAN = listen host(s), 825-day validity |
-| `sessions.json` (0600) | `{sha256(token) hex: {created, lastSeen, csrf}}` |
+| *(no session file)* | sessions live in the panel process's memory only: `{sha256(token): {created, lastSeen, csrf}}`; a legacy `sessions.json` is deleted at start |
 
 Pairing: `code = 8 decimal digits from crypto/rand`, held in memory only,
 valid 10 minutes, invalid after 5 wrong attempts or one success. Rate limit:

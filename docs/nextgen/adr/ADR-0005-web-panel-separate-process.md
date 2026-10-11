@@ -17,8 +17,19 @@
 - Pairing: the panel prints a one-time 8-digit pairing code (from
   `crypto/rand`), valid for 10 minutes and 5 attempts. A correct code yields a
   random 256-bit session token in an `HttpOnly; Secure; SameSite=Strict`
-  cookie. Sessions are stored hashed (SHA-256), expire after 30 days idle and
-  can all be revoked (`thothdock panel --revoke-all`).
+  cookie (no `Max-Age`: it ends with the browser session). **Amended
+  2026-10-11 (P1 session-lifecycle fix):** sessions exist only in the memory
+  of the running panel process, keyed by the SHA-256 of the token. They end on
+  logout, on idle for 12 hours, on "Disconnect all devices" (SIGUSR2) and,
+  always, when the process ends: Stop, a restart, a crash, a SIGKILL or an
+  Android process recreation each begin a fresh authentication lifecycle in
+  which every browser must pair again. The earlier design (a `sessions.json`
+  that survived restarts for 30 days) let a browser keep full control after the
+  owner pressed Stop; it was removed. A new pairing code on its own does not
+  revoke already paired browsers. The TLS certificate is a separate concern and
+  is kept across restarts, so the fingerprint stays the same. A leftover
+  `sessions.json` from an older version is deleted at start; if it cannot be
+  deleted the panel refuses to start.
 - Every state-changing request needs the session cookie, an `Origin` that
   matches the panel's own host, and an `X-ThothDock-CSRF` header equal to a
   per-session token. Comparisons use `crypto/subtle`.
