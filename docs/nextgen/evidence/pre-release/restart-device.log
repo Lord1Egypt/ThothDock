@@ -1,0 +1,16 @@
+PASS: restart=no: an exited container stays exited
+PASS: on-failure:2 with exit 3: restarted twice, then stays exited
+PASS: on-failure with exit 0: not restarted
+PASS: always: restarted after a normal exit (2 restarts)
+PASS: always: an explicit stop is honoured
+PASS: a Running container has a live process (pid 14954)
+PASS: docker restart replaces the process (14954 -> 14998)
+PASS: an explicit restart is not counted as a policy restart
+PASS: unless-stopped: an explicit stop stays stopped
+PASS: unless-stopped: a crashed container (SIGKILL, exit 137) is restarted
+PASS: crash loop backs off (6 restarts in 8 s, 7 in 16 s)
+PASS: events: create, start/die x3 for on-failure:2 (create start die start die start die destroy)
+PASS: events: kill/die recorded
+PASS: events: image pull
+PASS: events: network create and destroy
+PASS: every Running container maps to a live process (2 checked)

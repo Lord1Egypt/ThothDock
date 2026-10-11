@@ -55,7 +55,9 @@ docker rm -f qa_runless >/dev/null
 # A crash (SIGKILL from inside: nothing outside the app may signal its processes).
 docker run -d --name qa_rlive --restart unless-stopped "$IMAGE" sh -c 'sleep 2; kill -9 $$' >/dev/null
 for _ in $(seq 40); do [ "$(rc qa_rlive)" -ge 1 ] 2>/dev/null && break; sleep 0.5; done
-check "unless-stopped: a crashed container (SIGKILL, exit 137) is restarted" "$([ "$(rc qa_rlive)" -ge 1 ] && echo yes) $(docker inspect -f '{{.State.ExitCode}}' qa_rlive)" "yes 137"
+# a running container reports exit code 0, so read the crash from its die event
+code=$(docker events --since "$T0" --until "$(date +%s)" --filter container=qa_rlive --filter event=die --format '{{.Actor.Attributes.exitCode}}' | head -1)
+check "unless-stopped: a crashed container (SIGKILL, exit 137) is restarted" "$([ "$(rc qa_rlive)" -ge 1 ] && echo yes) $code" "yes 137"
 docker rm -f qa_rlive >/dev/null
 
 docker run -d --name qa_rloop --restart always "$IMAGE" sh -c 'exit 1' >/dev/null
