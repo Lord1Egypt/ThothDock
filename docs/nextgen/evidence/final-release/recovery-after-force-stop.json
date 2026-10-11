@@ -1,0 +1,37 @@
+{
+    "guard": {
+        "level": "ok",
+        "count": 21,
+        "cap": 32,
+        "capSource": "Android's default (AOSP max_phantom_processes); this device's value cannot be read by an app",
+        "observedAt": "2026-10-11T11:24:13Z",
+        "ageSeconds": 8,
+        "pendingContainers": 0,
+        "message": ""
+    },
+    "recovery": {
+        "at": "2026-10-11T11:23:58.296845763Z",
+        "previousExit": "unclean",
+        "reasonKnown": false,
+        "reason": "The previous daemon did not shut down cleanly and Android gave the app no reason; a force-stop, a crash or a device restart would look the same.",
+        "lastPressure": {
+            "level": "ok",
+            "count": 21,
+            "cap": 32,
+            "at": "2026-10-11T11:23:45.486092224Z"
+        },
+        "interrupted": [
+            "web1",
+            "tonapi-explorer-1",
+            "EgyptArmyAPI",
+            "keep"
+        ],
+        "restored": [
+            "web1",
+            "keep",
+            "tonapi-explorer-1",
+            "EgyptArmyAPI"
+        ],
+        "restoring": false
+    }
+}

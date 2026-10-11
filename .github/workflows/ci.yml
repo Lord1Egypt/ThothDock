@@ -100,7 +100,7 @@ jobs:
   nextgen:
     runs-on: ubuntu-24.04
     env:
-      GARDEN_COMMIT: c149f1263ee7ee8741d189f0b0e69e09de94310b
+      GARDEN_COMMIT: 324df86b2bfd0a3c94a44bf2b61de33043d66922
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -120,6 +120,8 @@ jobs:
           cp "$RUNNER_TEMP/gp/proot/src/proot" "$RUNNER_TEMP/garden-proot"
       - name: Build ThothDock
         run: go build -o "$RUNNER_TEMP/thothdock" ./cmd/thothdock
+      - name: Web Panel session lifecycle (real binary, SIGUSR2/SIGKILL/restart)
+        run: tests/panel/lifecycle.sh "$RUNNER_TEMP/thothdock"
       - name: Restart policies and events (stock Docker CLI)
         run: tests/regression/restart-policies.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/garden-proot"
       - name: User-defined networks (stock Docker CLI)

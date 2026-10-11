@@ -1,6 +1,6 @@
 #!/bin/bash
 # Guarded UI driver by element text. Refuses unless the RC app is in front.
-A=adb; PKG=com.thothterm.debian.rc.thothdock
+A="${ADB:-adb}"; PKG=${PKG:-com.thothterm.debian.rc.thothdock}
 guard() { $A shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q "$PKG" || { echo "GUARD: $PKG not in front; refusing input" >&2; exit 9; }; }
 dump() { $A shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $A shell cat /sdcard/ui.xml; }
 case "$1" in
@@ -16,6 +16,8 @@ for m in re.finditer(r"<node [^>]*>",x):
 if len(hits)<=idx: print("NOTFOUND",want,file=sys.stderr); sys.exit(3)
 print(*hits[idx])' "$2" "${3:-0}" > /tmp/uia.xy || exit $?
      $A shell input tap $(cat /tmp/uia.xy) ;;
+  scroll) guard; $A shell input swipe 540 1700 540 700 300 ;;
+  top) guard; for _ in 1 2 3 4; do $A shell input swipe 540 700 540 1800 200; done ;;
   texts) guard; dump | grep -o 'text="[^"]*"' | grep -v 'text=""' ;;
   shot) $A exec-out screencap -p > "$2" ;;
 esac
