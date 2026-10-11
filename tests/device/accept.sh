@@ -97,7 +97,7 @@ docker run -d --name rc-ins -e FOO=bar alpine sleep 300 >/dev/null
 t "inspect state and env" 0 "running FOO=bar" sh -c 'echo $(docker inspect rc-ins --format "{{.State.Status}}") $(docker inspect rc-ins --format "{{range .Config.Env}}{{println .}}{{end}}" | grep FOO)'
 t "docker stats is refused, never faked" 1 "does not implement" docker stats --no-stream rc-ins
 t "restart" 0 "rc-ins" docker restart -t 1 rc-ins
-t "restart count" 0 "1" docker inspect rc-ins --format '{{.RestartCount}}'
+t "an explicit restart is not a policy restart (Docker keeps RestartCount at 0)" 0 "0" docker inspect rc-ins --format '{{.RestartCount}}'
 t "stop" 0 "rc-ins" docker stop -t 1 rc-ins
 t "container prune removes the stopped one" 0 "Deleted Containers" docker container prune -f
 t "interactive TTY" 0 "interactive-ok" docker run --rm -it alpine sh -c 'tty >/dev/null && echo interactive-ok'

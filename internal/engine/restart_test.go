@@ -402,3 +402,23 @@ func TestLifecycleEvents(t *testing.T) {
 		t.Fatalf("events %q, want %q", strings.Join(got, " "), want)
 	}
 }
+
+// An explicit restart is not a restart-policy restart: RestartCount stays,
+// as with dockerd (Docker 29.8.1 measured 0 after docker restart).
+func TestExplicitRestartDoesNotCountAsPolicyRestart(t *testing.T) {
+	f := newFixture(t)
+	starts := f.program()
+	id := f.createWith(RestartPolicy{Name: PolicyUnlessStopped}, "run")
+	if err := f.e.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	zero := 0
+	if err := f.e.Restart(id, &zero); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "running again", func() bool { return f.state(id).Status == StatusRunning && starts.Load() == 2 })
+	c, _ := f.e.Lookup(id)
+	if n := c.Snapshot().RestartCount; n != 0 {
+		t.Fatalf("RestartCount after an explicit restart = %d, want 0", n)
+	}
+}

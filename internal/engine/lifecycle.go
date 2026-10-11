@@ -530,7 +530,8 @@ func (e *Engine) Restart(ref string, timeout *int) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.rec.RestartCount++
+	// RestartCount counts restart-policy restarts only; an explicit restart
+	// leaves it alone, as dockerd does (measured: Docker 29.8.1).
 	if err := e.startLocked(c, startAPI); err != nil {
 		return err
 	}
