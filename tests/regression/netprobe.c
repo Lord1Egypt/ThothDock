@@ -18,12 +18,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 static void probe(const char *what, int type, int bind_first, int v6, const char *ip, int port) {
     int s = socket(v6 ? AF_INET6 : AF_INET, type, 0);
     int r;
     if (s < 0) { printf("%s: socket: %s\n", what, strerror(errno)); return; }
+    struct timeval tv = {2, 0}; /* an unanswered TCP connect must not block the test */
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
     if (v6) {
         struct sockaddr_in6 b = {0}, d = {0};
         b.sin6_family = d.sin6_family = AF_INET6;
