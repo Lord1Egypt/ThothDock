@@ -51,6 +51,7 @@ type Server struct {
 	cert        tls.Certificate
 	fingerprint string
 	log         *slog.Logger
+	hosts       map[string]bool // names the Host header may carry
 	// CodeChanged is called after a pairing code is used up or exhausted, so
 	// whoever shows the code (the Android app) can stop showing a dead one.
 	CodeChanged func()
@@ -76,7 +77,25 @@ func New(cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{cfg: cfg, eng: newEngineClient(cfg.Socket), auth: a, cert: cert, fingerprint: fp, log: log}, nil
+	hosts := map[string]bool{"127.0.0.1": true, "localhost": true, "::1": true}
+	for _, h := range append([]string{host}, certHosts(host)...) {
+		if ip := net.ParseIP(h); ip == nil || !ip.IsUnspecified() {
+			hosts[strings.ToLower(h)] = true
+		}
+	}
+	return &Server{cfg: cfg, eng: newEngineClient(cfg.Socket), auth: a, cert: cert, fingerprint: fp, log: log, hosts: hosts}, nil
+}
+
+// hostAllowed: the Host header must name this panel -- its own address or
+// loopback -- whatever the port (adb or SSH forwards change it). A page on
+// another name that DNS-rebinds to the phone gets nothing, even before the
+// certificate and the host-scoped session cookie stop it.
+func (s *Server) hostAllowed(r *http.Request) bool {
+	h := r.Host
+	if hh, _, err := net.SplitHostPort(h); err == nil {
+		h = hh
+	}
+	return s.hosts[strings.ToLower(strings.Trim(h, "[]"))]
 }
 
 // certHosts are the names a new certificate covers: the listen address,
@@ -187,6 +206,10 @@ func (s *Server) headers(next http.Handler) http.Handler {
 		}
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+		}
+		if !s.hostAllowed(r) {
+			jsonError(w, http.StatusMisdirectedRequest, "this panel answers only on its own address")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -562,3 +562,33 @@ func TestNetworksAreDescribedByTheEngineAndCountedConsistently(t *testing.T) {
 		t.Fatalf("demo: %+v", n)
 	}
 }
+
+// A request whose Host is not the panel's own address (DNS rebinding) is
+// refused before any handler runs; the panel's own address works on any port.
+func TestHostHeaderMustNameThePanel(t *testing.T) {
+	f := newFixture(t)
+	for _, h := range []string{"evil.example", "evil.example:7690", "192.0.2.7"} {
+		r, _ := http.NewRequest("GET", f.srv.URL+"/", nil)
+		r.Host = h
+		resp, err := f.client.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMisdirectedRequest {
+			t.Fatalf("Host %q: got %d, want 421", h, resp.StatusCode)
+		}
+	}
+	for _, h := range []string{"127.0.0.1:17690", "localhost", "LOCALHOST:7690", "[::1]:7690"} {
+		r, _ := http.NewRequest("GET", f.srv.URL+"/", nil)
+		r.Host = h
+		resp, err := f.client.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Host %q: got %d, want 200", h, resp.StatusCode)
+		}
+	}
+}
