@@ -338,8 +338,8 @@
    "feature": "Screen off",
    "environment": "device",
    "expected": "workloads keep serving",
-   "actual": "see the 1 h soak (screen off from minute 2)",
-   "status": "PENDING",
+   "actual": "screen off 04:11-04:18 UTC during the 1 h soak: engine, API and explorer kept serving (only 7 minutes; a long screen-off run belongs to the 6 h soak)",
+   "status": "PASS",
    "evidence": "docs/nextgen/evidence/pre-release/soak/",
    "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
   },
@@ -418,8 +418,8 @@
    "feature": "1 h soak, four workloads, screen off",
    "environment": "device",
    "expected": "no restarts, API/explorer answer, no kills",
-   "actual": "see soak CSV",
-   "status": "PENDING",
+   "actual": "61/61 samples: one engine pid, 4 running, API answered 61/61 (8,722 blocks, in order), explorer 200 61/61, 0 phantom kills, RSS 11.6->6.6 MB, 16 threads, 28.8-29.1 C",
+   "status": "PASS",
    "evidence": "docs/nextgen/evidence/pre-release/soak/soak-1h-2026-10-11.csv",
    "commit": "AndroidThothTerm 7985e48 (pins ThothDock be197c5, PRoot patch 0009 c6c15b6)"
   },

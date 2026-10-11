@@ -80,10 +80,30 @@ image hard-codes the API at port 4000.
 
 | Item | Status | Effect |
 |---|---|---|
-| 1 h soak with the four workloads, screen off | running at the time of writing; result appended below | gate for "no restarts / no kills" under a real workload |
+| 1 h soak with the four workloads | **PASS** (below) | no restart, no kill, no growth under a real workload |
 | 6 h, 24 h, 48 h soak | not run (real elapsed time; `tests/device/soak.sh` ready) | required before calling the build stable |
 | Wild Rift coexistence | owner-assisted, not done | required by the owner's own acceptance |
 | Phantom-process budget | **open risk (QA-07)**: nothing warns before Android kills the engine | a user adding a few containers to a heavy stack can lose all of them until the app is reopened |
 | Network disconnection | skipped: ADB runs over Wi-Fi here | untested |
 | Scroll restoration on recreation | implemented, not measured | low |
 | Battery/thermal | phone was charging; only temperature sampled | no power claim is made |
+
+## 1-hour soak result (2026-10-11 04:10-05:10 UTC)
+
+`evidence/pre-release/soak/soak-1h-2026-10-11.csv`, one sample a minute from the computer over adb
+(`tests/device/soak.sh`), the owner's four workloads (TON API, TON explorer, two small fixtures):
+
+| Measure | Result |
+|---|---|
+| Samples | 61/61 |
+| Engine restarts | 0 (one engine pid throughout) |
+| Containers running | 4 in every sample |
+| TON API `/block/latest` | answered 61/61, 8,722 new blocks, always increasing |
+| Explorer | HTTP 200 61/61 |
+| Android phantom-process kills | 0 (the app held 22 processes) |
+| Engine memory | RSS 11.6 MB at start, 5.3 MB minimum, 6.6 MB at the end; 16 threads |
+| Temperature | 28.8-29.1 C (the phone was charging: 35 -> 42%, so no power claim) |
+
+The screen was off from 04:11 to 04:18 UTC (the owner then unlocked the phone); the
+workloads kept serving through it. That is a short screen-off window, not a substitute
+for the 6 h run.

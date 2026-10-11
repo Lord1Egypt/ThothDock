@@ -1,0 +1,374 @@
+######## ordinary apt
+$ apt-get update
+Hit:1 http://deb.debian.org/debian trixie InRelease
+Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+Get:4 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [266 kB]
+Fetched 357 kB in 1s (306 kB/s)
+Reading package lists...
+[exit 0]
+PASS: apt-get update
+$ apt-get -y upgrade
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt-get upgrade
+$ apt-get -y full-upgrade
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt-get full-upgrade
+$ apt-get -y install tree
+After this operation, 173 kB of additional disk space will be used.
+Selecting previously unselected package tree.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 
+Preparing to unpack .../tree_2.2.1-1_arm64.deb ...
+Unpacking tree (2.2.1-1) ...
+Setting up tree (2.2.1-1) ...
+[exit 0]
+PASS: install an unrelated package
+$ tree --version
+tree v2.2.1 © 1996 - 2024 by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro
+[exit 0]
+PASS: unrelated package works
+$ apt-get -y remove tree
+The following packages will be REMOVED:
+  tree
+0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
+After this operation, 173 kB disk space will be freed.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 
+Removing tree (2.2.1-1) ...
+[exit 0]
+PASS: remove an unrelated package
+$ apt-get -y install docker-cli docker-compose
+Reading package lists...
+Building dependency tree...
+Reading state information...
+docker-cli is already the newest version (26.1.5+dfsg1-9+deb13u1).
+docker-compose is already the newest version (2.26.1-4).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: docker-cli and docker-compose stay installable
+$ placeholders_ok
+placeholders-intact
+[exit 0]
+PASS: the placeholders are untouched by ordinary apt
+######## stock engine names
+$ apt-get -y install docker.io
+Reading package lists...
+Building dependency tree...
+Reading state information...
+docker.io is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install docker.io is a no-op on the placeholder
+$ apt-get -y install docker-ce
+Reading package lists...
+Building dependency tree...
+Reading state information...
+docker-ce is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install docker-ce is a no-op on the placeholder
+$ apt-get -y install containerd
+Reading package lists...
+Building dependency tree...
+Reading state information...
+containerd is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install containerd is a no-op on the placeholder
+$ apt-get -y install containerd.io
+Reading package lists...
+Building dependency tree...
+Reading state information...
+containerd.io is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install containerd.io is a no-op on the placeholder
+$ apt-get -y install runc
+Reading package lists...
+Building dependency tree...
+Reading state information...
+runc is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install runc is a no-op on the placeholder
+$ apt-get -y install moby-engine
+Reading package lists...
+Building dependency tree...
+Reading state information...
+moby-engine is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install moby-engine is a no-op on the placeholder
+$ apt-get -y install docker-engine
+Reading package lists...
+Building dependency tree...
+Reading state information...
+docker-engine is already the newest version (9999:1.0+thothdock.1).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: apt install docker-engine is a no-op on the placeholder
+$ apt-get -y install docker
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+However the following packages replace it:
+  wmdocker
+
+E: Package 'docker' has no installation candidate
+[exit 100]
+PASS: apt install docker (not in Debian) fails honestly
+$ apt-get -y install docker-ce-cli
+Reading state information...
+Package docker-ce-cli is not available, but is referred to by another package.
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+
+E: Package 'docker-ce-cli' has no installation candidate
+[exit 100]
+PASS: apt install docker-ce-cli (not in Debian) fails honestly
+$ apt-get -y install docker-compose-plugin
+Reading package lists...
+Building dependency tree...
+Reading state information...
+E: Unable to locate package docker-compose-plugin
+[exit 100]
+PASS: apt install docker-compose-plugin (not in Debian) fails honestly
+$ apt-get -y --allow-downgrades install docker.io=26.1.5+dfsg1-9+deb13u1
+E: The Docker CLI is unaffected; update ThothDock through its app.
+0 upgraded, 69 newly installed, 1 downgraded, 2 to remove and 0 not upgraded.
+Need to get 0 B/47.6 MB of archives.
+After this operation, 242 MB of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: explicit stock docker.io version is refused
+$ apt-get -y --allow-downgrades install runc=1.1.15+ds1-2+b4
+E: The Docker CLI is unaffected; update ThothDock through its app.
+0 upgraded, 31 newly installed, 1 downgraded, 1 to remove and 0 not upgraded.
+Need to get 0 B/12.5 MB of archives.
+After this operation, 51.9 MB of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: explicit stock runc version is refused
+$ apt-get -y --allow-downgrades install containerd=1.7.24~ds1-6+deb13u1
+E: The Docker CLI is unaffected; update ThothDock through its app.
+0 upgraded, 0 newly installed, 1 downgraded, 1 to remove and 0 not upgraded.
+Need to get 0 B/19.7 MB of archives.
+After this operation, 84.7 MB of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: explicit stock containerd version is refused
+$ apt-get -y --reinstall install docker.io
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Reinstallation of docker.io is not possible, it cannot be downloaded.
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+[exit 0]
+PASS: reinstall of a placeholder cannot fetch a stock engine
+######## removal
+$ apt-get -y remove runc
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt remove runc is refused
+$ apt-get -y purge runc
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt purge runc is refused
+$ apt-get -y remove docker.io
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt remove docker.io is refused
+$ apt-get -y purge docker.io
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt purge docker.io is refused
+$ apt-get -y remove containerd.io
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt remove containerd.io is refused
+$ apt-get -y purge containerd.io
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 2 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt purge containerd.io is refused
+$ apt-get -y remove thothdock-engine-guard
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt remove thothdock-engine-guard is refused
+$ apt-get -y purge thothdock-engine-guard
+E: the placeholders keep apt from installing a stock engine over it.
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
+After this operation, 0 B of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: apt purge thothdock-engine-guard is refused
+$ apt-get -y install podman-docker
+E: A package that conflicts with them (such as podman-docker) cannot be installed here.
+0 upgraded, 110 newly installed, 3 to remove and 0 not upgraded.
+Need to get 0 B/104 MB of archives.
+After this operation, 415 MB of additional disk space will be used.
+E: Sub-process /usr/lib/thothdock/engine-guard-hook returned an error code (1)
+E: Failure running script /usr/lib/thothdock/engine-guard-hook
+[exit 100]
+PASS: podman-docker (Conflicts: docker.io) is refused
+$ placeholders_ok
+placeholders-intact
+[exit 0]
+PASS: the placeholders survived every removal attempt
+######## direct dpkg (apt's hook does not run)
+$ dpkg -i --force-depends /tmp/tmp.AHNa9mhYBR/dl/containerd_1.7.24~ds1-6+deb13u1_arm64.deb
+  containerd (version 1.7.24~ds1-6+deb13u1) is to be installed.
+
+dpkg: error processing archive /tmp/tmp.AHNa9mhYBR/dl/containerd_1.7.24~ds1-6+deb13u1_arm64.deb (--install):
+ conflicting packages - not installing containerd
+Errors were encountered while processing:
+ /tmp/tmp.AHNa9mhYBR/dl/containerd_1.7.24~ds1-6+deb13u1_arm64.deb
+[exit 1]
+PASS: dpkg -i containerd (stock) is refused before unpacking
+$ dpkg -i --force-depends /tmp/tmp.AHNa9mhYBR/dl/docker.io_26.1.5+dfsg1-9+deb13u1_arm64.deb
+  docker-ce (version 9999:1.0+thothdock.1) is present and installed.
+
+dpkg: error processing archive /tmp/tmp.AHNa9mhYBR/dl/docker.io_26.1.5+dfsg1-9+deb13u1_arm64.deb (--install):
+ conflicting packages - not installing docker.io
+Errors were encountered while processing:
+ /tmp/tmp.AHNa9mhYBR/dl/docker.io_26.1.5+dfsg1-9+deb13u1_arm64.deb
+[exit 1]
+PASS: dpkg -i docker.io (stock) is refused before unpacking
+$ dpkg -i --force-depends /tmp/tmp.AHNa9mhYBR/dl/runc_1.1.15+ds1-2+b4_arm64.deb
+  runc (version 1.1.15+ds1-2+b4) is to be installed.
+
+dpkg: error processing archive /tmp/tmp.AHNa9mhYBR/dl/runc_1.1.15+ds1-2+b4_arm64.deb (--install):
+ conflicting packages - not installing runc
+Errors were encountered while processing:
+ /tmp/tmp.AHNa9mhYBR/dl/runc_1.1.15+ds1-2+b4_arm64.deb
+[exit 1]
+PASS: dpkg -i runc (stock) is refused before unpacking
+$ dpkg -r runc
+ thothdock-engine-guard depends on runc (>= 9999:1.0+thothdock.1).
+
+dpkg: error processing package runc (--remove):
+ dependency problems - not removing
+Errors were encountered while processing:
+ runc
+[exit 1]
+PASS: dpkg -r runc is refused
+$ dpkg -P containerd
+ thothdock-engine-guard depends on containerd (>= 9999:1.0+thothdock.1).
+
+dpkg: error processing package containerd (--purge):
+ dependency problems - not removing
+Errors were encountered while processing:
+ containerd
+[exit 1]
+PASS: dpkg -P containerd is refused
+$ realbins
+0
+[exit 0]
+PASS: no stock engine binary landed
+$ dpkg -i /tmp/tmp.AHNa9mhYBR/shim.deb
+Preparing to unpack /tmp/tmp.AHNa9mhYBR/shim.deb ...
+Unpacking shim-test (1) ...
+dpkg: error processing archive /tmp/tmp.AHNa9mhYBR/shim.deb (--install):
+ unable to make backup link of './usr/local/bin/docker' before installing new version: Operation not permitted
+Errors were encountered while processing:
+ /tmp/tmp.AHNa9mhYBR/shim.deb
+[exit 1]
+PASS: a package cannot replace the managed CLI or engine tool
+######## the engine afterwards
+$ managed
+6685bf6298efba6a36f412f938ed1540eafe15bb0525eb839f9051bba92c981c 7fd82501dd0a2217aeb4abd63d8c092b07bdf2cfa354797f0e92b4c5f85f4d17 3e694f3c2284934648b4d5ee2b3336ad83f0e70191df1f0b63fac3a1d5026dde
+[exit 0]
+PASS: managed CLI and engine tool unchanged
+$ placeholders_ok
+placeholders-intact
+[exit 0]
+PASS: placeholders and guard intact
+$ engineprocs
+0
+[exit 0]
+PASS: no stock engine process in the guest
+$ docker version
+  Built:            
+  OS/Arch:          linux/arm64
+  Experimental:     false
+ proot:
+  Version:          PRoot 5.1.0
+  Path:             /data/app/~~LJNoaSGyG-0SWtggBKVVmw==/com.thothterm.debian.qa.nextgen-cHFe5jTt5lyiZWMReK3bOg==/lib/arm64/libproot.so
+[exit 0]
+PASS: docker version
+$ docker info
+ Live Restore Enabled: false
+
+WARNING: ThothDock runs containers under PRoot (ptrace) in user space: there are no kernel namespaces, cgroups, capabilities or seccomp profiles, so containers are not a security boundary
+WARNING: No memory, CPU or PID limit support (no cgroups)
+WARNING: Containers share the device network and process table (no network or PID namespace)
+WARNING: Root inside a container is emulated by PRoot and grants no host privilege
+[exit 0]
+PASS: docker info
+$ docker ps
+CONTAINER ID   IMAGE                            COMMAND                  CREATED        STATUS              PORTS                      NAMES
+d4372a89fcc9   akim92/egyptianarmyapi:v58       "docker-entrypoint.s…"   11 hours ago   Up About a minute   127.0.0.1:4000->3000/tcp   EgyptArmyAPI
+c1185a6e81b5   akim92/egyptianarmyexplorer:v1   "/docker-entrypoint.…"   11 hours ago   Up About a minute   127.0.0.1:8080->80/tcp     tonapi-explorer-1
+e695b3a7911f   alpine:3.20                      "sleep 100000"           12 hours ago   Up About a minute                              keep
+a864685d1bc9   alpine:3.20                      "sh -c while true; d…"   12 hours ago   Up About a minute                              web1
+[exit 0]
+PASS: docker ps
+$ docker compose version
+Docker Compose version 2.26.1-4
+[exit 0]
+PASS: docker compose version
+$ sh -c echo $(docker ps -aq | wc -l)/$(docker images -q | wc -l)/$(docker volume ls -q | wc -l)
+4/3/0
+[exit 0]
+PASS: containers, images and volumes intact
+$ sh -c thothdock doctor --guard | grep -E "WARN|FAIL" || echo no problems
+no problems
+[exit 0]
+PASS: doctor --guard: no WARN/FAIL
