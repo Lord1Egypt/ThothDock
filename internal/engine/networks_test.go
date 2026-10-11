@@ -249,3 +249,30 @@ func TestExtraHostsHostGatewayOnANetwork(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// Docker and Compose accept underscores in aliases (a service named my_api is
+// its own alias); names that could break the hosts file stay refused.
+func TestAliasesAcceptUnderscoresButNotHostsFileBreakers(t *testing.T) {
+	for _, ok := range []string{"my_api", "qa_backend", "a-b.c_d", "web"} {
+		if !validHostsName(ok) {
+			t.Fatalf("%q should be accepted", ok)
+		}
+	}
+	for _, bad := range []string{"", "a b", "a\tb", "a\nb", "a#b", "-x\n127.0.0.1 evil", "a..b", strings.Repeat("a", 64)} {
+		if validHostsName(bad) {
+			t.Fatalf("%q must be refused", bad)
+		}
+	}
+	if validHostname("my_host") {
+		t.Fatal("a container hostname keeps the strict rule")
+	}
+	f := newFixture(t)
+	f.program()
+	if _, err := f.e.NetworkCreate(network.CreateRequest{Name: "u_net"}); err != nil {
+		t.Fatal(err)
+	}
+	id := f.onNetwork("svc-1", "u_net", "my_api")
+	if !hasLine(f.hosts(id), "127.77.0.2\t"+shortID(id)+" svc-1 my_api") {
+		t.Fatalf("alias not in hosts:\n%s", f.hosts(id))
+	}
+}

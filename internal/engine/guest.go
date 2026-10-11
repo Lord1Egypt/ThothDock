@@ -201,7 +201,15 @@ func hasEnv(env []string, key string) bool {
 	return false
 }
 
-func validHostname(h string) bool {
+func validHostname(h string) bool { return validName(h, false) }
+
+// validHostsName is a name ThothDock writes into a container's /etc/hosts:
+// a network alias (Compose uses each service name) or an --add-host name.
+// Docker accepts underscores there, and resolvers read them from the hosts
+// file; nothing that could start a new line or field is ever allowed.
+func validHostsName(h string) bool { return validName(h, true) }
+
+func validName(h string, underscore bool) bool {
 	if h == "" || len(h) > 253 {
 		return false
 	}
@@ -210,7 +218,7 @@ func validHostname(h string) bool {
 			return false
 		}
 		for _, c := range label {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || underscore && c == '_') {
 				return false
 			}
 		}
@@ -231,7 +239,7 @@ func hostsFile(hostname string, extra []string) ([]byte, error) {
 		if ip == "host-gateway" {
 			ip = "127.0.0.1"
 		}
-		if net.ParseIP(ip) == nil || !validHostname(name) {
+		if net.ParseIP(ip) == nil || !validHostsName(name) {
 			return nil, errdefs.Invalid("invalid extra host %q", h)
 		}
 		fmt.Fprintf(&b, "%s\t%s\n", ip, name)

@@ -64,7 +64,7 @@ func (e *Engine) endpointFor(ref string, ep *EndpointRequest) (network.Network, 
 			return n, rec, unsupported("container links", "use a user-defined network and names instead")
 		}
 		for _, a := range ep.Aliases {
-			if !validHostname(a) {
+			if !validHostsName(a) {
 				return n, rec, errdefs.Invalid("invalid network alias %q", a)
 			}
 		}
@@ -172,7 +172,7 @@ func hostsFor(self Record, all []Record) ([]byte, error) {
 		if ip == "host-gateway" {
 			ip = network.Gateway
 		}
-		if net.ParseIP(ip) == nil || !validHostname(name) {
+		if net.ParseIP(ip) == nil || !validHostsName(name) {
 			return nil, errdefs.Invalid("invalid extra host %q", h)
 		}
 		fmt.Fprintf(&b, "%s\t%s\n", ip, name)
