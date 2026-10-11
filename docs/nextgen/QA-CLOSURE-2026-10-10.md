@@ -48,8 +48,9 @@ drove the Android UI through the owner's exact sequence — pair, authenticated,
 Stop, Start, reopen with the old cookie: **401 on the session, start, stop,
 restart, delete and the event stream; fresh pairing 200** — and Disconnect all
 devices with two browsers: **both 401 at once, event stream ended, panel still
-listening, new code works, fingerprint unchanged**: 24/24
-(`evidence/final-release/session-lifecycle/device-lifecycle.log`; codes,
+listening, new code works, fingerprint unchanged**: 24/24 on build 013ae9f and again 24/24 on the release-candidate engine 508ac4e, with
+desktop-browser screenshots
+(`evidence/final-release/session-lifecycle/device-lifecycle*.log`, `shots/`; codes,
 cookies and CSRF tokens are never printed). The existing 22 panel security
 checks pass again (`panel-security-*.log`). Only a disposable container
 (`qa-disposable`) was started, stopped and removed; the owner's four containers
@@ -100,7 +101,30 @@ no destructive testing was done on the owner's phone.
 
 ## 5. Performance (Samsung SM-A165F, four workloads, idle)
 
-@@PERF@@
+Method: `tests/device/perf-sample.sh` (read-only, over adb): two `/proc` samples
+60 s apart of the engine and of every process of the app's uid, with the owner's
+four workloads running and the app in the background. CSV files:
+`evidence/final-release/perf/`.
+
+| State | Engine RSS | Engine threads | Engine CPU | Engine voluntary context switches | App processes |
+|---|---|---|---|---|---|
+| Before Process Guard (be197c5, engine up about 7 h), 3 samples | 6.3 MB | 17 | 0.07-0.11 % | 0 / s | 22-23 |
+| **Final candidate** (ThothDock 508ac4e, up about 5 min), 3 samples | 6.7-6.8 MB | 15 | 0.05-0.08 % | 0 / s | 22 |
+| Intermediate build after heavy testing (engine up 35 min), 3 samples | 13.6-14.9 MB | 19 | 0.07-0.08 % | 0 / s | 22 |
+| The same intermediate build with the Containers screen open | 14.6-14.9 MB | 19 | 0.54-0.57 % | 0 / s | 22 |
+
+Reading: with the app in the background the engine's idle CPU and wakeups are
+unchanged (0 wakeups). **The Containers screen polls the engine every 3 s while it is
+visible (an existing behaviour); that costs about 0.5 % of one core and stops when the
+screen is closed.** Process Guard's own part of that polling is one `/proc` scan at most
+every 30 s (about 3 ms on the host). The intermediate build's higher RSS appeared
+after a long test session in that engine (Go heap high-water mark; the final
+candidate, started fresh, is back at 6.7 MB); it is **not** attributable to Process
+Guard by this data. A host A/B of idle daemons (`evidence/final-release/perf/host-idle-ab.txt`,
+3 interleaved pairs, monitor inactive on the host): RSS 11.74 vs 11.83 MB, threads
+equal, 0 CPU, 0 switches in 20 s. Container start and UI responsiveness were not
+re-measured separately; the 120-switch stress and the earlier 0.6-1.3 s start times
+were not repeated.
 
 ## 6. Regression results
 

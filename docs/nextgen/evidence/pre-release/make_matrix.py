@@ -81,7 +81,7 @@ rows = [
     ("L-11", "Engine Guard hardening (48) and LAN Mode on the final build", "device", "re-run", "not re-run: no guard or LAN file changed since the passing runs; doctor --guard clean", "NOT_RERUN", "", APP),
     ("L-12", "Upgrade from a real v0.1.1 data root", "host", "containers, image, named volume with data kept; no container starts by itself; old containers run", "pass", "PASS", "tests/regression/upgrade-from-v0.1.1.sh", ENGINE),
     ("L-13", "In-place upgrade of the QA app on the phone (data kept, four containers restored by policy)", "device", "no data loss", "three in-place installs; /home/thoth and containers intact; 4/4 restored each time", "PASS", E.replace("pre-release","final-release") + "pre-install-containers.txt", APP),
-    ("L-14", "Idle cost before and after Process Guard", "device", "no meaningful regression", "@@PERFROW@@", "@@PERFSTATUS@@", E.replace("pre-release","final-release") + "perf/", APP),
+    ("L-14", "Idle cost before and after Process Guard", "device", "no meaningful regression", "app in background: engine 6.7 MB RSS, 15 threads, 0.05-0.08% CPU, 0 wakeups (before: 6.3 MB, 17 threads, 0.07-0.11%, 0). Containers screen open: +0.5% CPU from its existing 3 s polling. An intermediate build showed 14 MB RSS after a long test session, not reproduced on the final candidate.", "PASS", E.replace("pre-release","final-release") + "perf/", APP),
     ("L-15", "Targeted Critical/High security audit", "host", "no open Critical/High", "one P1 (sessions) fixed; no other Critical/High found; targeted review, not a proof of absence", "PASS", "docs/nextgen/QA-CLOSURE-2026-10-10.md section 4", ENGINE),
 ]
 
