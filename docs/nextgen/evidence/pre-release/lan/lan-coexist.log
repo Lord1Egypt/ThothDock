@@ -1,0 +1,7 @@
+PASS: LAN pairing (200)
+PASS: Web Panel pairing (200)
+PASS: the LAN token does not open the Web Panel (401)
+PASS: the Web Panel session works (200)
+PASS: the Web Panel session does not open LAN Mode (401)
+PASS: the LAN session works (204)
+lan-mode coexist: 0 failure(s)

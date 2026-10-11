@@ -1,0 +1,21 @@
+PASS: the served certificate matches the fingerprint the phone shows
+PASS: unauthenticated GET /api/summary is refused (401)
+PASS: unauthenticated GET /api/containers is refused (401)
+PASS: unauthenticated GET /api/networks is refused (401)
+PASS: unauthenticated GET /api/events is refused (401)
+PASS: unauthenticated stop is refused (401)
+PASS: a foreign Host header (DNS rebinding) is refused (421)
+PASS: pairing from a foreign Origin is refused (403)
+PASS: pairing with the code from the phone (200)
+PASS: session cookie is HttpOnly, Secure, SameSite=Strict
+PASS: the same code cannot pair a second browser (401)
+PASS: the session reads the summary
+PASS: a state change without the CSRF token is refused (403)
+PASS: a state change from a foreign Origin is refused (403)
+PASS: a wrong CSRF token is refused (403)
+PASS: stop web1 with Origin and CSRF (200)
+PASS: start web1 again (200)
+PASS: an action outside the allow list is refused (404)
+PASS: sign out (200)
+PASS: the signed-out session is dead (401)
+device panel security (session): 0 failure(s)

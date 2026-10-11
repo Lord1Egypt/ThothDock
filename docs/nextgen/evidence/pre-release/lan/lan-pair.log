@@ -1,0 +1,15 @@
+PASS: a foreign Host header is refused (421)
+PASS: pairing from a foreign Origin is refused (403)
+PASS: paired with the PIN from the phone; the browser holds a token
+PASS: typing reaches the guest shell and its output comes back
+PASS: the terminal is the phone's Debian guest
+PASS: resizing the browser resizes the guest terminal (['40 135'] -> ['25 93'])
+PASS: file upload finished: 'Uploaded 2 files to /home/thoth. Kept both, as: qa-blob (3).bin, qa-note (3).txt.' into ''
+UPLOAD_TARGET=
+PASS: folder upload finished: 'Uploaded “lanup (3)” to /home/thoth.'
+PASS: after the tab was closed, a new tab reconnects without the PIN
+PASS: the reconnected terminal works
+PASS: the token is a live session (204)
+PASS: after sign-out the old token is refused (401)
+PASS: no CSP violation
+lan-mode pair: 0 failure(s)

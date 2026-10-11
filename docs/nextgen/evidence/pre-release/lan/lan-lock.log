@@ -1,0 +1,2 @@
+PASS: after five wrong PINs the right PIN no longer pairs (423 b'{"error":"locked"}')
+lan-mode lock: 0 failure(s)

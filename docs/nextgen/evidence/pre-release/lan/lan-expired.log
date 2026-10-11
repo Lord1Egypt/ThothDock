@@ -1,0 +1,2 @@
+PASS: a PIN past its two-minute life no longer pairs (410 b'{"error":"expired"}')
+lan-mode expired: 0 failure(s)
