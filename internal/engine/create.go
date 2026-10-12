@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -231,11 +232,19 @@ func (e *Engine) Create(req CreateRequest, name, platform string) (string, []str
 	if len(ic.ExposedPorts) > 0 && cfg.ExposedPorts == nil {
 		cfg.ExposedPorts = ic.ExposedPorts
 	}
+	// A declared volume that a named volume or bind mount already covers
+	// (docker run -v pgdata:/var/lib/postgresql/data) is not anonymous.
+	mounted := map[string]bool{}
+	for _, b := range binds {
+		mounted[b.Target] = true
+	}
 	for v := range ic.Volumes {
-		warnings = append(warnings, fmt.Sprintf("image volume %s stays inside the container's filesystem (anonymous volumes are not implemented)", v))
+		if !mounted[path.Clean(v)] {
+			warnings = append(warnings, fmt.Sprintf("image volume %s stays inside the container's filesystem (anonymous volumes are not implemented)", v))
+		}
 	}
 	for v := range cfg.Volumes {
-		if _, ok := ic.Volumes[v]; !ok {
+		if _, ok := ic.Volumes[v]; !ok && !mounted[path.Clean(v)] {
 			warnings = append(warnings, fmt.Sprintf("volume %s stays inside the container's filesystem (anonymous volumes are not implemented)", v))
 		}
 	}
