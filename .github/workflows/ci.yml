@@ -100,7 +100,7 @@ jobs:
   nextgen:
     runs-on: ubuntu-24.04
     env:
-      GARDEN_COMMIT: 324df86b2bfd0a3c94a44bf2b61de33043d66922
+      GARDEN_COMMIT: 79670f424c8a4e81bbf0b7ced74cabd7bad993c6
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -112,7 +112,7 @@ jobs:
           ref: ${{ env.GARDEN_COMMIT }}
           path: garden
           submodules: false
-      - name: Garden PRoot (patches 0001-0009) and its --net-ip host check
+      - name: Garden PRoot (patches 0001-0014) and its --net-ip host check
         run: |
           git -C garden submodule update --init --depth 1 third_party/proot
           mkdir -p "$RUNNER_TEMP/gp"
@@ -130,3 +130,26 @@ jobs:
         run: |
           docker compose version
           tests/regression/compose.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/garden-proot"
+      # System V IPC and the PRoot checks need unprivileged user and IPC
+      # namespaces, which Ubuntu 24.04 restricts through AppArmor.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Garden PRoot System V IPC and guest semantics checks (patches 0010-0014)
+        run: |
+          WORK="$RUNNER_TEMP/gs1" sh garden/tests/garden-common/proot/sysvipc-check.sh
+          WORK="$RUNNER_TEMP/gs2" sh garden/tests/garden-common/proot/guest-semantics-check.sh
+      - name: Runtime System V IPC and host name with Garden's PRoot
+        run: |
+          gcc -O2 -static -pthread -o "$RUNNER_TEMP/ipc-probe" tests/regression/ipc-probe.c
+          THOTHDOCK_TEST_PROOT="$RUNNER_TEMP/garden-proot" THOTHDOCK_TEST_IPC_PROBE="$RUNNER_TEMP/ipc-probe" \
+            go test -race -count=1 -run 'SysVIPC|Hostname' -v ./internal/runtime/
+      - name: Container compatibility subset (probes, PostgreSQL, Redis, nginx)
+        run: |
+          tests/compatibility/probes/build.sh amd64 tests/compatibility/probes/bin
+          mkdir -p "$RUNNER_TEMP/compat"
+          "$RUNNER_TEMP/thothdock" serve --root "$RUNNER_TEMP/compat" --proot "$RUNNER_TEMP/garden-proot" > "$RUNNER_TEMP/compat.log" 2>&1 &
+          for _ in $(seq 100); do [ -S "$RUNNER_TEMP/compat/run/thothdock.sock" ] && break; sleep 0.1; done
+          COMPAT_DOCKER_HOST="unix://$RUNNER_TEMP/compat/run/thothdock.sock" COMPAT_EVIDENCE="$RUNNER_TEMP/evidence" \
+            sh tests/compatibility/runner/run.sh P-CORE P-IPC G-ALPINE A-POSTGRES C-REDIS D-NGINX
+          cat "$RUNNER_TEMP/evidence/results.txt"
+          ! grep -v 'status=PASS' "$RUNNER_TEMP/evidence/results.txt"
