@@ -28,7 +28,7 @@ dk start "$(name srv)" >/dev/null
 wait_for 30 dk exec "$(name srv)" test -S $S
 ok "$([ "$(dk run --rm -v "$V":/v $IMG /v/unix-probe connect $S)" = "pong peer=$S" ]; echo $?)" "after a server restart the recreated socket works"
 out=$(dk run --rm -v "$V":/v $IMG /v/unix-probe serve $S 2>&1 < /dev/null)
-ok "$(echo "$out" | grep -qi 'address already in use'; echo $?)" "a competing bind fails with EADDRINUSE"
+ok "$(echo "$out" | grep -qiE 'address (already )?in use'; echo $?)" "a competing bind fails with EADDRINUSE"
 ok "$([ "$(dk run --rm -v "$V":/v $IMG /v/unix-probe connect $S)" = "pong peer=$S" ]; echo $?)" "the first server is unaffected by the failed bind"
 dk container remove --force "$(name srv)" >/dev/null
 if [ -n "$COMPAT_ENGINE_ROOT" ] && [ -d "$COMPAT_ENGINE_ROOT/tmp/proot" ]; then
