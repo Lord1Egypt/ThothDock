@@ -21,8 +21,10 @@ minimal_env() {
     ok "$([ "$(echo "$perm" | sed -n 1p | cut -c1-10)" = "-rw-r-----" ] && echo "$perm" | grep -q '^f$' && echo "$perm" | grep -q '^x$' && echo "$perm" | grep -q rmok; echo $?)" \
         "permissions, hard link, symlink, temporary files"
     # Signals: SIGUSR1 reaches a trap; docker stop's SIGTERM ends a trapping shell.
-    run_bg sig "$IMG" sh -c 'trap "echo usr1 > /tmp/u" USR1; trap "exit 143" TERM; while :; do sleep 0.2; done'
-    wait_for 15 running "$(name sig)"
+    # The signal must not arrive before the trap exists (the default action of
+    # USR1 ends the shell): wait for "ready". PRoot starts slower on a phone.
+    run_bg sig "$IMG" sh -c 'trap "echo usr1 > /tmp/u" USR1; trap "exit 143" TERM; echo ready; while :; do sleep 0.2; done'
+    wait_for 30 sh -c "dk logs $(name sig) 2>&1 | grep -q ready"
     dk kill -s USR1 "$(name sig)" >/dev/null
     wait_for 10 x sig test -f /tmp/u; ok $? "docker kill -s USR1 reaches the trap"
     ok "$([ "$(x sig cat /tmp/u)" = usr1 ]; echo $?)" "docker exec sees the container's files"
