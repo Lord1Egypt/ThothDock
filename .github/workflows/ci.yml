@@ -100,7 +100,7 @@ jobs:
   nextgen:
     runs-on: ubuntu-24.04
     env:
-      GARDEN_COMMIT: dc7f38a834e014b79239ed062a8f21ad1b28db12
+      GARDEN_COMMIT: 7952cac270e5be231dde3a9cbcd8a553ea5c518d
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -112,7 +112,7 @@ jobs:
           ref: ${{ env.GARDEN_COMMIT }}
           path: garden
           submodules: false
-      - name: Garden PRoot (patches 0001-0015) and its --net-ip host check
+      - name: Garden PRoot (patches 0001-0017) and its --net-ip host check
         run: |
           git -C garden submodule update --init --depth 1 third_party/proot
           mkdir -p "$RUNNER_TEMP/gp"
@@ -134,7 +134,7 @@ jobs:
       # namespaces, which Ubuntu 24.04 restricts through AppArmor.
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Garden PRoot System V IPC and guest semantics checks (patches 0010-0015)
+      - name: Garden PRoot System V IPC and guest semantics checks (patches 0010-0017)
         run: |
           WORK="$RUNNER_TEMP/gs1" sh garden/tests/garden-common/proot/sysvipc-check.sh
           WORK="$RUNNER_TEMP/gs2" sh garden/tests/garden-common/proot/guest-semantics-check.sh
