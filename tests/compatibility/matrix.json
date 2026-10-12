@@ -318,6 +318,116 @@
    "cost": "medium",
    "expected": "static ThothDock + PRoot inside a container start a nested container (PRoot under PRoot)",
    "requires": "ptrace under ptrace"
+  },
+  {
+   "id": "P-UNIX",
+   "category": "Foundational probes",
+   "priority": "P0",
+   "image": "alpine:3.22",
+   "digest": "sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "Unix socket on a >180-byte host path: docker exec client, second container on a shared volume, server restart, competing bind, alias cleanup",
+   "requires": "PRoot patch 0014"
+  },
+  {
+   "id": "P-SQLITE",
+   "category": "Foundational probes",
+   "priority": "P0",
+   "image": "python:3.13-alpine",
+   "digest": "sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "SQLite WAL on a volume: concurrent processes, SIGKILLed transaction, checkpoint, reopen",
+   "requires": "mmap, POSIX/OFD locks, fsync"
+  },
+  {
+   "id": "P-LMDB",
+   "category": "Foundational probes",
+   "priority": "P0",
+   "image": "alpine:3.22",
+   "digest": "sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "LMDB load/dump/stat, concurrent readers and writer, reopen",
+   "requires": "big mmap, reader lock table"
+  },
+  {
+   "id": "D-PHPFPM",
+   "category": "HTTP server",
+   "priority": "P0",
+   "image": "php:8.4-fpm-alpine",
+   "digest": "sha256:78cd8de9970a9cd6ff4d98860a94eb5bf37dd2d5776b4785562dbfad01c29d5a",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "FastCGI over TCP and over a Unix socket on a volume (nginx in another container), reload, graceful stop",
+   "requires": "Unix sockets across PRoot instances"
+  },
+  {
+   "id": "C-COREDNS",
+   "category": "DNS",
+   "priority": "P0",
+   "image": "coredns/coredns:1.12.1",
+   "digest": "sha256:e8c262566636e6bc340ece6473b0eed193cad045384401529721ddbe6463d31c",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "DNS over UDP and TCP on a user network, NXDOMAIN, concurrent queries; UDP host publishing refused by design",
+   "requires": "UDP sockets"
+  },
+  {
+   "id": "M-MAILPIT",
+   "category": "Mail",
+   "priority": "P0",
+   "image": "axllent/mailpit:v1.27",
+   "digest": "sha256:e22dce5b36f93c77082e204a3942fb6b283b7896e057458400a4c88344c3df68",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "SMTP submission, HTTP API, search, concurrent sessions, SQLite persistence",
+   "requires": "sockets, SQLite"
+  },
+  {
+   "id": "P-PROMETHEUS",
+   "category": "Monitoring",
+   "priority": "P0",
+   "image": "prom/prometheus:v3.5.0",
+   "digest": "sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "medium",
+   "expected": "scrape, query, WAL replay after restart and SIGKILL, fd and thread growth, idle context switches",
+   "requires": "TSDB mmap, fsync"
+  },
+  {
+   "id": "L-FLUENTBIT",
+   "category": "Logging",
+   "priority": "P0",
+   "image": "fluent/fluent-bit:4.0",
+   "digest": "sha256:945b0bdb80ff2886cebedbfa5130d0856877320368b7d9bd0431512907b75177",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "low",
+   "expected": "tail with inotify, rotation, truncation, parser, HTTP output, restart offsets, idle wake-ups",
+   "requires": "inotify"
+  },
+  {
+   "id": "S-OPENSSH",
+   "category": "Remote access",
+   "priority": "P0",
+   "image": "alpine:3.22",
+   "digest": "sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "medium",
+   "expected": "key auth, exec, PTY, stdin, SFTP with SHA-256, signal propagation, session cleanup (loopback network only)",
+   "requires": "privilege separation, PTY"
+  },
+  {
+   "id": "V-GITEA",
+   "category": "Git hosting",
+   "priority": "P0",
+   "image": "gitea/gitea:1.24-rootless",
+   "digest": "sha256:a664a64d7740ef0db74f090f567040d0e5b34592473aad08ed5e296ccbe00eab",
+   "architectures": "linux/arm64 linux/amd64",
+   "cost": "medium",
+   "expected": "SQLite, admin user, API repository, git clone/commit/push/fsck over HTTP, restart persistence",
+   "requires": "git subprocesses, hard links"
   }
  ]
 }
