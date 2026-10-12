@@ -35,7 +35,7 @@ Unsupported by design: Docker in Docker (`dockerd` needs namespaces/cgroups/moun
 ## Test notes you should know
 
 - P-UNIX fails 4 checks on PRoot 0001–0013, D-PHPFPM's stop and the signal unit test fail without the engine change, guest chroot check and S-OPENSSH fail without 0016/0017: the regression tests are real negative controls.
-- H-SEAWEEDFS: with stored objects `docker stop` took ~55 s and the container exited 137 although the grace period was 60 s; with an empty store it stops in 22 s with exit 0. The cause was not established (not reproduced in manual runs); the object was intact after restart. Classified PARTIAL, not a release blocker.
+- H-SEAWEEDFS (bounded investigation, owner decision 3): **application-specific graceful-shutdown hang, data intact, PARTIAL**. After SIGTERM, SeaweedFS 4.48 holding stored objects did not finish within 60, 150 or 300 s (`docker stop -t N`), and ThothDock killed it at the deadline (exit 137, as Docker does); `docker kill -s TERM` shows the same (still running after 130 s); with an empty store it stops in 22 s. A SIGQUIT goroutine dump (delivered by patch 0012) shows the main goroutine parked in `select {}` and the shutdown hook blocked in `Filer.Shutdown` → `LogBuffer.WaitForShutdown`, a Go `sync.WaitGroup` inside the application: no OS call, signal or PRoot operation is involved. The object's SHA-256 was identical after restart in every run. Not a ThothDock lifecycle defect; not a release blocker. (Timings here come from `date` on a WSL host whose clock drifts, which is why some durations looked shorter than the grace period.)
 - C-COREDNS was re-run once after relabelling a note (its result row came from that rerun, 9/9).
 - Docker Hub's anonymous quota (100 pulls/hour) interrupted two runs; `runner/prepull.sh` pulls through `mirror.gcr.io` (same digests, checked against `matrix.json`).
 - Several test-harness bugs were found and fixed on the way (variable clobbering, content types, hex dump format, `/proc` shared with the host, key permissions); none was counted as a runtime result.
@@ -69,5 +69,5 @@ Earlier on the same host: `--sysvipc` adds no measurable cost to a process-heavy
 ## Owner decisions (2026-10-12)
 
 1. MongoDB 8: documented as incompatible with 39-bit user address spaces; MongoDB 7.0 (v7.0.43 verified on the host) is the recommended alternative; no workaround attempted (docs/COMPATIBILITY.md).
-2. SeaweedFS shutdown with data: investigate or accept.
+2. SeaweedFS: investigated, application-specific, accepted as PARTIAL (see above).
 3. Ship 0.4.1 without a device re-run of all workloads (not recommended), or reconnect the phone for one focused QA round with the QA package.

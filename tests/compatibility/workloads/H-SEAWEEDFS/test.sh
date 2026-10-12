@@ -1,6 +1,8 @@
 # H-SEAWEEDFS: SeaweedFS (Go; master, volume, filer and S3 gateway in one
 # process): bucket, object upload/download with SHA-256 check, restart
-# persistence. The S3 gateway runs without credentials, on the test network
+# persistence. Known: with stored data its own shutdown hangs in Filer.Shutdown
+# (LogBuffer.WaitForShutdown), so this test is PARTIAL by application, data intact.
+# The S3 gateway runs without credentials, on the test network
 # only. Explicit alternative to H-MINIO, not a substitute result for it.
 # timeout: 300
 IMG=chrislusf/seaweedfs:latest
