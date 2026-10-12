@@ -66,8 +66,8 @@ Earlier on the same host: `--sysvipc` adds no measurable cost to a process-heavy
 | Reproducible F-Droid build, F-Droid MR update (!50342, open at the 0.4.0 recipe, pipeline green) | not started: needs frozen release commits |
 | Versions/tags | none created; suggested ThothDock `v0.2.1`, `trixie-v0.4.1` (versionCode 401); the app's engine pin is a fix-branch commit and must be re-pinned to the release commit first |
 
-## Open decisions for the owner
+## Owner decisions (2026-10-12)
 
-1. MongoDB 8 on 39-bit kernels: document as unsupported, or recommend MongoDB 7.
+1. MongoDB 8: documented as incompatible with 39-bit user address spaces; MongoDB 7.0 (v7.0.43 verified on the host) is the recommended alternative; no workaround attempted (docs/COMPATIBILITY.md).
 2. SeaweedFS shutdown with data: investigate or accept.
 3. Ship 0.4.1 without a device re-run of all workloads (not recommended), or reconnect the phone for one focused QA round with the QA package.
