@@ -7,7 +7,7 @@ IMG=alpine:3.22
 dk pull -q $IMG >/dev/null
 setup
 K=$(name keys); dk volume create "$K" >/dev/null
-dk run --rm -v "$K":/k $IMG sh -c 'apk add --no-cache openssh-keygen >/dev/null && ssh-keygen -q -t ed25519 -N "" -f /k/id && ssh-keygen -q -t ed25519 -N "" -f /k/host && cp /k/id.pub /k/authorized_keys && chmod 644 /k/*'
+dk run --rm -v "$K":/k $IMG sh -c 'apk add --no-cache openssh-keygen >/dev/null && ssh-keygen -q -t ed25519 -N "" -f /k/id && ssh-keygen -q -t ed25519 -N "" -f /k/host && cp /k/id.pub /k/authorized_keys && chmod 644 /k/authorized_keys /k/id.pub /k/host.pub && chmod 600 /k/id /k/host'
 run_bg sshd -v "$K":/k $IMG sh -c '
     apk add --no-cache openssh-server >/dev/null &&
     adduser -D -s /bin/sh tester && echo "tester:*" | chpasswd -e >/dev/null 2>&1; passwd -u tester >/dev/null 2>&1
@@ -27,11 +27,12 @@ ok "$([ "$(cli "echo piped | $SSH 'tr a-z A-Z'" )" = PIPED ]; echo $?)" "stdin p
 cli "head -c 2000000 /dev/urandom > /tmp/up && sha256sum /tmp/up | cut -d' ' -f1 > /tmp/up.sum && printf 'put /tmp/up /home/tester/up\nget /home/tester/up /tmp/down\n' | sftp -q -i /k/id -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes tester@$S >/dev/null && sha256sum /tmp/down | cut -d' ' -f1 | cmp - /tmp/up.sum && echo sftp-roundtrip-ok" > "$TMPD/sftp.out" 2>&1
 ok "$(grep -q sftp-roundtrip-ok "$TMPD/sftp.out"; echo $?)" "SFTP upload and download of 2 MB, SHA-256 equal"
 # Signal propagation and cleanup: kill the local ssh, the remote command must go.
-cli "$SSH -tt 'echo \$\$ > /tmp/rpid; exec sleep 300' & sleep 4; kill -TERM \$! ; sleep 3; echo killed" >/dev/null 2>&1
+cli "$SSH -tt 'echo \$\$ > /tmp/rpid; exec sleep 31337' & sleep 4; kill -TERM \$! ; sleep 3; echo killed" >/dev/null 2>&1
 sleep 3
-left=$(dk exec "$S" sh -c 'for d in /proc/[0-9]*; do [ "$(cat $d/comm 2>/dev/null)" = sleep ] && echo x; done' | wc -l)
-ok "$([ "$left" = 0 ]; echo $?)" "a killed client's remote command does not outlive its session ($left sleep left)"
-sess=$(dk exec "$S" sh -c 'for d in /proc/[0-9]*; do case "$(cat $d/cmdline 2>/dev/null | tr "\0" " ")" in "sshd: tester"*) echo x;; esac; done' | wc -l)
+# /proc inside a container is the host's: match the unique command line.
+left=$(dk exec "$S" sh -c 'for d in /proc/[0-9]*; do case "$(tr "\0" " " < $d/cmdline 2>/dev/null)" in "sleep 31337"*) echo x;; esac; done' | wc -l)
+ok "$([ "$left" = 0 ]; echo $?)" "a killed client's remote command does not outlive its session ($left left)"
+sess=$(dk exec "$S" sh -c 'for d in /proc/[0-9]*; do case "$(tr "\0" " " < $d/cmdline 2>/dev/null)" in "sshd: tester"*) echo x;; esac; done' | wc -l)
 ok "$([ "$sess" = 0 ]; echo $?)" "no session processes remain ($sess)"
 dk stop -t 15 "$S" >/dev/null
 ok "$(c=$(exit_code "$S"); [ "$c" = 0 ] || [ "$c" = 255 ] || [ "$c" = 143 ]; echo $?)" "sshd stops (exit $(exit_code "$S"))"

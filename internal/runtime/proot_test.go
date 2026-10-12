@@ -421,3 +421,39 @@ func TestPRootHostnameReachesUname(t *testing.T) {
 		t.Fatalf("uname -n = %q (%+v)", out, ex)
 	}
 }
+
+// A workload that calls setsid (php-fpm, sshd...) leaves proot's process
+// group; the stop signal must still reach it.
+func TestPRootSignalReachesAWorkloadThatLeftTheGroup(t *testing.T) {
+	r := testPRoot(t)
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("no setsid")
+	}
+	var out, errb syncBuf
+	p, err := r.Start(Spec{Rootfs: "/", Stdout: &out, Stderr: &errb, Args: []string{"/bin/sh", "-c",
+		`exec setsid sh -c 'trap "echo got-term; exit 7" TERM; echo ready; while :; do sleep 0.1; done'`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Kill()
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out.String(), "ready") {
+		if time.Now().After(deadline) {
+			t.Fatalf("workload did not start: %q %q", out.String(), errb.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan Exit, 1)
+	go func() { done <- p.Wait() }()
+	select {
+	case ex := <-done:
+		if ex.Code != 7 || !strings.Contains(out.String(), "got-term") {
+			t.Fatalf("exit %+v, output %q", ex, out.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("SIGTERM never reached the workload that left the process group; output %q", out.String())
+	}
+}

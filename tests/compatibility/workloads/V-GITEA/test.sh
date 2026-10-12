@@ -12,7 +12,7 @@ run_bg git -e GITEA__security__INSTALL_LOCK=true -e GITEA__database__DB_TYPE=sql
     -e GITEA__server__ROOT_URL=http://git:3000/ -e GITEA__server__DISABLE_SSH=true -e GITEA__log__LEVEL=Info \
     -e GITEA__repository__DEFAULT_BRANCH=main -v "$V":/var/lib/gitea -v "$V":/etc/gitea $IMG
 G=$(name git)
-api() { dk run --rm --network "$N" $CLI sh -c "apk add --no-cache curl >/dev/null 2>&1; curl -s --max-time 20 -u tester:Compat-Passw0rd! -H 'Content-Type: application/json' $*"; }
+api() { dk run --rm --network "$N" $CLI sh -c 'apk add --no-cache curl >/dev/null 2>&1; exec curl -s --max-time 20 -u "tester:Compat-Passw0rd!" -H "Content-Type: application/json" "$@"' curl "$@"; }
 wait_for 180 sh -c "dk run --rm --network $N $CLI wget -q -O /dev/null -T 3 http://$G:3000/api/healthz"
 ok $? "Gitea started and its SQLite database initialised"
 [ "$fails" = 0 ] || { logs_on_fail git; no_leftovers; return 0; }

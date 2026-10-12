@@ -374,11 +374,55 @@ func (p *prootProc) Signal(sig syscall.Signal) error {
 	if p.gone {
 		return nil
 	}
-	err := syscall.Kill(-p.cmd.Process.Pid, sig)
+	pid := p.cmd.Process.Pid
+	err := syscall.Kill(-pid, sig)
 	if err == syscall.ESRCH {
-		return nil
+		err = nil
+	}
+	// A workload may leave the group (php-fpm, sshd and other daemons call
+	// setsid or setpgid): docker stop must still reach its main process.
+	if child := mainTracee(pid); child > 0 {
+		if pg, perr := syscall.Getpgid(child); perr == nil && pg != pid {
+			if kerr := syscall.Kill(child, sig); kerr != nil && kerr != syscall.ESRCH && err == nil {
+				err = kerr
+			}
+		}
 	}
 	return err
+}
+
+// mainTracee is the host pid of the container's first process: the one child
+// proot forks (its other tracees are descendants of that one). Looked up
+// only when a signal is sent. proot is neither reaped nor exited while the
+// caller holds sigMu, so a process whose parent is proot's pid is its own
+// child and the pid cannot have been reused.
+func mainTracee(proot int) int {
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0
+	}
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid == proot {
+			continue
+		}
+		stat, err := os.ReadFile("/proc/" + e.Name() + "/stat")
+		if err != nil {
+			continue
+		}
+		// pid (comm) state ppid ...: comm may contain spaces and parentheses.
+		i := bytes.LastIndexByte(stat, ')')
+		if i < 0 {
+			continue
+		}
+		f := strings.Fields(string(stat[i+1:]))
+		if len(f) > 1 {
+			if ppid, err := strconv.Atoi(f[1]); err == nil && ppid == proot {
+				return pid
+			}
+		}
+	}
+	return 0
 }
 
 func (p *prootProc) Kill() error {
