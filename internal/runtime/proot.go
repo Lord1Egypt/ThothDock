@@ -43,6 +43,8 @@ type PRootRuntime struct {
 	// sysvIPC: this PRoot has --sysvipc, System V shared memory, semaphores
 	// and message queues for kernels without them (Android's).
 	sysvIPC bool
+	// hostname: this PRoot has --hostname (Garden patch 0013).
+	hostname bool
 }
 
 // NewPRoot checks that proot is executable.
@@ -87,6 +89,7 @@ func (r *PRootRuntime) checkOptions() error {
 	help := string(out)
 	r.netIP = strings.Contains(help, "--net-ip")
 	r.sysvIPC = strings.Contains(help, "--sysvipc")
+	r.hostname = strings.Contains(help, "--hostname")
 	for _, opt := range requiredOptions {
 		if !strings.Contains(help, opt) {
 			if err != nil {
@@ -131,6 +134,11 @@ func (r *PRootRuntime) Argv(spec Spec) []string {
 	}
 	if spec.NetIP != "" {
 		argv = append(argv, "--net-ip="+spec.NetIP)
+	}
+	// Before --kernel-release: PRoot's extensions run newest first, and
+	// kompat rewrites the whole utsname.
+	if r.hostname && spec.Hostname != "" {
+		argv = append(argv, "--hostname="+spec.Hostname)
 	}
 	if r.cfg.KernelRelease != "" {
 		argv = append(argv, "--kernel-release="+r.cfg.KernelRelease)

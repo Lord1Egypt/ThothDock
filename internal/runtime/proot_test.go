@@ -376,3 +376,48 @@ func TestSignalRacesWithExit(t *testing.T) {
 		p.Signal(syscall.SIGTERM)
 	}
 }
+
+func TestPRootHostnameOption(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "proot")
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink --hostname\"\n"), 0o755)
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir, KernelRelease: "6.1.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := r.Argv(Spec{Rootfs: "/r", Hostname: "web1", Args: []string{"/bin/true"}})
+	h, k := -1, -1
+	for i, a := range argv {
+		switch a {
+		case "--hostname=web1":
+			h = i
+		case "--kernel-release=6.1.0":
+			k = i
+		}
+	}
+	if h < 0 || k < 0 || h > k {
+		t.Fatalf("want --hostname before --kernel-release: %q", argv)
+	}
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r", Args: []string{"/bin/true"}}), " "); strings.Contains(argv, "--hostname") {
+		t.Fatalf("no hostname, no option: %s", argv)
+	}
+	// A PRoot without the option never gets it.
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
+	r, _ = NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r", Hostname: "web1"}), " "); strings.Contains(argv, "--hostname") {
+		t.Fatalf("unsupported PRoot got --hostname: %s", argv)
+	}
+}
+
+// With a real PRoot: uname, as hostname(1) and every runtime read it,
+// reports the container's host name.
+func TestPRootHostnameReachesUname(t *testing.T) {
+	r := testPRoot(t)
+	if !r.hostname {
+		t.Skip("this proot has no --hostname")
+	}
+	out, _, ex := run(t, r, Spec{Hostname: "compat-host", Args: []string{"/bin/sh", "-c", "uname -n"}})
+	if ex.Code != 0 || strings.TrimSpace(out) != "compat-host" {
+		t.Fatalf("uname -n = %q (%+v)", out, ex)
+	}
+}
