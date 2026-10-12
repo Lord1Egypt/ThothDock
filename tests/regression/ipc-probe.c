@@ -23,8 +23,8 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#if defined(__BIONIC__)
-/* bionic has no strerrorname_np. */
+#if !defined(__GLIBC__)
+/* Only glibc has strerrorname_np (not bionic, not musl). */
 static const char *strerrorname_np(int e)
 {
 	switch (e) {
@@ -35,7 +35,10 @@ static const char *strerrorname_np(int e)
 	default: return "E?";
 	}
 }
-#else
+#endif
+
+#if !defined(__BIONIC__)
+/* The caller defines it everywhere but bionic. */
 union semun { int val; struct semid_ds *buf; unsigned short *array; };
 #endif
 
