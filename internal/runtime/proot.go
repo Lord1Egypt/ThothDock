@@ -40,6 +40,9 @@ type PRootRuntime struct {
 	cfg PRootConfig
 	// netIP: this PRoot has --net-ip (Garden patch 0009).
 	netIP bool
+	// sysvIPC: this PRoot has --sysvipc, System V shared memory, semaphores
+	// and message queues for kernels without them (Android's).
+	sysvIPC bool
 }
 
 // NewPRoot checks that proot is executable.
@@ -83,6 +86,7 @@ func (r *PRootRuntime) checkOptions() error {
 	}
 	help := string(out)
 	r.netIP = strings.Contains(help, "--net-ip")
+	r.sysvIPC = strings.Contains(help, "--sysvipc")
 	for _, opt := range requiredOptions {
 		if !strings.Contains(help, opt) {
 			if err != nil {
@@ -119,6 +123,12 @@ func (r *PRootRuntime) Argv(spec Spec) []string {
 		cwd = "/"
 	}
 	argv = append(argv, "--cwd="+cwd, "--kill-on-exit")
+	if r.sysvIPC {
+		// Handled inside this proot: one IPC namespace per proot (so per
+		// container, and per docker exec), costing nothing until a
+		// workload makes an IPC call.
+		argv = append(argv, "--sysvipc")
+	}
 	if spec.NetIP != "" {
 		argv = append(argv, "--net-ip="+spec.NetIP)
 	}
@@ -151,6 +161,11 @@ func (r *PRootRuntime) Env(spec Spec) []string {
 		env = append(env, kv)
 	}
 	env = append(env, "PROOT_TMP_DIR="+r.cfg.TmpDir)
+	if r.sysvIPC {
+		// On Android, --sysvipc would otherwise route shared memory through
+		// libandroid-shmem, visible to every container of the app.
+		env = append(env, "PROOT_DONT_SHARE_LIBANDROID_SHMEM=1")
+	}
 	if r.cfg.Loader != "" {
 		env = append(env, "PROOT_LOADER="+r.cfg.Loader)
 	}

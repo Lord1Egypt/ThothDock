@@ -213,8 +213,90 @@ func TestPRootOptionCheck(t *testing.T) {
 		t.Fatalf("want missing-option error, got %v", err)
 	}
 	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
-	if _, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir}); err != nil {
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Without --sysvipc in the help text, neither the option nor its
+	// environment is passed.
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r"}), " "); strings.Contains(argv, "--sysvipc") {
+		t.Fatalf("argv without --sysvipc support: %s", argv)
+	}
+	if env := strings.Join(r.Env(Spec{}), " "); strings.Contains(env, "PROOT_DONT_SHARE_LIBANDROID_SHMEM") {
+		t.Fatalf("env without --sysvipc support: %s", env)
+	}
+}
+
+func TestPRootSysVIPCOption(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "proot")
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink --sysvipc\"\n"), 0o755)
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := r.Argv(Spec{Rootfs: "/r", Args: []string{"/bin/true"}})
+	at := -1
+	for i, a := range argv {
+		if a == "--sysvipc" {
+			at = i
+		}
+	}
+	// An option, so before the guest command and never part of it.
+	if at < 0 || at >= len(argv)-1 || argv[len(argv)-1] != "/bin/true" {
+		t.Fatalf("argv: %q", argv)
+	}
+	// A container's own PROOT_* settings never reach proot; ours always do.
+	env := r.Env(Spec{Env: []string{"PROOT_DONT_SHARE_LIBANDROID_SHMEM=0", "A=1"}})
+	n := 0
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PROOT_DONT_SHARE_LIBANDROID_SHMEM=") {
+			n++
+			if kv != "PROOT_DONT_SHARE_LIBANDROID_SHMEM=1" {
+				t.Fatalf("env: %q", env)
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("env: %q", env)
+	}
+}
+
+// System V IPC with a real PRoot: the probe a container runs (PostgreSQL's
+// interlock sequence, shared contents across processes, removal). The
+// host kernel has System V IPC, so the probe runs in an IPC namespace whose
+// limits are zero: a call that slipped past PRoot would fail.
+func TestPRootSysVIPC(t *testing.T) {
+	r := testPRoot(t)
+	if !r.sysvIPC {
+		t.Skip("this proot has no --sysvipc")
+	}
+	probe := os.Getenv("THOTHDOCK_TEST_IPC_PROBE")
+	if probe == "" {
+		t.Skip("THOTHDOCK_TEST_IPC_PROBE not set (tests/regression/ipc-probe.c, built static)")
+	}
+	unshare, err := exec.LookPath("unshare")
+	if err != nil {
+		t.Skip("no unshare")
+	}
+	if out, err := exec.Command(unshare, "-ri", "true").CombinedOutput(); err != nil {
+		t.Skipf("no unprivileged IPC namespaces: %v %s", err, out)
+	}
+	// unshare -ri, zero the limits, then exec the probe under proot.
+	cmd := exec.Command(unshare, append([]string{"-ri", "sh", "-c",
+		`echo 0 > /proc/sys/kernel/shmmni && echo "0 0 0 0" > /proc/sys/kernel/sem && echo 0 > /proc/sys/kernel/msgmni && exec "$@"`,
+		"ipcns"}, r.Argv(Spec{Rootfs: "/", UID: 0, GID: 0, Args: []string{probe, "all"}})...)...)
+	cmd.Env = r.Env(Spec{Env: []string{"PATH=/usr/bin:/bin"}})
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "all: 0 failure(s)") || strings.Contains(string(out), "FAIL") {
+		t.Fatalf("ipc probe under proot: %v\n%s", err, out)
+	}
+	// Nothing left behind in PROOT_TMP_DIR but proot's own loader copy.
+	ents, _ := os.ReadDir(r.cfg.TmpDir)
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), "prootshm") {
+			t.Fatalf("leftover %s", e.Name())
+		}
 	}
 }
 
