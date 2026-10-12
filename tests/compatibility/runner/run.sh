@@ -26,6 +26,8 @@ esac
 COMPAT_CLI_BIN=${COMPAT_DOCKER_CLI:-docker}
 EVID=${COMPAT_EVIDENCE:-$ROOT/evidence/$(date +%Y%m%d-%H%M%S)}
 export COMPAT_PROBES="${COMPAT_PROBES:-$ROOT/probes/bin}"
+# Optional: the engine's --root, so tests can look for leftover temporary files.
+export COMPAT_ENGINE_ROOT="${COMPAT_ENGINE_ROOT:-}"
 mkdir -p "$EVID"
 EVID=$(cd "$EVID" && pwd)
 

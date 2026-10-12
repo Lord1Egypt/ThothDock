@@ -14,7 +14,8 @@ ready; ok $? "broker running, management API reachable from another container"
 [ "$fails" = 0 ] || { logs_on_fail mq; return 0; }
 ok "$([ "$(dk run --rm --network "$N" nginx:1.28-alpine curl -s -o /dev/null -w '%{http_code}' -u compat:wrong http://$M:15672/api/overview)" = 401 ]; echo $?)" "wrong password refused (401)"
 api -X PUT http://$M:15672/api/queues/%2F/durable_q -d '{"durable": true}' >/dev/null
-api -X PUT http://$M:15672/api/queues/%2F/q2 -d '{"durable": false}' >/dev/null
+# RabbitMQ 4 refuses transient non-exclusive queues by default.
+api -X PUT http://$M:15672/api/queues/%2F/q2 -d '{"durable": true}' >/dev/null
 api -X PUT http://$M:15672/api/exchanges/%2F/fan -d '{"type": "fanout", "durable": true}' >/dev/null
 api -X POST http://$M:15672/api/bindings/%2F/e/fan/q/durable_q -d '{}' >/dev/null
 api -X POST http://$M:15672/api/bindings/%2F/e/fan/q/q2 -d '{}' >/dev/null

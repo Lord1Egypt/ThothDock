@@ -19,7 +19,7 @@ ok $? "S3 gateway up, bucket created"
 sum=$(c sh -c "head -c 3000000 /dev/urandom > /tmp/o && sha256sum /tmp/o | cut -d' ' -f1 && curl -sf -X PUT --data-binary @/tmp/o http://$S:8333/compat-bucket/object.bin >/dev/null && curl -sf http://$S:8333/compat-bucket/object.bin | sha256sum | cut -d' ' -f1")
 ok "$([ "$(echo "$sum" | sed -n 1p)" = "$(echo "$sum" | sed -n 2p)" ] && [ -n "$(echo "$sum" | sed -n 2p)" ]; echo $?)" "3 MB object round trip, SHA-256 equal"
 before=$(echo "$sum" | sed -n 1p)
-dk stop -t 30 "$S" >/dev/null
+dk stop -t 60 "$S" >/dev/null  # its graceful shutdown takes ~25 s
 ok "$(c2=$(exit_code "$S"); [ "$c2" = 0 ] || [ "$c2" = 143 ]; echo $?)" "docker stop ends the server (exit $(exit_code "$S"))"
 dk start "$S" >/dev/null
 wait_for 120 c curl -sf -o /dev/null "http://$S:8333/compat-bucket/object.bin"

@@ -15,5 +15,6 @@ arm64) CC=${CC_ARM64:?set CC_ARM64 to a static-capable aarch64 C compiler} ;;
 esac
 $CC -O2 -static -pthread -o "$OUT/core-probe" "$HERE/core-probe.c"
 $CC -O2 -static -pthread -o "$OUT/ipc-probe" "$HERE/../../regression/ipc-probe.c"
+$CC -O2 -static -o "$OUT/unix-probe" "$HERE/unix-probe.c"
 (cd "$HERE/go-probe" && CGO_ENABLED=0 GOOS=linux GOARCH=$ARCH GOFLAGS=-mod=mod go build -trimpath -ldflags=-s -o "$OUT/go-probe" .)
 ls -l "$OUT"
