@@ -51,9 +51,9 @@ for t in matrix["tests"]:
 os.makedirs(out, exist_ok=True)
 json.dump({"runs": [{"label": l, "evidence": p, "environment": e} for l, p, e, _ in runs], "tests": rows},
           open(os.path.join(out, "matrix-results.json"), "w"), indent=1)
-fields = list(rows[0].keys())
+fields = list(dict.fromkeys(k for r in rows for k in r))
 with open(os.path.join(out, "matrix.csv"), "w", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=fields)
+    w = csv.DictWriter(f, fieldnames=fields, restval="")
     w.writeheader()
     w.writerows(rows)
 with open(os.path.join(out, "summary.md"), "w") as f:

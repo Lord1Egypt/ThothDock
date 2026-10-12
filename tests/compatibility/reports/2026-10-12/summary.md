@@ -42,6 +42,11 @@
 | L-FLUENTBIT | P0 | `fluent/fluent-bit:4.0` | PASS (9/9) |
 | S-OPENSSH | P0 | `alpine:3.22` | PASS (10/10) |
 | V-GITEA | P0 | `gitea/gitea:1.24-rootless` | PASS (9/9) |
+| X-GRAFANA | P1 | `grafana/grafana:12.1.0` | NOT_TESTED |
+| X-FFMPEG | P1 | `(not selected)` | NOT_TESTED |
+| X-RCLONE | P1 | `rclone/rclone` | NOT_TESTED |
+| X-CELERY | P1 | `celery + redis` | NOT_TESTED |
+| X-CRON | P1 | `alpine busybox crond` | NOT_TESTED |
 
 ## Failures
 
