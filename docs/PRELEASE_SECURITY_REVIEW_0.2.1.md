@@ -1,4 +1,4 @@
-# Pre-release security review: Garden PRoot patches 0010–0015 and ThothDock 0.2.1
+# Pre-release security review: Garden PRoot patches 0010–0017 and ThothDock 0.2.1
 
 Scope: the changes of this round, reviewed in source and exercised in
 `tests/garden-common/proot/*-check.sh` (Garden) and the compatibility suite.
@@ -15,6 +15,8 @@ new code.
 | 0013 | `--hostname` rewrites `uname`'s node name | Reviewed, no issue |
 | 0014 | Long Unix socket paths kept at their real path | **Finding fixed**: collidable alias names |
 | 0015 | systemd-resolved stub addresses are not redirected | Reviewed, no issue |
+| 0016, 0017 | Guest `chroot()` as fake root no longer aborts PRoot | Reviewed; fixes memory-safety bugs (below) |
+| ThothDock | Stop signals also reach a workload that left the process group | Reviewed, no issue |
 
 ## Finding 1 (fixed): predictable alias names in 0014
 
@@ -113,6 +115,33 @@ existing Docker-style fallback only applies when the host file has no
 nameserver at all, and warns). A container service bound to those two
 addresses inside its own network is the only thing that changes. Phones have
 no such stub.
+
+## chroot (0016, 0017)
+
+Both are bug fixes in code that already existed (Termux's fake-root `chroot`
+emulation), found by running sshd. 0016: the bindings destructor looked its
+tracee up through a namespace that was already detached (talloc type abort)
+and unlinked from `tracee->fs`, the *new* namespace, which is a use of the
+wrong object; it now uses the list's own namespace. 0017: a stack buffer
+(`path_guest`) was compared before being initialised, and a failed
+`realpath` was ignored; the guest path is now always read before use and a
+failure returns its error. Both removed crashes (a guest could abort PRoot
+and with it every process of its own container; it could not affect other
+containers' PRoot). The emulation's authority is unchanged: it only swaps
+PRoot's *view* of the root for this tracee, for a process that is fake root,
+into a directory it could already name; real credentials stay the
+application's, and bind mounts below the new root are still refused
+("unsupported chroot variant"). The change does not weaken or widen path
+translation: `chroot` into a missing directory fails cleanly (tested).
+
+## Signals to a workload outside the group (ThothDock)
+
+`Signal()` now also sends the signal to the container's main process when
+that process left proot's group. The pid is found as the single process whose
+parent is the proot pid, under the lock that guarantees proot is still alive
+and unreaped, so the pid cannot have been reused by another process. Only
+the signal the user asked for (`docker stop`/`kill`/`restart`) is sent, and
+only to a process that is a direct child of this container's own proot.
 
 ## ThothDock engine changes
 
