@@ -7,7 +7,7 @@ Status: **source and host evidence complete; Android validation of the final bui
 - Host (Linux x86-64, PRoot built from the pinned termux/proot + Garden patches 0001–0017, engine ThothDock fix branch): 38 workloads, `summary.md`/`matrix.csv`. 34 PASS, 2 EXPECTED_UNSUPPORTED (Docker in Docker, socket mounting), 1 BLOCKED (MinIO: image not pullable), 1 PARTIAL (SeaweedFS stop), plus 5 deferred P1 rows (NOT_TESTED).
 - Garden host checks: `guest-semantics-check.sh` (24 checks), `sysvipc-check.sh` 5, `net-ip-check.sh` 18, `fork-recovery-check.sh` 24, `owner-check.sh` 2: all PASS.
 - ThothDock: `go test -race` with a real PRoot, Docker CLI smoke, lifecycle, restart policies, networks, Compose, upgrade-from-v0.1.1: all PASS.
-- Android (SM-A165F, Android 16, kernel 6.12 with `# CONFIG_SYSVIPC is not set`, 39-bit user VA, via `run-as` of an isolated QA package, production untouched): only the **earlier** build was run: IPC probe 42/42 ×10 under the packaged PRoot (patch 0010), PostgreSQL 17 acceptance 19/19 (initdb, SQL, parallel query, restart, SIGKILL recovery, no leftovers). The phone was disconnected afterwards: patches 0011–0017, the signal fix and all other workloads were **not** run on a device.
+- Android (SM-A165F, Android 16, kernel 6.12, no CONFIG_SYSVIPC, 39-bit user VA, isolated QA package, production untouched): see "Android device gate" below. The earlier-build run (IPC probe 42/42 ×10, PostgreSQL 19/19) is superseded by the final-build run.
 
 ## Root causes (one per mechanism)
 
@@ -71,3 +71,19 @@ Earlier on the same host: `--sysvipc` adds no measurable cost to a process-heavy
 1. MongoDB 8: documented as incompatible with 39-bit user address spaces; MongoDB 7.0 (v7.0.43 verified on the host) is the recommended alternative; no workaround attempted (docs/COMPATIBILITY.md).
 2. SeaweedFS: investigated, application-specific, accepted as PARTIAL (see above).
 3. Ship 0.4.1 without a device re-run of all workloads (not recommended), or reconnect the phone for one focused QA round with the QA package.
+
+## Android device gate (final build, patches 0010–0018)
+
+Device: SM-A165F, Android 16, isolated package `com.thothterm.debian.qa.sysvipc`, QA APK `qa4.apk` sha256 `433d8f290201634c4d3b2e7b3b7b556eb527a69dee14e3fd44efe7d6acdf228c` (engine pin 81d8f0d + patches 0010–0018). Baseline APK `qa-base.apk` sha256 `24963d90…` (trixie-v0.4.0). Raw logs: `device-final-evidence.tar`, `device-ab-measurements.txt`.
+
+Result: every mandatory workload PASS on the candidate (P-CORE, P-IPC, P-UNIX, PostgreSQL, MongoDB 7, Redis, Valkey, Nginx, RabbitMQ, PHP-FPM, DNS, OpenSSH) except MongoDB 8, which fails as documented (39-bit address space).
+
+- Device-only defect found and fixed: Redis/Valkey privilege drop failed because Android apps carry `SECBIT_KEEP_CAPS_LOCKED` (kernel refuses `PR_SET_KEEPCAPS`). Patch 0018 reports success for fake root; host repro plus negative control; PASS on the phone.
+- G-BUSYBOX: the earlier failure was a harness race (USR1 sent before the trap was installed), not networking; fixed in the workload.
+- Probe staging: `/data/local/tmp` is not executable for the app; probes are copied into the app files directory (verified).
+- RabbitMQ: three early device runs failed or were partial. Cause was the harness readiness check, which ran `rabbitmq-diagnostics` through `docker exec` repeatedly; each call starts another Erlang VM and starves the booting broker. Readiness now watches the log, then the management API. After the change: two consecutive PASS (6/6, 127 s and 115 s). Not a regression: the baseline cannot run RabbitMQ at all (no `--hostname`).
+- Open, unexplained: a guest SIGQUIT was ignored on the device in some earlier attempts; not reproduced in the final run. Not a release blocker (SIGKILL after the stop timeout still ends containers).
+
+Baseline vs candidate, same device, interleaved, 60 s idle with four containers (two rounds each): processes 17/17; threads 39–40 vs 40–41; tree RSS ≈187–192 MB both; CPU 30–50 ms vs 20–40 ms; context switches 65–70 vs 69; fds 245/245; engine RSS 12–13 MB both; stop latency within noise; no leftover processes, shm or socket aliases. No regression observed. Battery was **not measured** (no controlled measurement was performed).
+
+Not done: production app is not installed on the phone and no verified backup of its data exists; nothing was reinstalled.

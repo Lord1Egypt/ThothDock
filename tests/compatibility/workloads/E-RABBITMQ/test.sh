@@ -9,7 +9,10 @@ V=$(name data); dk volume create "$V" >/dev/null
 run_bg mq --hostname compatmq -e RABBITMQ_DEFAULT_USER=compat -e RABBITMQ_DEFAULT_PASS=disposable-test-only -v "$V":/var/lib/rabbitmq $IMG
 M=$(name mq)
 api() { dk run --rm --network "$N" nginx:1.28-alpine curl -s --max-time 20 -u compat:disposable-test-only -H 'content-type: application/json' "$@"; }
-ready() { wait_for 240 sh -c "dk exec $M rabbitmq-diagnostics -q check_running && dk run --rm --network $N nginx:1.28-alpine curl -sf -u compat:disposable-test-only http://$M:15672/api/overview"; }
+# Gentle readiness: watch the log. Polling "docker exec rabbitmq-diagnostics"
+# starts a second Erlang VM every time, which on a phone slows or kills the
+# broker that is still booting.
+ready() { wait_for 300 sh -c "dk logs $M 2>&1 | grep -q 'Server startup complete'" && wait_for 60 sh -c "dk run --rm --network $N nginx:1.28-alpine curl -sf -u compat:disposable-test-only http://$M:15672/api/overview"; }
 ready; ok $? "broker running, management API reachable from another container"
 [ "$fails" = 0 ] || { logs_on_fail mq; return 0; }
 ok "$([ "$(dk run --rm --network "$N" nginx:1.28-alpine curl -s -o /dev/null -w '%{http_code}' -u compat:wrong http://$M:15672/api/overview)" = 401 ]; echo $?)" "wrong password refused (401)"

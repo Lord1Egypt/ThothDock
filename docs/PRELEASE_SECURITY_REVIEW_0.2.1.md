@@ -1,4 +1,4 @@
-# Pre-release security review: Garden PRoot patches 0010–0017 and ThothDock 0.2.1
+# Pre-release security review: Garden PRoot patches 0010–0018 and ThothDock 0.2.1
 
 Scope: the changes of this round, reviewed in source and exercised in
 `tests/garden-common/proot/*-check.sh` (Garden) and the compatibility suite.
@@ -160,6 +160,8 @@ count equal within noise (`stageF-*` evidence in the round report).
 
 ## Not covered
 
-Android SELinux behaviour of the new Unix-socket aliases (PRoot's temporary
-directory on a phone) has not been run on a device yet; see the release notes
-for the open device gate.
+The Android gate has since been run (see the round report): the socket
+aliases work under the app's SELinux domain, and the run found one more
+device-only issue, patch 0018 (`PR_SET_KEEPCAPS` for fake root). It only turns
+a kernel `EPERM` caused by Android's locked securebits into success when the
+fake-id0 model already treats the process as root; no credentials change.

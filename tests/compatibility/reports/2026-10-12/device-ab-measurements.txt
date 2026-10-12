@@ -1,0 +1,48 @@
+Success
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libtalloc.so.2: 1 file pushed, 0 skipped. 5.9 MB/s (45552 bytes in 0.007s)
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libandroid-shmem.so: 1 file pushed, 0 skipped. 2.4 MB/s (18448 bytes in 0.007s)
+[base-r1] apk 24963d90ab8218f2
+0.2.0 1.41
+[base-r1] engine pid 10486 version 0.2.0
+[base-r1] run_rm_true_avg_ms=-313
+[base-r1] running=m-a,m-b,m-m,m-n,
+[base-r1] idle60 procs=17 threads=40 rss_kb=192176 cpu_ms=50 ctxsw=70 fds=245 engine_rss_kb=13236 engine_threads=15
+[base-r1] stop_nginx_ms=316
+[base-r1] stop_three_ms=1024
+[base-r1] leftover container procs=0 prootshm=0 prootsock=0
+Success
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libtalloc.so.2: 1 file pushed, 0 skipped. 6.2 MB/s (45552 bytes in 0.007s)
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libandroid-shmem.so: 1 file pushed, 0 skipped. 3.8 MB/s (18448 bytes in 0.005s)
+[cand-r1] apk 433d8f290201634c
+0.2.0 1.41
+[cand-r1] engine pid 12905 version 0.2.0
+[cand-r1] run_rm_true_avg_ms=113
+[cand-r1] running=m-a,m-b,m-m,m-n,
+[cand-r1] idle60 procs=17 threads=41 rss_kb=191496 cpu_ms=40 ctxsw=69 fds=245 engine_rss_kb=12256 engine_threads=16
+[cand-r1] stop_nginx_ms=341
+[cand-r1] stop_three_ms=234
+[cand-r1] leftover container procs=0 prootshm=0 prootsock=0
+Success
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libtalloc.so.2: 1 file pushed, 0 skipped. 4.4 MB/s (45552 bytes in 0.010s)
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libandroid-shmem.so: 1 file pushed, 0 skipped. 3.1 MB/s (18448 bytes in 0.006s)
+[base-r2] apk 24963d90ab8218f2
+0.2.0 1.41
+[base-r2] engine pid 15176 version 0.2.0
+[base-r2] run_rm_true_avg_ms=182
+[base-r2] running=m-a,m-b,m-m,m-n,
+[base-r2] idle60 procs=17 threads=39 rss_kb=186748 cpu_ms=30 ctxsw=65 fds=245 engine_rss_kb=12328 engine_threads=14
+[base-r2] stop_nginx_ms=220
+[base-r2] stop_three_ms=752
+[base-r2] leftover container procs=0 prootshm=0 prootsock=0
+Success
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libtalloc.so.2: 1 file pushed, 0 skipped. 6.8 MB/s (45552 bytes in 0.006s)
+C:\Users\MohamedMounir\AppData\Local\Temp\thoth-sysvipc\qa\libandroid-shmem.so: 1 file pushed, 0 skipped. 3.8 MB/s (18448 bytes in 0.005s)
+[cand-r2] apk 433d8f290201634c
+0.2.0 1.41
+[cand-r2] engine pid 17691 version 0.2.0
+[cand-r2] run_rm_true_avg_ms=140
+[cand-r2] running=m-a,m-b,m-m,m-n,
+[cand-r2] idle60 procs=17 threads=40 rss_kb=189788 cpu_ms=20 ctxsw=69 fds=245 engine_rss_kb=13428 engine_threads=15
+[cand-r2] stop_nginx_ms=354
+[cand-r2] stop_three_ms=379
+[cand-r2] leftover container procs=0 prootshm=0 prootsock=0
