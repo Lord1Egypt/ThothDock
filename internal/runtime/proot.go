@@ -397,6 +397,15 @@ func (p *prootProc) Signal(sig syscall.Signal) error {
 // caller holds sigMu, so a process whose parent is proot's pid is its own
 // child and the pid cannot have been reused.
 func mainTracee(proot int) int {
+	// Kernels with CONFIG_PROC_CHILDREN list a task's children directly.
+	if data, err := os.ReadFile("/proc/" + strconv.Itoa(proot) + "/task/" + strconv.Itoa(proot) + "/children"); err == nil {
+		if f := strings.Fields(string(data)); len(f) > 0 {
+			if pid, err := strconv.Atoi(f[0]); err == nil {
+				return pid
+			}
+		}
+		return 0
+	}
 	ents, err := os.ReadDir("/proc")
 	if err != nil {
 		return 0

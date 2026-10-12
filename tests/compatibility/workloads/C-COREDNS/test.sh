@@ -21,7 +21,7 @@ n=$(dk run --rm --network "$N" $CLI sh -c "apk add --no-cache bind-tools >/dev/n
 ok "$([ "$n" = 40 ]; echo $?)" "40 concurrent UDP queries ($n answered)"
 dk stop -t 10 "$D" >/dev/null
 ok "$(c=$(exit_code "$D"); [ "$c" = 0 ] || [ "$c" = 143 ]; echo $?)" "graceful stop (exit $(exit_code "$D"))"
-unsupported "publishing a UDP port on the host (-p ...:53/udp) is refused by design"
+note "UNSUPPORTED_BY_DESIGN (not a failure): publishing a UDP port on the host (-p ...:53/udp) is refused"
 ok "$(dk run --rm -p 15353:53/udp $CLI true 2>&1 | grep -qi 'udp'; echo $?)" "-p .../udp is refused with an explanation"
 logs_on_fail dns
 no_leftovers

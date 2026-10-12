@@ -428,6 +428,66 @@
    "cost": "medium",
    "expected": "SQLite, admin user, API repository, git clone/commit/push/fsck over HTTP, restart persistence",
    "requires": "git subprocesses, hard links"
+  },
+  {
+   "id": "X-GRAFANA",
+   "category": "Additional (P1)",
+   "priority": "P1",
+   "image": "grafana/grafana:12.1.0",
+   "digest": "",
+   "architectures": "",
+   "cost": "medium",
+   "expected": "SQLite migration, HTTP, file persistence",
+   "requires": "-",
+   "note": "NOT_TESTED: deferred, disproportionate to the compatibility information it adds after P0"
+  },
+  {
+   "id": "X-FFMPEG",
+   "category": "Additional (P1)",
+   "priority": "P1",
+   "image": "(not selected)",
+   "digest": "",
+   "architectures": "",
+   "cost": "medium",
+   "expected": "short synthetic media through pipes: ARM64 instructions, subprocesses",
+   "requires": "-",
+   "note": "NOT_TESTED: deferred, disproportionate to the compatibility information it adds after P0"
+  },
+  {
+   "id": "X-RCLONE",
+   "category": "Additional (P1)",
+   "priority": "P1",
+   "image": "rclone/rclone",
+   "digest": "",
+   "architectures": "",
+   "cost": "medium",
+   "expected": "WebDAV upload/download and streaming",
+   "requires": "-",
+   "note": "NOT_TESTED: deferred, disproportionate to the compatibility information it adds after P0"
+  },
+  {
+   "id": "X-CELERY",
+   "category": "Additional (P1)",
+   "priority": "P1",
+   "image": "celery + redis",
+   "digest": "",
+   "architectures": "",
+   "cost": "medium",
+   "expected": "worker start, queued tasks, cancellation, signals, graceful stop",
+   "requires": "-",
+   "note": "NOT_TESTED: deferred, disproportionate to the compatibility information it adds after P0"
+  },
+  {
+   "id": "X-CRON",
+   "category": "Additional (P1)",
+   "priority": "P1",
+   "image": "alpine busybox crond",
+   "digest": "",
+   "architectures": "",
+   "cost": "medium",
+   "expected": "foreground scheduler: timers and child cleanup",
+   "requires": "-",
+   "note": "NOT_TESTED: deferred, disproportionate to the compatibility information it adds after P0"
   }
  ]
 }
