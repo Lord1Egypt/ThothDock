@@ -85,6 +85,8 @@ static void postgres_interlock(void)
 	check_errno(shmget(key, 56, IPC_CREAT | IPC_EXCL | 0600), EEXIST,
 		    "postgres: a second IPC_EXCL create is refused");
 	char *p = shmat(id, NULL, 0);
+	if (p == (void *)-1)
+		printf("     shmat errno=%s\n", strerrorname_np(errno));
 	check(p != (void *)-1, "postgres: shmat attaches");
 	if (p == (void *)-1)
 		return;
