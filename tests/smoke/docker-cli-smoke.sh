@@ -91,10 +91,13 @@ if [ "${SMOKE_PULL:-0}" = 1 ]; then
     docker volume rm smokevol >/dev/null || fail "volume rm"
     pass "named volumes (persistence, in-use protection, hostile name)"
     # --- port publishing
-    docker run -d --name pub -p 18741:8080 alpine:3.20 sh -c 'while true; do printf "HTTP/1.0 200 OK\r\n\r\nsmoke-web\n" | nc -l -p 8080; done' >/dev/null
+    # Containers share the host's network, so the service port must be free
+    # on the host too (a developer machine may already serve 8080).
+    cport=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    docker run -d --name pub -p 18741:$cport alpine:3.20 sh -c "while true; do printf 'HTTP/1.0 200 OK\r\n\r\nsmoke-web\n' | nc -l -p $cport; done" >/dev/null
     sleep 2
     [ "$(curl -s --max-time 5 http://127.0.0.1:18741/)" = smoke-web ] || fail "published port"
-    [ "$(docker port pub)" = "8080/tcp -> 127.0.0.1:18741" ] || fail "docker port"
+    [ "$(docker port pub)" = "$cport/tcp -> 127.0.0.1:18741" ] || fail "docker port"
     docker run --rm -p 5353:53/udp alpine:3.20 true >/dev/null 2>&1 && fail "UDP publishing accepted"
     docker run --rm -p 0.0.0.0:18742:80 alpine:3.20 true >/dev/null 2>&1 && fail "non-loopback publishing accepted"
     docker stop -t 1 pub >/dev/null
