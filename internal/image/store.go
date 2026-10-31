@@ -213,13 +213,40 @@ func (s *Store) Delete(name string, force bool, usage Usage) ([]DeleteItem, erro
 		}
 	}
 	short := img.ID.Hex()[:12]
-	if key != "" && len(refs) > 1 {
-		delete(s.refMap, key)
-		if err := s.saveRefsLocked(); err != nil {
-			return nil, err
+	if key != "" {
+		// Docker's rule: removing a tag also drops the digest references of the
+		// same repository when no other tag of it is left; every pull records
+		// both "name:tag" and "name@sha256:...", so without this a removed tag
+		// left the image behind as <none>:<none>.
+		drop := []string{key}
+		if !strings.Contains(key, "@") {
+			name := refName(key)
+			otherTag := false
+			for _, r := range refs {
+				if r != key && !strings.Contains(r, "@") && refName(r) == name {
+					otherTag = true
+				}
+			}
+			if !otherTag {
+				for _, r := range refs {
+					if strings.Contains(r, "@") && refName(r) == name {
+						drop = append(drop, r)
+					}
+				}
+			}
 		}
-		ref, _ := registry.ParseReference(key)
-		return []DeleteItem{{Untagged: ref.FamiliarString()}}, nil
+		if len(refs) > len(drop) {
+			var out []DeleteItem
+			for _, r := range drop {
+				delete(s.refMap, r)
+				ref, _ := registry.ParseReference(r)
+				out = append(out, DeleteItem{Untagged: ref.FamiliarString()})
+			}
+			if err := s.saveRefsLocked(); err != nil {
+				return nil, err
+			}
+			return out, nil
+		}
 	}
 	running, stopped := usage(img.ID)
 	if len(running) > 0 {
@@ -258,6 +285,16 @@ func (s *Store) Delete(name string, force bool, usage Usage) ([]DeleteItem, erro
 		}
 	}
 	return out, nil
+}
+
+// refName is the repository of a stored reference ("host/path:tag" or
+// "host/path@sha256:..."), or the reference itself if it does not parse.
+func refName(r string) string {
+	ref, err := registry.ParseReference(r)
+	if err != nil {
+		return r
+	}
+	return ref.Name()
 }
 
 // blobsOf lists every blob an image needs: config, manifest and layers.

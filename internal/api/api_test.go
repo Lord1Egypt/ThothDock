@@ -218,15 +218,21 @@ func TestRunFlowOverHTTP(t *testing.T) {
 	expect(t, resp, body, 200, `"RootFS"`)
 	var img struct{ Id string }
 	json.Unmarshal([]byte(body), &img)
-	// By tag with another reference left: only untagged, as in Docker.
+	// The image's only tag (its digest reference does not count, as in Docker):
+	// a stopped container using it blocks the delete, by tag or by ID.
 	resp, body = f.do(t, "DELETE", "/v1.41/images/"+f.image, "")
-	expect(t, resp, body, 200, `"Untagged"`)
+	expect(t, resp, body, 409, "must be forced")
 	resp, body = f.do(t, "DELETE", "/v1.41/images/"+img.Id, "")
 	expect(t, resp, body, 409, "must be forced")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 204, "")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 404, "No such container")
+	// Unused now: removing the tag removes the image, not just the tag.
+	resp, body = f.do(t, "DELETE", "/v1.41/images/"+f.image, "")
+	expect(t, resp, body, 200, `"Deleted":"`+img.Id)
+	resp, body = f.do(t, "GET", "/v1.41/images/"+img.Id+"/json", "")
+	expect(t, resp, body, 404, "No such image")
 }
 
 func TestExecOverHTTP(t *testing.T) {
