@@ -60,6 +60,16 @@ engine: new empty root dir + PRoot -r <dir> -b <binds…> --link2symlink, argv, 
   and are dropped, which is reported as a warning, never silently.
 * `--info-fd` must still receive `{"child-pid": N}`, or `flatpak ps` and
   `flatpak kill` break.
+* Guest paths. Flatpak names guest paths (`/home/thoth/.local/share/flatpak/...`),
+  but the engine runs in the app's context, and on Android it is started
+  without `--allow-bind`, so it cannot bind arbitrary host paths. The daemon gets
+  a `--guest-root DIR` (the Debian rootfs, passed by the app), and every source
+  path of a sandbox is resolved inside it with chroot semantics
+  (`internal/securefs`), so a guest symlink cannot point a bind outside the
+  guest. Sources outside the guest root are refused.
+* Hard links. OSTree checks files out as hard links. In the guest those are
+  PRoot link2symlink entries whose symlinks hold absolute host paths; the
+  sandbox's PRoot also runs with `--link2symlink` and resolves them the same way.
 
 ## Snap (Phase 2)
 
