@@ -201,11 +201,11 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 // PRoot's link2symlink stores hard links) is followed as the guest path it
 // stands for.
 func ResolveGuest(guest *securefs.Root, p string) (string, bool, error) {
-	if path.Clean("/"+p) == "/" {
-		return guest.Path(), true, nil
-	}
 	cur := p
 	for i := 0; i <= maxLinkFollow; i++ {
+		if path.Clean("/"+cur) == "/" {
+			return guest.Path(), true, nil
+		}
 		par, err := guest.OpenParent(cur, false, nil)
 		if err != nil {
 			return "", false, err

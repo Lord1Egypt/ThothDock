@@ -81,11 +81,14 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install talloc headers
-        run: sudo apt-get update -q && sudo apt-get install -y -q libtalloc-dev
+        run: sudo apt-get update -q && sudo apt-get install -y -q libtalloc-dev busybox-static
       - name: Build
         run: |
           scripts/build-host-proot.sh "$RUNNER_TEMP/proot"
           go build -o "$RUNNER_TEMP/thothdock" ./cmd/thothdock
+          go build -o "$RUNNER_TEMP/thothdock-bwrap" ./cmd/thothdock-bwrap
+      - name: Flatpak sandbox path (bwrap shim, --guest-root, real PRoot)
+        run: tests/regression/sandbox.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/thothdock-bwrap" "$RUNNER_TEMP/proot/proot" /bin/busybox
       - name: Docker CLI against ThothDock (no dockerd involved)
         env:
           SMOKE_PULL: "1"

@@ -32,7 +32,10 @@ type apiFixture struct {
 	srv   *httptest.Server
 	rt    *runtime.FakeRuntime
 	image string
+	eng   *engine.Engine
 }
+
+func (f *apiFixture) engineOf() *engine.Engine { return f.eng }
 
 func newAPI(t *testing.T) *apiFixture { return newAPIWith(t, engine.Config{}) }
 
@@ -57,7 +60,7 @@ func newAPIWith(t *testing.T, cfg engine.Config) *apiFixture {
 	s := &Server{Engine: e, Log: quiet, DaemonID: "test", RuntimeName: "fake", RuntimeVersion: "0"}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
-	return &apiFixture{srv: ts, rt: rt, image: reg.Host() + "/library/tiny:1"}
+	return &apiFixture{srv: ts, rt: rt, image: reg.Host() + "/library/tiny:1", eng: e}
 }
 
 func (f *apiFixture) do(t *testing.T, method, path, body string) (*http.Response, string) {

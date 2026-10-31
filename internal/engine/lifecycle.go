@@ -661,6 +661,7 @@ func (e *Engine) Attach(ref string) (*Container, AttachStreams, error) {
 // stop: restart policies bring the containers back when the daemon starts.
 func (e *Engine) Shutdown(timeout int) {
 	e.shuttingDown.Store(true)
+	e.killSandboxes()
 	var wg sync.WaitGroup
 	for _, r := range e.List() {
 		if IsRunning(r.State.Status) {

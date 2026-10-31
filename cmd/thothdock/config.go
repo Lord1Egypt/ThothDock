@@ -35,6 +35,7 @@ type options struct {
 	link2symlink  string
 	kernelRelease string
 	resolvConf    string
+	guestRoot     string
 	allowBind     multiFlag
 	allowPublish  bool
 	devTCP        string
@@ -53,6 +54,7 @@ func (o *options) register(fs *flag.FlagSet) {
 	fs.StringVar(&o.link2symlink, "link2symlink", "auto", "emulate hard links inside containers: auto (when the data root refuses hard links), on, off")
 	fs.StringVar(&o.kernelRelease, "kernel-release", "", "kernel release reported inside containers (default: the real one)")
 	fs.StringVar(&o.resolvConf, "resolv-conf", "/etc/resolv.conf", "resolver configuration for the daemon and containers")
+	fs.StringVar(&o.guestRoot, "guest-root", "", "the guest's root file system; enables Flatpak sandboxes, whose paths resolve inside it (default: none)")
 	fs.Var(&o.allowBind, "allow-bind", "host directory containers may bind-mount from (repeatable; default none)")
 	fs.BoolVar(&o.allowPublish, "allow-publish-nonlocal", false, "let -p name a host address other than loopback (default: published ports are reachable from this device only)")
 	fs.StringVar(&o.devTCP, "dev-tcp", "", "DEVELOPMENT ONLY: also listen on this loopback TCP address (127.0.0.1:PORT), unauthenticated")

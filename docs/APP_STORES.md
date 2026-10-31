@@ -1,6 +1,6 @@
 # Flatpak and Snap on ThothDock: design and verified constraints
 
-Status: design, 2026-10-31. Nothing here is implemented yet. Every
+Status (2026-11-01): Flatpak phase 1 engine side implemented and host-tested (internal/sandbox, POST /thothdock/sandboxes, cmd/thothdock-bwrap, serve --guest-root, tests/regression/sandbox.sh); Android wiring, a real Flathub app on the device, Snap and the Apps tab are not done yet. Every
 "verified" line below was run on the owner's Samsung SM-A165F (Android 16,
 kernel 6.12.38, production ThothTerm • ThothDock 0.4.1) or in a disposable
 Debian trixie container on the host, and says which.
@@ -57,7 +57,9 @@ engine: new empty root dir + PRoot -r <dir> -b <binds…> --link2symlink, argv, 
   `--new-session`, `--as-pid-1`, `--unshare-*`, `--share-net`, `--cap-*`,
   `--perms`, `--size`. Data passed on descriptors becomes files in the
   sandbox root. Namespace, seccomp and capability options cannot be honoured
-  and are dropped, which is reported as a warning, never silently.
+  and are dropped; the engine logs them with every sandbox start and the shim
+  prints them with THOTHDOCK_BWRAP_VERBOSE=1 (not by default, so every
+  `flatpak run` does not print the same lines).
 * `--info-fd` must still receive `{"child-pid": N}`, or `flatpak ps` and
   `flatpak kill` break.
 * Guest paths. Flatpak names guest paths (`/home/thoth/.local/share/flatpak/...`),

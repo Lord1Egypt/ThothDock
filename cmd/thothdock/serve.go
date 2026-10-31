@@ -103,6 +103,21 @@ func build(o *options, log *slog.Logger) (*stack, error) {
 		return nil, err
 	}
 	puller := &image.Puller{Store: images, Client: registry.NewClient(registry.DefaultHTTPClient(), "ThothDock/"+version.Version), Limits: o.limits}
+	// Canonical, like the path the app gives PRoot: link2symlink entries in
+	// the guest hold host paths under it.
+	var guestRoot string
+	if o.guestRoot != "" {
+		c, err := filepath.EvalSymlinks(o.guestRoot)
+		if err != nil {
+			return nil, fmt.Errorf("--guest-root %s: %w", o.guestRoot, err)
+		}
+		if guestRoot, err = filepath.Abs(c); err != nil {
+			return nil, err
+		}
+		if fi, err := os.Stat(guestRoot); err != nil || !fi.IsDir() {
+			return nil, fmt.Errorf("--guest-root %s is not a directory", o.guestRoot)
+		}
+	}
 	var roots []string
 	for _, b := range o.allowBind {
 		c, err := filepath.EvalSymlinks(b)
@@ -115,7 +130,7 @@ func build(o *options, log *slog.Logger) (*stack, error) {
 		roots = append(roots, c)
 	}
 	eng, err := engine.New(l, images, puller, rt, engine.Config{AllowedBindRoots: roots, ResolvConf: o.resolvConf, AllowNonLoopbackPublish: o.allowPublish,
-		Pressure: o.pressureMonitor()}, log)
+		Pressure: o.pressureMonitor(), GuestRoot: guestRoot}, log)
 	if err != nil {
 		return nil, err
 	}
