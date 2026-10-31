@@ -65,7 +65,7 @@ func TestSandboxRunsOverTheSocket(t *testing.T) {
 	if started.Pid <= 0 || len(started.Warnings) != 1 || !strings.Contains(started.Warnings[0], "read-only") {
 		t.Fatalf("started %+v", started)
 	}
-	if seen.Args[0] != "/usr/bin/hello" || seen.UID != 1000 || len(seen.Binds) != 1 || seen.Binds[0].Source != filepath.Join(g, "usr") {
+	if seen.Args[0] != "/usr/bin/hello" || seen.UID != 1000 || len(seen.Binds) != 2 || seen.Binds[1].Source != filepath.Join(g, "usr") {
 		t.Fatalf("spec %+v", seen)
 	}
 	waitFor(t, func() bool { return len(f.engineOf().Sandboxes()) == 0 })

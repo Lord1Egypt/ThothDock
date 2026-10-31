@@ -53,6 +53,24 @@ func run(args []string) int {
 		Ops: spec.Ops, Env: spec.Env, BaseEnv: os.Environ(), Chdir: spec.Chdir, Argv: spec.Argv,
 		UID: os.Getuid(), GID: os.Getgid(), DieWithParent: true, Files: map[int][]byte{},
 	}
+	// A directory descriptor cannot cross the socket: bind the path it names.
+	// Inside the guest, /proc/self/fd/N reads back as the guest path (PRoot
+	// translates it), which the engine resolves inside the guest root.
+	for i, op := range req.Ops {
+		if op.Kind != sandbox.OpBindFD && op.Kind != sandbox.OpROBindFD {
+			continue
+		}
+		src, err := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", op.FD))
+		if err != nil || !strings.HasPrefix(src, "/") {
+			return fail("--%s %d: cannot name the directory it holds: %v", op.Kind, op.FD, err)
+		}
+		k := sandbox.OpBind
+		if op.Kind == sandbox.OpROBindFD {
+			k = sandbox.OpROBind
+		}
+		req.Ops[i] = sandbox.Op{Kind: k, Src: src, Dest: op.Dest, FD: -1, Perms: -1}
+		os.NewFile(uintptr(op.FD), "bind-fd").Close()
+	}
 	total := 0
 	for _, op := range spec.Ops {
 		switch op.Kind {

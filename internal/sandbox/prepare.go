@@ -80,6 +80,14 @@ func Prepare(req *Request, guest *securefs.Root, dir string) (*Prepared, error) 
 	}
 	defer root.Close()
 	p := &Prepared{Root: dir}
+	// Hard links in the guest (OSTree checks every file out as one) are
+	// PRoot link2symlink entries: symlinks to absolute host paths under the
+	// guest root. The guest root at its own host path lets them resolve in
+	// the sandbox, whose root is elsewhere.
+	if err := root.MkdirAll(guest.Path()); err != nil {
+		return nil, fmt.Errorf("sandbox: mount point for the guest root: %w", err)
+	}
+	p.Binds = append(p.Binds, Bind{Source: guest.Path(), Target: guest.Path()})
 	for _, op := range req.Ops {
 		if err := p.apply(op, req, guest, root); err != nil {
 			return nil, err
@@ -202,6 +210,9 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 // stands for.
 func ResolveGuest(guest *securefs.Root, p string) (string, bool, error) {
 	cur := p
+	if rest, ok := strings.CutPrefix(cur, guest.Path()+"/"); ok {
+		cur = "/" + rest // a host path inside the guest root names that guest path
+	}
 	for i := 0; i <= maxLinkFollow; i++ {
 		if path.Clean("/"+cur) == "/" {
 			return guest.Path(), true, nil

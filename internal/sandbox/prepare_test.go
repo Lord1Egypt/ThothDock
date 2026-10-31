@@ -88,6 +88,7 @@ func TestPrepareFlatpakShapedRequest(t *testing.T) {
 		t.Fatalf("argv %q", p.Argv)
 	}
 	want := []Bind{
+		{g.Path(), g.Path()}, // link2symlink targets resolve
 		{filepath.Join(g.Path(), "home/thoth/.local/share/flatpak/runtime/rt/files"), "/usr"},
 		{filepath.Join(g.Path(), "home/thoth/.local/share/flatpak/app/org.example.Tool/files"), "/app"},
 		{filepath.Join(g.Path(), "home/thoth/.var/app/org.example.Tool"), "/home/thoth/.var/app/org.example.Tool"},
@@ -147,7 +148,7 @@ func TestEscapingSymlinkBindStaysInGuest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Binds[0].Source != filepath.Join(g.Path(), "etc") {
-		t.Fatalf("bind source %s escaped the guest", p.Binds[0].Source)
+	if p.Binds[1].Source != filepath.Join(g.Path(), "etc") {
+		t.Fatalf("bind source %s escaped the guest", p.Binds[1].Source)
 	}
 }

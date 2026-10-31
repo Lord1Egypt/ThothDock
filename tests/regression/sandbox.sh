@@ -66,7 +66,11 @@ pgrep -f "sleep 300" >/dev/null && no "sandbox outlived the shim" || ok "sandbox
 sleep 1
 [ -z "$(ls -A "$WORK/root/sandboxes" 2>/dev/null)" ] && ok "sandbox roots removed" || no "left: $(ls "$WORK/root/sandboxes")"
 
-# 7: unknown options are refused, not half-applied.
+# 7: --ro-bind-fd (flatpak's ldconfig step) binds the directory the descriptor holds.
+out=$("$SHIM" "${common[@]}" --ro-bind-fd 6 /mnt -- ls /mnt 6< "$GUEST/home/thoth/.local/share/flatpak/app/org.example.Tool/files/bin")
+[ "$out" = tool ] && ok "--ro-bind-fd binds the descriptor's directory" || no "--ro-bind-fd: $out"
+
+# 8: unknown options are refused, not half-applied.
 "$SHIM" --frobnicate -- true 2>/dev/null && no "unknown option accepted" || ok "unknown option refused"
 
 echo "RESULT pass=$pass fail=$fail"
