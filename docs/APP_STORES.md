@@ -95,6 +95,19 @@ engine: Snap Store API v2 (api.snapcraft.io) → .snap download → sha3-384 che
 * The Snap Store backend is not free software. F-Droid will likely want the
   `NonFreeNet` anti-feature for it; Flathub's server side is free.
 
+## Networking: one address space for containers, sandboxes and snaps
+
+There are no network namespaces, so without care every Flatpak sandbox and
+snap shares the app's loopback, and two servers on the same port collide (two
+snaps on :80, or a snap on :8080 next to `docker run -p 8080:80`). Each sandbox
+and each snap service therefore gets its own loopback address from the **same**
+allocator that hands out user-network addresses to containers today
+(`127.77.x.y`, PRoot `--net-ip`, `internal/network`). One allocator means one
+address can never belong to two workloads; exhaustion is an error, never a
+reuse. A service that listens on 0.0.0.0 is rewritten to its own address by
+`--net-ip`, as for containers. Reaching it from the phone uses that address;
+publishing to the phone's port (like `-p`) is a later, explicit option.
+
 ## Panel decision (Containers screen and Web Panel)
 
 Yes, with limits. Sandboxes and snaps run in the same engine, so the Containers
@@ -115,6 +128,16 @@ Phase 1 works on the device.
 * Resources: idle CPU, wakeups and RSS of the engine with and without a
   sandbox (A/B, as for 0.2.0); download size, on-disk size (OSTree dedupe under
   link2symlink) and peak RSS for one runtime and one app.
+* Stress (owner requirement, 2026-11-01): many snaps and many Flatpak apps
+  installed and running at the same time next to Docker containers, including
+  server snaps (cloud/self-hosted kinds, e.g. a web or database snap) that open
+  ports. Check: every running workload has a distinct address
+  (`/thothdock/addresses` dump vs `ss -ltn` inside each); two snaps on the same
+  port both answer on their own addresses; a snap and `docker run -p` on the
+  same port do not collide; a snap next to a container on a user network;
+  allocator exhaustion fails the next start cleanly; addresses are released on
+  stop and restart; Process Guard and Android's phantom-process cap under the
+  combined load (measure where the engine is killed, never guess).
 * Host suite: the shim's argv parser against bwrap's own option table, and a
   replay of real `flatpak run` command lines captured with
   `FLATPAK_BWRAP=/usr/bin/echo`.
