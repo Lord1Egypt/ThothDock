@@ -25,6 +25,13 @@ from the app that no package can replace. ThothTerm rewrites the hook, its
 configuration and the pin whenever a terminal window opens and registers the
 placeholders again when the engine starts.
 
+snapd is guarded the same way: "snap" here is ThothDock's /usr/local/bin/snap,
+which installs from the Snap Store and runs snaps without snapd (which needs
+systemd, a setuid snap-confine, squashfs mounts and AppArmor). "apt install
+snapd" reports the placeholder as installed, so no second, broken
+/usr/bin/snap appears. flatpak is not guarded: ThothTerm runs Debian's own
+flatpak and only replaces its sandbox (bwrap) through $FLATPAK_BWRAP.
+
 The Docker CLI (docker-cli, docker-ce-cli) is not restricted. ThothDock itself
 is updated by the ThothTerm app, not by apt.
 
