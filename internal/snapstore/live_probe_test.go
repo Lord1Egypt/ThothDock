@@ -3,6 +3,7 @@ package snapstore
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -18,12 +19,25 @@ func TestLiveStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%+v", rel)
-	var b bytes.Buffer
-	if err := c.Download(rel, &b); err != nil {
+	file := filepath.Join(t.TempDir(), "hello-world.snap")
+	if err := c.Fetch(rel, file, nil); err != nil {
 		t.Fatal(err)
 	}
-	if b.Len() != int(rel.Size) || !bytes.HasPrefix(b.Bytes(), []byte("hsqs")) {
-		t.Fatalf("%d bytes, magic %q", b.Len(), b.Bytes()[:4])
+	b, err := os.ReadFile(file)
+	if err != nil || len(b) != int(rel.Size) || !bytes.HasPrefix(b, []byte("hsqs")) {
+		t.Fatalf("%d bytes: %v", len(b), err)
+	}
+	aliases, err := c.Aliases(rel.SnapID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("aliases: %v", aliases)
+	gc, err := c.Info("google-cloud-cli", "stable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, err := c.Aliases(gc.SnapID); err != nil || a["gcloud"] != "gcloud" {
+		t.Fatalf("google-cloud-cli aliases %v: %v", a, err)
 	}
 	found, err := c.Find("hello")
 	if err != nil || len(found) == 0 {

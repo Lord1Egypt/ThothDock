@@ -4,16 +4,20 @@
 package snapstore
 
 import (
+	"context"
 	"crypto/sha3"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	goruntime "runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -33,9 +37,19 @@ func ValidName(s string) bool { return len(s) <= 40 && nameRe.MatchString(s) }
 // Client queries the store.
 type Client struct {
 	URL  string
-	HTTP *http.Client
-	Arch string // store architecture: arm64, amd64, ...
+	HTTP *http.Client // its Timeout bounds API calls, not downloads
+	Arch string       // store architecture: arm64, amd64, ...
+	// Stall is how long a download may receive nothing before it is dropped
+	// and resumed; zero means DefaultStall.
+	Stall time.Duration
 }
+
+// DefaultStall: a download is bounded by progress, never by total time, so
+// a large snap on a slow link still finishes.
+const DefaultStall = 60 * time.Second
+
+// fetchAttempts is how many dropped connections one Fetch resumes from.
+const fetchAttempts = 8
 
 // New returns a client for this machine's architecture.
 func New() *Client {
@@ -43,7 +57,7 @@ func New() *Client {
 	if arch == "arm" {
 		arch = "armhf"
 	}
-	return &Client{URL: DefaultURL, HTTP: &http.Client{Timeout: 10 * time.Minute}, Arch: arch}
+	return &Client{URL: DefaultURL, HTTP: &http.Client{Timeout: 2 * time.Minute}, Arch: arch}
 }
 
 // Found is one search result.
@@ -54,6 +68,7 @@ type Found struct {
 // Release is a snap's revision on one channel for this architecture.
 type Release struct {
 	Name        string
+	SnapID      string
 	Channel     string // track/risk
 	Version     string
 	Revision    int
@@ -66,34 +81,45 @@ type Release struct {
 }
 
 func (c *Client) get(path string, v any) error {
-	req, err := http.NewRequest(http.MethodGet, c.URL+path, nil)
+	body, err := c.getRaw(path, "")
 	if err != nil {
 		return err
 	}
+	return json.Unmarshal(body, v)
+}
+
+func (c *Client) getRaw(path, accept string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, c.URL+path, nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Snap-Device-Series", "16")
 	req.Header.Set("User-Agent", "ThothDock-snap")
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
 		var e struct {
 			ErrorList []struct{ Message string } `json:"error-list"`
 		}
 		if json.Unmarshal(body, &e) == nil && len(e.ErrorList) > 0 {
-			return fmt.Errorf("snap store: %s", e.ErrorList[0].Message)
+			return nil, fmt.Errorf("snap store: %s", e.ErrorList[0].Message)
 		}
-		return fmt.Errorf("snap store answered %s", resp.Status)
+		return nil, fmt.Errorf("snap store answered %s", resp.Status)
 	}
-	return json.Unmarshal(body, v)
+	return body, nil
 }
 
 // ErrNotFound is a snap the store does not have.
@@ -157,6 +183,7 @@ func (c *Client) Info(name, channel string) (*Release, error) {
 	}
 	var r struct {
 		Name       string
+		SnapID     string `json:"snap-id"`
 		ChannelMap []struct {
 			Channel                          struct{ Architecture, Track, Risk string }
 			Type, Base, Confinement, Version string
@@ -184,7 +211,7 @@ func (c *Client) Info(name, channel string) (*Release, error) {
 		if m.Channel.Track != track || m.Channel.Risk != risk {
 			continue
 		}
-		rel := &Release{Name: name, Channel: track + "/" + risk, Version: m.Version, Revision: m.Revision,
+		rel := &Release{Name: name, SnapID: r.SnapID, Channel: track + "/" + risk, Version: m.Version, Revision: m.Revision,
 			Type: m.Type, Base: m.Base, Confinement: m.Confinement,
 			URL: m.Download.URL, SHA3_384: strings.ToLower(m.Download.SHA3_384), Size: m.Download.Size}
 		if rel.Type == "app" && rel.Base == "" {
@@ -201,37 +228,220 @@ func (c *Client) Info(name, channel string) (*Release, error) {
 	return nil, fmt.Errorf("snap %q has no release on %s/%s for %s (available: %s)", name, track, risk, c.Arch, strings.Join(have, ", "))
 }
 
-// Download writes the release's file to w, refusing it unless its size and
-// SHA3-384 are the store's.
-func (c *Client) Download(rel *Release, w io.Writer) error {
+// Fetch downloads rel to file. The bytes arrive in file+".partial" and are
+// kept when the connection drops: a dropped or stalled connection (nothing
+// for c.Stall) is resumed with an HTTP Range, here up to fetchAttempts times
+// and by the next Fetch after that. file appears only once its size and
+// SHA3-384 are the store's; a mismatch discards the partial file. progress,
+// if set, is called with the bytes on disk after each write.
+func (c *Client) Fetch(rel *Release, file string, progress func(done int64)) error {
 	u, err := url.Parse(rel.URL)
 	if err != nil || u.Scheme != "https" {
 		return fmt.Errorf("snap store: refusing a download URL that is not HTTPS: %q", rel.URL)
 	}
-	req, err := http.NewRequest(http.MethodGet, rel.URL, nil)
+	part := file + ".partial"
+	f, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
+	}
+	defer f.Close()
+	h := sha3.New384()
+	have, err := io.Copy(h, f)
+	if err != nil {
+		return err
+	}
+	if have > rel.Size {
+		if have, err = restart(f, h); err != nil {
+			return err
+		}
+	}
+	for attempt := 0; have < rel.Size; attempt++ {
+		var retry bool
+		have, retry, err = c.fetchFrom(rel, f, h, have, progress)
+		if err == nil {
+			break
+		}
+		if !retry || attempt+1 == fetchAttempts {
+			return err
+		}
+	}
+	if have != rel.Size {
+		os.Remove(part)
+		return fmt.Errorf("snap %s: got %d bytes, the store says %d", rel.Name, have, rel.Size)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != rel.SHA3_384 {
+		os.Remove(part)
+		return fmt.Errorf("snap %s: SHA3-384 %s does not match the store's %s", rel.Name, got, rel.SHA3_384)
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(part, file)
+}
+
+// fetchFrom appends the rest of rel's file to f from offset have. retry
+// reports an error the connection caused rather than the store or the disk.
+func (c *Client) fetchFrom(rel *Release, f *os.File, h hash.Hash, have int64,
+	progress func(int64)) (int64, bool, error) {
+	stall := c.Stall
+	if stall <= 0 {
+		stall = DefaultStall
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	watchdog := time.AfterFunc(stall, cancel)
+	defer watchdog.Stop()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rel.URL, nil)
+	if err != nil {
+		return have, false, err
 	}
 	req.Header.Set("Snap-Device-Series", "16")
 	req.Header.Set("User-Agent", "ThothDock-snap")
-	resp, err := c.HTTP.Do(req)
+	if have > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", have))
+	}
+	dl := *c.HTTP
+	dl.Timeout = 0 // the watchdog bounds the download instead
+	resp, err := dl.Do(req)
 	if err != nil {
-		return err
+		return have, true, stalled(ctx, stall, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("snap store download answered %s", resp.Status)
+	switch {
+	case have > 0 && resp.StatusCode == http.StatusPartialContent &&
+		strings.HasPrefix(resp.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", have)):
+	case resp.StatusCode == http.StatusOK:
+		if have, err = restart(f, h); err != nil {
+			return have, false, err
+		}
+	default:
+		return have, resp.StatusCode >= 500, fmt.Errorf("snap store download answered %s", resp.Status)
 	}
-	h := sha3.New384()
-	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(resp.Body, rel.Size+1))
+	body := io.LimitReader(resp.Body, rel.Size-have+1)
+	buf := make([]byte, 256<<10)
+	for {
+		n, rerr := body.Read(buf)
+		if n > 0 {
+			watchdog.Reset(stall)
+			if _, err := f.Write(buf[:n]); err != nil {
+				return have, false, err
+			}
+			h.Write(buf[:n])
+			have += int64(n)
+			if progress != nil {
+				progress(have)
+			}
+		}
+		if rerr == io.EOF {
+			if have < rel.Size {
+				return have, true, fmt.Errorf("snap %s: connection closed at %d of %d bytes", rel.Name, have, rel.Size)
+			}
+			return have, false, nil
+		}
+		if rerr != nil {
+			return have, true, stalled(ctx, stall, rerr)
+		}
+	}
+}
+
+// restart empties f for a download from the first byte.
+func restart(f *os.File, h hash.Hash) (int64, error) {
+	h.Reset()
+	if err := f.Truncate(0); err != nil {
+		return 0, err
+	}
+	_, err := f.Seek(0, io.SeekStart)
+	return 0, err
+}
+
+func stalled(ctx context.Context, stall time.Duration, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("no data from the Snap Store for %s", stall)
+	}
+	return err
+}
+
+var (
+	snapIDRe  = regexp.MustCompile(`^[A-Za-z0-9]{32}$`)
+	aliasRe   = regexp.MustCompile(`^[a-zA-Z0-9][-_.a-zA-Z0-9]*$`)
+	appNameRe = regexp.MustCompile(`^[a-zA-Z0-9](?:-?[a-zA-Z0-9])*$`)
+)
+
+// Aliases returns the command aliases the store grants a snap (alias ->
+// app), as snapd sets them up on install: "gcloud" for
+// google-cloud-cli.gcloud. They come from the snap's snap-declaration
+// assertion, fetched over HTTPS from the same store as the download and its
+// SHA3-384; its signature is not checked here, as snapd would.
+func (c *Client) Aliases(snapID string) (map[string]string, error) {
+	if !snapIDRe.MatchString(snapID) {
+		return nil, fmt.Errorf("snap store: bad snap id %q", snapID)
+	}
+	body, err := c.getRaw("/v2/assertions/snap-declaration/16/"+snapID, "application/x.ubuntu.assertion")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if n != rel.Size {
-		return fmt.Errorf("snap %s: got %d bytes, the store says %d", rel.Name, n, rel.Size)
+	return ParseDeclarationAliases(body), nil
+}
+
+// ParseDeclarationAliases reads the aliases of a snap-declaration's headers:
+// the "aliases" list of name/target maps, or, in older declarations, the
+// "auto-aliases" list, where each alias names the app of the same name.
+// Entries that are not a valid alias and app name are dropped.
+func ParseDeclarationAliases(assertion []byte) map[string]string {
+	head, _, _ := strings.Cut(strings.ReplaceAll(string(assertion), "\r\n", "\n"), "\n\n")
+	lists := map[string][]map[string]string{}
+	var cur string
+	for _, line := range strings.Split(head, "\n") {
+		if line == "" {
+			continue
+		}
+		if line[0] != ' ' {
+			cur = ""
+			if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(v) == "" &&
+				(k == "aliases" || k == "auto-aliases") {
+				cur = k
+			}
+			continue
+		}
+		if cur == "" {
+			continue
+		}
+		t := strings.TrimSpace(line)
+		switch {
+		case t == "-":
+			lists[cur] = append(lists[cur], map[string]string{})
+		case strings.HasPrefix(t, "- "):
+			lists[cur] = append(lists[cur], map[string]string{"": strings.TrimSpace(t[2:])})
+		default:
+			if k, v, ok := strings.Cut(t, ":"); ok && len(lists[cur]) > 0 {
+				lists[cur][len(lists[cur])-1][k] = strings.TrimSpace(v)
+			}
+		}
 	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != rel.SHA3_384 {
-		return fmt.Errorf("snap %s: SHA3-384 %s does not match the store's %s", rel.Name, got, rel.SHA3_384)
+	out := map[string]string{}
+	add := func(alias, app string) {
+		if aliasRe.MatchString(alias) && appNameRe.MatchString(app) {
+			out[alias] = app
+		}
 	}
-	return nil
+	if l, ok := lists["aliases"]; ok {
+		for _, e := range l {
+			add(e["name"], e["target"])
+		}
+	} else {
+		for _, e := range lists["auto-aliases"] {
+			add(e[""], e[""])
+		}
+	}
+	return out
+}
+
+// SortedAliases lists m's aliases in order.
+func SortedAliases(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for a := range m {
+		out = append(out, a)
+	}
+	sort.Strings(out)
+	return out
 }

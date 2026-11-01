@@ -139,6 +139,7 @@ type installed struct {
 	Confinement string   `json:"confinement"`
 	Apps        []string `json:"apps"`
 	Daemons     []string `json:"daemons"`
+	Aliases     []string `json:"aliases"`
 }
 
 type state struct {
@@ -242,9 +243,11 @@ func cmdInstall(args []string) int {
 	if err != nil || len(names) == 0 {
 		return fail("usage: snap install [--channel=C] [--classic] <snap>...")
 	}
-	if _, err := exec.LookPath("unsquashfs"); err != nil {
-		return fail("unsquashfs is needed to unpack snaps: sudo apt install squashfs-tools")
+	if err := ensureUnsquashfs(); err != nil {
+		return fail("%v", err)
 	}
+	_, err = os.Stat(snapBin)
+	firstSnap := errors.Is(err, os.ErrNotExist)
 	st, err := loadState()
 	if err != nil {
 		return fail("%v", err)
@@ -255,7 +258,43 @@ func cmdInstall(args []string) int {
 			return fail("%v", err)
 		}
 	}
+	if _, err := os.Stat(snapBin); firstSnap && err == nil {
+		fmt.Println("Open a new window to use these commands: a window opened before the first snap has no /snap/bin in its PATH.")
+	}
 	return 0
+}
+
+// ensureUnsquashfs installs squashfs-tools from the guest's own archive when
+// unsquashfs is missing. snap install already runs as root and needs the
+// network, so this asks nothing more of the user than the install itself.
+func ensureUnsquashfs() error {
+	if _, err := exec.LookPath("unsquashfs"); err == nil {
+		return nil
+	}
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return errors.New("unsquashfs is needed to unpack snaps: install squashfs-tools")
+	}
+	fmt.Println("Installing squashfs-tools, which unpacks snaps...")
+	apt := func(args ...string) error {
+		c := exec.Command("apt-get", args...)
+		c.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+		c.Stdout, c.Stderr = os.Stdout, os.Stderr
+		return c.Run()
+	}
+	pkg := []string{"install", "-y", "--no-install-recommends", "squashfs-tools"}
+	if apt(pkg...) != nil {
+		// The package lists may predate the package or be missing.
+		if err := apt("update"); err != nil {
+			return fmt.Errorf("apt-get update: %v", err)
+		}
+		if err := apt(pkg...); err != nil {
+			return fmt.Errorf("installing squashfs-tools: %v", err)
+		}
+	}
+	if _, err := exec.LookPath("unsquashfs"); err != nil {
+		return errors.New("squashfs-tools is installed but unsquashfs is not on PATH")
+	}
+	return nil
 }
 
 func install(store *snapstore.Client, st *state, name, channel string, classic bool, seen map[string]bool) error {
@@ -279,6 +318,11 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	}
 	if cur, ok := st.Snaps[name]; ok && cur.Revision == rel.Revision {
 		fmt.Printf("snap %q is already installed (%s, revision %d)\n", name, cur.Version, cur.Revision)
+		if cur.Aliases == nil && cur.Type == "app" {
+			// Installed before aliases were set up: add them now.
+			setAliases(store, name, rel.SnapID, cur)
+			return st.save()
+		}
 		return nil
 	}
 	fmt.Printf("Downloading %s %s (revision %d, %.1f MB) from the Snap Store...\n", name, rel.Version, rel.Revision, float64(rel.Size)/(1<<20))
@@ -287,18 +331,24 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 		return err
 	}
 	file := filepath.Join(cache, fmt.Sprintf("%s_%d.snap", name, rel.Revision))
-	f, err := os.Create(file)
-	if err != nil {
-		return err
+	// A partial download of another revision can never be resumed.
+	if old, _ := filepath.Glob(filepath.Join(cache, name+"_*.snap.partial")); len(old) > 0 {
+		for _, p := range old {
+			if p != file+".partial" {
+				os.Remove(p)
+			}
+		}
 	}
-	err = store.Download(rel, f)
-	if cerr := f.Close(); err == nil {
-		err = cerr
+	p := newProgress(rel.Size)
+	err = store.Fetch(rel, file, p.update)
+	p.done()
+	if err != nil {
+		if _, perr := os.Stat(file + ".partial"); perr == nil {
+			return fmt.Errorf("downloading %s: %v (run the same command again to continue the download)", name, err)
+		}
+		return fmt.Errorf("downloading %s: %v", name, err)
 	}
 	defer os.Remove(file)
-	if err != nil {
-		return err
-	}
 	dir := filepath.Join(snapRoot, name)
 	revDir := filepath.Join(dir, strconv.Itoa(rel.Revision))
 	partial := revDir + ".partial"
@@ -335,8 +385,11 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	if err := os.Rename(cur+".new", cur); err != nil {
 		return err
 	}
-	if old, ok := st.Snaps[name]; ok && old.Revision != rel.Revision {
-		os.RemoveAll(filepath.Join(dir, strconv.Itoa(old.Revision)))
+	if old, ok := st.Snaps[name]; ok {
+		removeAliases(name, old.Aliases)
+		if old.Revision != rel.Revision {
+			os.RemoveAll(filepath.Join(dir, strconv.Itoa(old.Revision)))
+		}
 	}
 	rec := &installed{Revision: rel.Revision, Version: rel.Version, Channel: rel.Channel, Type: y.Type,
 		Base: rel.Base, Confinement: rel.Confinement}
@@ -357,6 +410,9 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	if err := writeLaunchers(name, rec.Apps); err != nil {
 		return err
 	}
+	if rec.Type == "app" {
+		setAliases(store, name, rel.SnapID, rec)
+	}
 	st.Snaps[name] = rec
 	if err := st.save(); err != nil {
 		return err
@@ -364,6 +420,96 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	runHooks(name, rec, y, revDir)
 	fmt.Printf("%s %s from the Snap Store installed\n", name, rel.Version)
 	return nil
+}
+
+// progress draws one updating line while a snap downloads, on a terminal.
+type progress struct {
+	total      int64
+	tty        bool
+	start      time.Time
+	last       time.Time
+	first, now int64
+	drawn      bool
+}
+
+func newProgress(total int64) *progress {
+	return &progress{total: total, tty: termutil.IsTerminal(1), start: time.Now(), first: -1}
+}
+
+func (p *progress) update(done int64) {
+	if p.first < 0 {
+		p.first = done // bytes kept from an earlier, interrupted download
+	}
+	p.now = done
+	if !p.tty || (time.Since(p.last) < 250*time.Millisecond && done < p.total) {
+		return
+	}
+	p.last = time.Now()
+	mb := float64(1 << 20)
+	speed := ""
+	if secs := time.Since(p.start).Seconds(); secs > 0.5 {
+		speed = fmt.Sprintf("  %.1f MB/s", float64(done-p.first)/mb/secs)
+	}
+	fmt.Printf("\r  %.1f / %.1f MB  %3d%%%s   ", float64(done)/mb, float64(p.total)/mb, done*100/p.total, speed)
+	p.drawn = true
+}
+
+func (p *progress) done() {
+	if p.drawn {
+		fmt.Println()
+	}
+}
+
+// launcherBody runs <name>.<app> through snap run.
+func launcherBody(name, app string) []byte {
+	return []byte("#!/bin/sh\nexec /usr/local/bin/snap run " + name + "." + app + " \"$@\"\n")
+}
+
+// setAliases makes /snap/bin/<alias> for each command alias the store grants
+// the snap ("gcloud" for google-cloud-cli.gcloud), as snapd does on install.
+// An alias whose path already exists is left alone and reported. Failing to
+// reach the store only costs the aliases, never the install.
+func setAliases(store *snapstore.Client, name, snapID string, rec *installed) {
+	rec.Aliases = []string{}
+	granted, err := store.Aliases(snapID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %s's command aliases are not set up: %v\n", name, err)
+		return
+	}
+	apps := map[string]bool{}
+	for _, a := range rec.Apps {
+		apps[a] = true
+	}
+	for _, alias := range snapstore.SortedAliases(granted) {
+		app := granted[alias]
+		if !apps[app] {
+			continue
+		}
+		p := filepath.Join(snapBin, alias)
+		if _, err := os.Lstat(p); err == nil {
+			fmt.Fprintf(os.Stderr, "warning: alias %s for %s.%s not set up: %s already exists\n", alias, name, app, p)
+			continue
+		}
+		if err := os.WriteFile(p, launcherBody(name, app), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: alias %s: %v\n", alias, err)
+			continue
+		}
+		rec.Aliases = append(rec.Aliases, alias)
+	}
+	if len(rec.Aliases) > 0 {
+		fmt.Printf("Commands: %s\n", strings.Join(rec.Aliases, ", "))
+	}
+}
+
+// removeAliases deletes the snap's aliases, but only those that still run
+// this snap: another snap may have taken the name since.
+func removeAliases(name string, aliases []string) {
+	for _, alias := range aliases {
+		p := filepath.Join(snapBin, alias)
+		if b, err := os.ReadFile(p); err == nil && strings.Contains(string(b), " run "+name+".") {
+			os.Remove(p)
+		}
+	}
 }
 
 // cmdHook is snap run --hook=<install|configure> <snap>, as in snapd.
@@ -440,14 +586,12 @@ func writeLaunchers(name string, apps []string) error {
 		return err
 	}
 	removeLaunchers(name)
-	self := "/usr/local/bin/snap"
 	for _, app := range apps {
 		cmd := name + "." + app
 		if app == name {
 			cmd = name
 		}
-		body := "#!/bin/sh\nexec " + self + " run " + name + "." + app + " \"$@\"\n"
-		if err := os.WriteFile(filepath.Join(snapBin, cmd), []byte(body), 0o755); err != nil {
+		if err := os.WriteFile(filepath.Join(snapBin, cmd), launcherBody(name, app), 0o755); err != nil {
 			return err
 		}
 	}
@@ -484,6 +628,7 @@ func cmdRemove(args []string) int {
 			}
 		}
 		stopAll(name)
+		removeAliases(name, st.Snaps[name].Aliases)
 		removeLaunchers(name)
 		os.RemoveAll(filepath.Join(snapRoot, name))
 		os.RemoveAll(filepath.Join(dataRoot, name))

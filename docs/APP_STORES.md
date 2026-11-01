@@ -91,8 +91,19 @@ engine: Snap Store API v2 (api.snapcraft.io) → .snap download → sha3-384 che
   assertion chain (account-key → snap-declaration → snap-revision) against
   the pinned store root key. A snap whose hash does not match is refused.
 * Squashfs: snaps are xz-compressed squashfs and Go's standard library has
-  neither. The engine runs the guest's `unsquashfs` (Debian squashfs-tools) in a
-  helper PRoot instead of vendoring a decompressor.
+  neither. `snap install` runs the guest's `unsquashfs` (Debian squashfs-tools)
+  instead of vendoring a decompressor, and installs squashfs-tools with apt
+  itself when it is missing: it already runs as root and needs the network.
+* Downloads are bounded by progress, not total time: a connection that sends
+  nothing for 60 s is dropped and resumed with an HTTP Range (up to 8 times),
+  and an interrupted download stays in the cache as `<name>_<rev>.snap.partial`
+  for the next `snap install` to continue. A terminal shows MB, percent and
+  speed. (The first version had a 10-minute limit on the whole download, which
+  no 250 MB snap could meet on a slow link, and started over every time.)
+* Aliases: the commands the store grants a snap (`gcloud`, `gsutil` and `bq`
+  for google-cloud-cli) become `/snap/bin/<alias>`, read from the snap's
+  snap-declaration as snapd does. An alias whose path is taken is skipped and
+  reported; removing the snap removes only aliases that still run it.
 * Engine Guard refuses the real `snapd` package, as it does dockerd.
 * The Snap Store backend is not free software. F-Droid will likely want the
   `NonFreeNet` anti-feature for it; Flathub's server side is free.
