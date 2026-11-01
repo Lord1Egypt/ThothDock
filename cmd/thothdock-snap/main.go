@@ -60,6 +60,7 @@ const usage = `Usage: snap <command> [options]
   remove <snap>...
   list                         installed snaps
   run <snap>[.<app>] [args]    run an app (also /snap/bin/<snap>)
+  run --hook=configure <snap>  run a snap's install or configure hook again
   start|stop <snap>[.<app>]    run or stop a service (a daemon in snap.yaml)
   services                     services and whether they run
   logs <snap>[.<app>]          a service's output
@@ -89,6 +90,9 @@ func run(args []string) int {
 	case "list":
 		return cmdList()
 	case "run":
+		if len(rest) == 2 && strings.HasPrefix(rest[0], "--hook=") {
+			return asRoot(args, func() int { return cmdHook(strings.TrimPrefix(rest[0], "--hook="), rest[1]) })
+		}
 		return cmdRun(rest, false)
 	case "start":
 		return asRoot(args, func() int { return cmdRun(rest, true) })
@@ -357,8 +361,76 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	if err := st.save(); err != nil {
 		return err
 	}
+	runHooks(name, rec, y, revDir)
 	fmt.Printf("%s %s from the Snap Store installed\n", name, rel.Version)
 	return nil
+}
+
+// cmdHook is snap run --hook=<install|configure> <snap>, as in snapd.
+func cmdHook(hook, name string) int {
+	if hook != "install" && hook != "configure" {
+		return fail("only the install and configure hooks can be run")
+	}
+	if !snapstore.ValidName(name) {
+		return fail("%q is not a valid snap name", name)
+	}
+	st, err := loadState()
+	if err != nil {
+		return fail("%v", err)
+	}
+	rec, ok := st.Snaps[name]
+	if !ok {
+		return fail("snap %q is not installed", name)
+	}
+	revDir := filepath.Join(snapRoot, name, strconv.Itoa(rec.Revision))
+	meta, err := os.ReadFile(filepath.Join(revDir, "meta/snap.yaml"))
+	if err != nil {
+		return fail("%v", err)
+	}
+	y, err := snapstore.ParseSnapYAML(meta)
+	if err != nil {
+		return fail("%v", err)
+	}
+	if !runHook(name, hook, rec, y, revDir) {
+		return 1
+	}
+	return 0
+}
+
+// runHooks runs the snap's install and configure hooks, as snapd does after
+// unpacking (redis's configure hook writes $SNAP_COMMON/etc/redis/redis.conf),
+// in the snap's sandbox as root. snapctl is not available; a failing hook is
+// reported and the snap stays installed.
+func runHooks(name string, rec *installed, y *snapstore.SnapYAML, revDir string) {
+	for _, hook := range []string{"install", "configure"} {
+		runHook(name, hook, rec, y, revDir)
+	}
+}
+
+// runHook runs one hook if the snap has it; false when it exists and failed.
+func runHook(name, hook string, rec *installed, y *snapstore.SnapYAML, revDir string) bool {
+	if fi, err := os.Stat(filepath.Join(revDir, "meta/hooks", hook)); err != nil || !fi.Mode().IsRegular() {
+		return true
+	}
+	app := snapstore.App{Command: "meta/hooks/" + hook}
+	req, err := buildRequest(name, "hook."+hook, rec, y, app, revDir, nil, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %s hook of %s: %v\n", hook, name, err)
+		return false
+	}
+	req.Tty = false
+	conn, err := net.Dial("unix", engineSocket())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %s hook of %s not run: cannot reach the ThothDock engine: %v\n", hook, name, err)
+		return false
+	}
+	defer conn.Close()
+	code, err := sandbox.Run(conn, req, nil, os.Stdout, os.Stderr, nil)
+	if err != nil || code != 0 {
+		fmt.Fprintf(os.Stderr, "warning: the %s hook of %s failed (exit %d, %v)\n", hook, name, code, err)
+		return false
+	}
+	return true
 }
 
 // writeLaunchers makes /snap/bin/<snap> (the app named like the snap) and

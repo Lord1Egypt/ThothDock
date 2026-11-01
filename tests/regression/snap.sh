@@ -54,6 +54,21 @@ snap services | grep -q "svc-test.tick *active" && ok "service active (engine sa
 snap logs svc-test.tick | grep -q tick && ok "service log" || no "logs"
 snap stop svc-test.tick >/dev/null && sleep 1 && snap services | grep -q "svc-test.tick *inactive" && ok "snap stop" || no "stop: $(snap services)"
 
+# Hooks: a snap's configure hook runs at install, as snapd's would.
+mkdir -p "$WORK/hooksnap/meta/hooks" "$WORK/hooksnap/bin"
+printf 'name: hook-test\nversion: "1"\nbase: core20\napps:\n  hook-test:\n    command: bin/true\n' > "$WORK/hooksnap/meta/snap.yaml"
+printf '#!/bin/sh -e\nmkdir -p $SNAP_COMMON/etc && echo configured > $SNAP_COMMON/etc/marker\n' > "$WORK/hooksnap/meta/hooks/configure"
+chmod 755 "$WORK/hooksnap/meta/hooks/configure"
+python3 - "$WORK" <<'PY'
+import json,sys; p='/var/lib/thothdock-snaps/state.json'; s=json.load(open(p))
+s['snaps']['hook-test']={"revision":1,"version":"1","channel":"local","type":"app","base":"core20","confinement":"strict","apps":["hook-test"],"daemons":[]}
+json.dump(s,open(p,'w'))
+PY
+mkdir -p /snap/hook-test /var/snap/hook-test/common && cp -a "$WORK/hooksnap" /snap/hook-test/1 && ln -sfn 1 /snap/hook-test/current
+snap run --hook=configure hook-test >/dev/null 2>&1
+[ "$(cat /var/snap/hook-test/common/etc/marker 2>/dev/null)" = configured ] && ok "configure hook runs in the snap's sandbox" || no "hook did not run"
+snap remove hook-test >/dev/null
+
 # A base cannot be removed while an app needs it.
 snap remove core20 2>&1 | grep -q "uses it as its base" && ok "base in use cannot be removed" || no "base removal"
 snap remove svc-test >/dev/null; snap remove hello >/dev/null && snap remove core20 >/dev/null
