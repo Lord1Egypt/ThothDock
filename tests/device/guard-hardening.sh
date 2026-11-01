@@ -25,7 +25,7 @@ managed() { sha256sum /usr/local/bin/docker /usr/local/bin/thothdock | cut -c1-6
 realbins() { ls /usr/bin/dockerd /usr/sbin/dockerd /usr/bin/containerd /usr/bin/containerd-shim* /usr/bin/runc /usr/sbin/runc 2>/dev/null | wc -l; }
 engineprocs() { n=$(ps -eo comm | grep -cE '^(dockerd|containerd|runc|containerd-shim)'); echo "$n"; }
 placeholders_ok() {
-  for p in docker.io docker-ce docker-engine moby-engine containerd containerd.io runc; do
+  for p in docker.io docker-ce docker-engine moby-engine containerd containerd.io runc snapd; do
     [ "$(dpkg-query -W -f='${Version}' "$p" 2>/dev/null)" = "9999:1.0+thothdock.1" ] || return 1
   done
   dpkg-query -W -f='${Status}' thothdock-engine-guard 2>/dev/null | grep -q 'install ok installed' && echo placeholders-intact
@@ -45,7 +45,7 @@ t "docker-cli and docker-compose stay installable" 0 "" $APT install docker-cli 
 t "the placeholders are untouched by ordinary apt" 0 "placeholders-intact" placeholders_ok
 
 section "stock engine names"
-for p in docker.io docker-ce containerd containerd.io runc moby-engine docker-engine; do
+for p in docker.io docker-ce containerd containerd.io runc moby-engine docker-engine snapd; do
   t "apt install $p is a no-op on the placeholder" 0 "already the newest version (9999:" $APT install "$p"
 done
 for p in docker docker-ce-cli docker-compose-plugin; do
@@ -55,6 +55,8 @@ RV=$(apt-cache madison runc | awk 'NR==1{print $3}'); DV=$(apt-cache madison doc
 t "explicit stock docker.io version is refused" 100 "E: " $APT --allow-downgrades install "docker.io=$DV"
 t "explicit stock runc version is refused" 100 "E: " $APT --allow-downgrades install "runc=$RV"
 t "explicit stock containerd version is refused" 100 "E: " $APT --allow-downgrades install "containerd=$CV"
+SV=$(apt-cache madison snapd | awk 'NR==1{print $3}')
+t "explicit stock snapd version is refused" 100 "Refusing to install the stock snapd" $APT --allow-downgrades install "snapd=$SV"
 t "reinstall of a placeholder cannot fetch a stock engine" 0 "" $APT --reinstall install docker.io
 
 section "removal"

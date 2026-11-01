@@ -15,6 +15,7 @@
 PROTECTED="@PROTECTED@"
 GUARD="thothdock-engine-guard"
 bad=
+badsnap=
 removed=
 in_list=
 first=1
@@ -53,8 +54,20 @@ while IFS= read -r line <&3; do
         '**CONFIGURE**') continue ;;
         '**REMOVE**') removed="$removed $name"; continue ;;
     esac
-    case "$new" in 9999:*+thothdock.*) ;; *) bad="$bad $name($new)" ;; esac
+    case "$new" in
+        9999:*+thothdock.*) ;;
+        *) if [ "$name" = snapd ]; then badsnap="$badsnap $name($new)"; else bad="$bad $name($new)"; fi ;;
+    esac
 done
+if [ -n "$badsnap" ]; then
+    {
+        echo "E: Refusing to install the stock snapd:$badsnap"
+        echo "E: snap is provided by ThothDock (/usr/local/bin/snap): it installs from the"
+        echo "E: Snap Store and runs snaps without snapd, which needs systemd, AppArmor and"
+        echo "E: squashfs mounts that this system does not have. Use: snap install <name>"
+    } >&2
+    exit 1
+fi
 if [ -n "$bad" ]; then
     {
         echo "E: Refusing to install the stock Docker Engine:$bad"

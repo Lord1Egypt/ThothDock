@@ -9,8 +9,9 @@ import (
 	"strings"
 )
 
-// Protected are the engine package names the guard covers.
-var Protected = []string{"docker.io", "docker-ce", "docker-engine", "moby-engine", "containerd", "containerd.io", "runc"}
+// Protected are the package names the guard covers: the stock Docker Engine,
+// and snapd, whose snap command ThothDock provides.
+var Protected = []string{"docker.io", "docker-ce", "docker-engine", "moby-engine", "containerd", "containerd.io", "runc", "snapd"}
 
 // EngineBinaries must not exist in a ThothDock guest.
 var EngineBinaries = []string{"dockerd", "containerd", "runc", "docker-proxy", "docker-init", "containerd-shim-runc-v2"}

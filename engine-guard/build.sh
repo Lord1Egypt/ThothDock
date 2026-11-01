@@ -3,8 +3,9 @@
 #
 #   engine-guard/build.sh OUT_DIR
 #
-# ThothDock is the engine. These packages keep a stock Docker Engine from
-# ever being installed in the guest:
+# ThothDock is the engine. These packages keep a stock Docker Engine, and
+# snapd, whose `snap` command ThothDock also provides, from ever being
+# installed in the guest:
 #
 #   * one empty placeholder per ENGINE package name, versioned
 #     9999:1.0+thothdock.N -- an epoch no repository reaches, so apt sees the
@@ -30,10 +31,10 @@ umask 022
 OUT="${1:?usage: build.sh OUT_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VERSION='9999:1.0+thothdock.1'   # the placeholders
-GUARD_VERSION='1.0+thothdock.3' # the guard: bumped when its hook or pin changes, so dpkg replaces an older one
+GUARD_VERSION='1.0+thothdock.4' # the guard: bumped when its hook or pin changes, so dpkg replaces an older one
 EPOCH="${SOURCE_DATE_EPOCH:-1790000000}"
 export SOURCE_DATE_EPOCH="$EPOCH"
-PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc"
+PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc snapd"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 rm -f "$OUT"/*.deb
@@ -48,6 +49,25 @@ build() { # dir -> deb
 
 for p in $PROTECTED; do
     d="$WORK/$p"; mkdir -p "$d/DEBIAN"
+    if [ "$p" = snapd ]; then
+        cat > "$d/DEBIAN/control" <<CTL
+Package: $p
+Version: $VERSION
+Architecture: all
+Section: admin
+Priority: optional
+Maintainer: ThothDock <noreply@users.noreply.github.com>
+Description: snapd placeholder -- snap is provided by ThothDock
+ This empty package stands in for the stock "snapd" package. The snap
+ command at /usr/local/bin/snap is ThothDock's: it installs from the Snap
+ Store and runs snaps through the ThothDock engine. The real snapd needs
+ systemd, a setuid snap-confine, squashfs mounts and AppArmor, none of
+ which exist here, and its /usr/bin/snap would only fail. It carries an
+ epoch no repository reaches, so "apt upgrade" never replaces it.
+CTL
+        build "$d" "${p}_${VERSION#*:}_all.deb"
+        continue
+    fi
     cat > "$d/DEBIAN/control" <<CTL
 Package: $p
 Version: $VERSION
@@ -83,13 +103,13 @@ Priority: optional
 Depends: $DEPENDS
 Conflicts: $CONFLICTS
 Maintainer: ThothDock <noreply@users.noreply.github.com>
-Description: Keeps a stock Docker Engine from replacing ThothDock
+Description: Keeps a stock Docker Engine and snapd from replacing ThothDock
  Installs an apt pin and an apt hook that refuse any attempt to install the
  stock Docker Engine packages (docker.io, docker-ce, docker-engine,
- moby-engine, containerd, containerd.io, runc) in place of the ThothDock
- placeholders, or to remove the placeholders. Docker Engine is integrated
- into the ThothDock app and is updated with it, not with apt. The Docker CLI
- is not restricted.
+ moby-engine, containerd, containerd.io, runc) or snapd in place of the
+ ThothDock placeholders, or to remove the placeholders. Docker Engine and
+ the snap command are integrated into the ThothDock app and are updated with
+ it, not with apt. The Docker CLI and flatpak are not restricted.
 CTL
 cat > "$g/DEBIAN/postinst" <<'SH'
 #!/bin/sh

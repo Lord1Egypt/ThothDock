@@ -16,7 +16,7 @@ trap 'rm -rf "$W"' EXIT
 fails=0
 pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1"; fails=$((fails + 1)); }
-PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc"
+PROTECTED="docker.io docker-ce docker-engine moby-engine containerd containerd.io runc snapd"
 
 sed "s/@PROTECTED@/$PROTECTED/" "$HERE/engine-guard-hook.sh" > "$W/hook"
 chmod +x "$W/hook"
@@ -43,6 +43,9 @@ done
     && pass "removal message names the placeholder" || fail "removal message names the placeholder"
 "$W/hook" 3< "$HERE/testdata/block-stock-install.apt3" 2>&1 | grep -q 'docker.io(26.1.5-1)' \
     && pass "message names the package and version" || fail "message names the package and version"
+sed "s/^docker.io /snapd /" "$HERE/testdata/block-stock-install.apt3" > "$W/rec"
+"$W/hook" 3< "$W/rec" 2>&1 | grep -q 'Refusing to install the stock snapd: snapd(26.1.5-1)' \
+    && pass "snapd gets its own message" || fail "snapd gets its own message"
 
 if ! command -v apt-get >/dev/null || ! unshare -rm true 2>/dev/null; then
     echo "SKIP part 2: needs apt-get and unprivileged user namespaces (unshare -rm)"
@@ -53,7 +56,7 @@ fi
 # ---- part 2: real apt and dpkg ------------------------------------------
 G="$W/guard"
 sh "$HERE/build.sh" "$W/guard-debs" > /dev/null
-dpkg-deb -x "$W/guard-debs/thothdock-engine-guard_1.0+thothdock.3_all.deb" "$G"
+dpkg-deb -x "$W/guard-debs/thothdock-engine-guard_1.0+thothdock.4_all.deb" "$G"
 R="$W/root"
 mkdir -p "$R/var/lib/dpkg" "$R/inst" "$R/cache/archives/partial" "$R/state/lists/partial" "$W/repo" "$W/pool"
 : > "$R/var/lib/dpkg/status"
@@ -120,7 +123,7 @@ apt() { # real apt-get as "root" in a user namespace
 installed() { dpkg-query --admindir="$R/var/lib/dpkg" -W -f='${Version}' "$1" 2>/dev/null || true; }
 # ok NAME CMD...: command must succeed; no NAME CMD...: apt must refuse
 ok() { n="$1"; shift; if apt "$@"; then pass "$n"; else fail "$n"; cat "$W/out"; fi; }
-no() { n="$1"; shift; if apt "$@"; then fail "$n (apt succeeded)"; else if grep -q 'Refusing to install the stock Docker Engine' "$W/out"; then pass "$n"; else fail "$n (refused for another reason)"; cat "$W/out"; fi; fi; }
+no() { n="$1"; shift; if apt "$@"; then fail "$n (apt succeeded)"; else if grep -q 'Refusing to install the stock \(Docker Engine\|snapd\)' "$W/out"; then pass "$n"; else fail "$n (refused for another reason)"; cat "$W/out"; fi; fi; }
 is() { [ "$(installed "$2")" = "$3" ] && pass "$1" || { fail "$1: $2 is '$(installed "$2")', wanted '$3'"; }; }
 
 all="$(cd "$W/pool" && ls | grep -v thothdock.2)"
@@ -166,7 +169,7 @@ refuse() {
     if "$@"; then fail "$n (succeeded)"; cat "$W/out"; elif grep -qi "$pat" "$W/out"; then pass "$n"; else fail "$n (refused for another reason)"; cat "$W/out"; fi
 }
 if dp -i "$W"/guard-debs/*.deb; then pass "placeholders and guard register with dpkg"; else fail "placeholders and guard register with dpkg"; cat "$W/out"; fi
-is2 "guard registered" thothdock-engine-guard 1.0+thothdock.3
+is2 "guard registered" thothdock-engine-guard 1.0+thothdock.4
 for p in $PROTECTED; do
     refuse "dpkg -i stock $p over its placeholder" 'conflicts with' dp -i "$W/pool/${p}_26.1.5-1_all.deb"
     refuse "dpkg -r placeholder $p" 'depends on' dp -r "$p"
@@ -208,13 +211,13 @@ if converge; then pass "registration replaces a stock engine already installed";
 for p in $PROTECTED; do
     [ "$(installed3 "$p")" = 9999:1.0+thothdock.1 ] && pass "migration: $p is the placeholder" || fail "migration: $p is '$(installed3 "$p")'"
 done
-[ "$(installed3 thothdock-engine-guard)" = 1.0+thothdock.3 ] && pass "migration: guard installed" || fail "migration: guard is '$(installed3 thothdock-engine-guard)'"
+[ "$(installed3 thothdock-engine-guard)" = 1.0+thothdock.4 ] && pass "migration: guard installed" || fail "migration: guard is '$(installed3 thothdock-engine-guard)'"
 # a guest with the previous guard (no Depends/Conflicts): the new guard replaces it
 R3="$W/root4"; mkdir -p "$R3/var/lib/dpkg" "$R3/inst"; : > "$R3/var/lib/dpkg/status"
 mkdeb thothdock-engine-guard 1.0+thothdock.2
 for p in $PROTECTED; do dp3 -i "$W/guard-debs/${p}_1.0+thothdock.1_all.deb" || fail "placeholder $p into the upgrade root"; done
 dp3 -i "$W/pool/thothdock-engine-guard_1.0+thothdock.2_all.deb" || { fail "old guard into the upgrade root"; cat "$W/out"; }
 if converge; then pass "the new guard upgrades the previous guard"; else fail "the new guard upgrades the previous guard"; cat "$W/out"; fi
-[ "$(installed3 thothdock-engine-guard)" = 1.0+thothdock.3 ] && pass "upgrade: guard is thothdock.3" || fail "upgrade: guard is '$(installed3 thothdock-engine-guard)'"
+[ "$(installed3 thothdock-engine-guard)" = 1.0+thothdock.4 ] && pass "upgrade: guard is thothdock.4" || fail "upgrade: guard is '$(installed3 thothdock-engine-guard)'"
 
 if [ "$fails" -eq 0 ]; then echo "engine-guard: all passed"; else echo "engine-guard: $fails FAILED"; exit 1; fi
