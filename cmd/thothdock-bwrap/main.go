@@ -100,10 +100,27 @@ func run(args []string) int {
 	defer conn.Close()
 
 	req.Tty = isTerminal(0) && isTerminal(1)
+	var resizes chan [2]uint16
 	if req.Tty {
 		if restore, err := makeRaw(0); err == nil {
 			defer restore()
 		}
+		if ws, err := unix.IoctlGetWinsize(1, unix.TIOCGWINSZ); err == nil {
+			req.Width, req.Height = ws.Col, ws.Row
+		}
+		resizes = make(chan [2]uint16, 1)
+		winch := make(chan os.Signal, 1)
+		signal.Notify(winch, syscall.SIGWINCH)
+		go func() {
+			for range winch {
+				if ws, err := unix.IoctlGetWinsize(1, unix.TIOCGWINSZ); err == nil {
+					select {
+					case resizes <- [2]uint16{ws.Col, ws.Row}:
+					default:
+					}
+				}
+			}
+		}()
 	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP)
@@ -114,7 +131,7 @@ func run(args []string) int {
 		conn.Close() // the engine kills a --die-with-parent sandbox
 	}()
 
-	code, err := sandbox.Run(conn, req, os.Stdin, os.Stdout, os.Stderr, func(s sandbox.Started) {
+	code, err := sandbox.RunWithResize(conn, req, os.Stdin, os.Stdout, os.Stderr, func(s sandbox.Started) {
 		info := fmt.Sprintf("{\n    \"child-pid\": %d\n}\n", s.Pid)
 		if spec.InfoFD >= 0 {
 			f := os.NewFile(uintptr(spec.InfoFD), "info-fd")
@@ -130,7 +147,7 @@ func run(args []string) int {
 				fmt.Fprintf(os.Stderr, "bwrap (ThothDock): %s\n", w)
 			}
 		}
-	})
+	}, resizes)
 	if err != nil {
 		if sig := stoppedBy.Load(); sig != 0 {
 			return 128 + int(sig) // stopped on purpose: no error message

@@ -70,7 +70,7 @@ func (s *Server) runSandbox(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		// Stdin arrives in frames; the connection ending means the client
 		// went away.
-		sandbox.ReadClientFrames(buf.Reader, sb.Stdin(), req.Tty)
+		sandbox.ReadClientFrames(buf.Reader, sb.Stdin(), req.Tty, func(w, h uint16) { sb.Resize(w, h) })
 		close(clientGone)
 	}()
 	select {

@@ -26,7 +26,9 @@ type Request struct {
 	UID     int
 	GID     int
 	Tty     bool
-	Files   map[int][]byte
+	// Width and Height are the terminal's size in cells, for a TTY.
+	Width, Height uint16
+	Files         map[int][]byte
 	// DieWithParent ends the sandbox when the shim's connection ends.
 	DieWithParent bool
 }

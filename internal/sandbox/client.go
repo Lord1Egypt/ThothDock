@@ -11,12 +11,15 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 )
 
-// Frame types the client sends: stdin data, then one end-of-input frame.
+// Frame types the client sends: stdin data, one end-of-input frame, and
+// window sizes ({"w":cols,"h":rows}) for a TTY.
 const (
 	StdinFrame    byte = 0
 	StdinEOFFrame byte = 4
+	ResizeFrame   byte = 5
 )
 
 func writeFrame(w io.Writer, typ byte, p []byte) error {
@@ -28,8 +31,9 @@ func writeFrame(w io.Writer, typ byte, p []byte) error {
 }
 
 // ReadClientFrames delivers the client's stdin frames to in (closing it at
-// end of input unless keepOpen) and returns when the connection ends.
-func ReadClientFrames(r io.Reader, in io.WriteCloser, keepOpen bool) {
+// end of input unless keepOpen), window sizes to resize, and returns when the
+// connection ends.
+func ReadClientFrames(r io.Reader, in io.WriteCloser, keepOpen bool, resize func(w, h uint16)) {
 	var hdr [8]byte
 	for {
 		if _, err := io.ReadFull(r, hdr[:]); err != nil {
@@ -53,6 +57,15 @@ func ReadClientFrames(r io.Reader, in io.WriteCloser, keepOpen bool) {
 				in.Close()
 			}
 			in = nil
+		case ResizeFrame:
+			b := make([]byte, n)
+			if _, err := io.ReadFull(r, b); err != nil {
+				return
+			}
+			var sz struct{ W, H uint16 }
+			if json.Unmarshal(b, &sz) == nil && resize != nil && sz.W > 0 && sz.H > 0 {
+				resize(sz.W, sz.H)
+			}
 		default:
 			return
 		}
@@ -70,6 +83,12 @@ type Started struct {
 // ends. onStart is called with the sandbox's pid before any output is
 // awaited further. It returns the sandbox's exit code.
 func Run(conn net.Conn, req *Request, stdin io.Reader, stdout, stderr io.Writer, onStart func(Started)) (int, error) {
+	return RunWithResize(conn, req, stdin, stdout, stderr, onStart, nil)
+}
+
+// RunWithResize is Run, also sending every window size received on resizes
+// (for a TTY) to the sandbox.
+func RunWithResize(conn net.Conn, req *Request, stdin io.Reader, stdout, stderr io.Writer, onStart func(Started), resizes <-chan [2]uint16) (int, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return -1, err
@@ -98,19 +117,35 @@ func Run(conn net.Conn, req *Request, stdin io.Reader, stdout, stderr io.Writer,
 	if stdin == nil {
 		stdin = strings.NewReader("")
 	}
+	var wmu sync.Mutex // stdin and resize frames share the connection
+	send := func(typ byte, p []byte) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		return writeFrame(conn, typ, p)
+	}
 	go func() {
 		buf := make([]byte, 32<<10)
 		for {
 			n, err := stdin.Read(buf)
-			if n > 0 && writeFrame(conn, StdinFrame, buf[:n]) != nil {
+			if n > 0 && send(StdinFrame, buf[:n]) != nil {
 				return
 			}
 			if err != nil {
-				writeFrame(conn, StdinEOFFrame, nil)
+				send(StdinEOFFrame, nil)
 				return
 			}
 		}
 	}()
+	if resizes != nil {
+		go func() {
+			for sz := range resizes {
+				b, _ := json.Marshal(map[string]uint16{"w": sz[0], "h": sz[1]})
+				if send(ResizeFrame, b) != nil {
+					return
+				}
+			}
+		}()
+	}
 	var head [8]byte
 	for {
 		if _, err := io.ReadFull(br, head[:]); err != nil {
