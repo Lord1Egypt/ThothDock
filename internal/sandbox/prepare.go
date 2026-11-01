@@ -54,6 +54,23 @@ type Prepared struct {
 	Argv  []string // Argv[0] is absolute, resolved through PATH
 	// Warnings name what was asked for but cannot be honoured under PRoot.
 	Warnings []string
+	// rootIsGuest: Root is a guest directory (a bind onto /), never written.
+	rootIsGuest bool
+}
+
+func isBind(k OpKind) bool { return k == OpBind || k == OpROBind || k == OpDevBind }
+
+// mustExist refuses an operation that would create dest inside a sandbox
+// rooted at a guest directory, unless dest already exists as wanted.
+func (p *Prepared) mustExist(root *securefs.Root, dest string, wantDir bool) error {
+	if !p.rootIsGuest {
+		return nil
+	}
+	host, isDir, err := ResolveGuest(root, dest)
+	if err == nil && host != "" && isDir == wantDir {
+		return nil
+	}
+	return fmt.Errorf("sandbox: %s does not exist in a sandbox rooted at the guest, and nothing is created there", dest)
 }
 
 // Prepare builds the sandbox root in dir (an empty directory the engine owns)
@@ -74,21 +91,36 @@ func Prepare(req *Request, guest *securefs.Root, dir string) (*Prepared, error) 
 	if len(req.Argv) == 0 {
 		return nil, ErrNoCommand
 	}
-	root, err := securefs.OpenRoot(dir)
+	p := &Prepared{Root: dir}
+	ops := req.Ops
+	// "--ro-bind / /" (flatpak's triggers) as the first operation: the
+	// sandbox root is that guest directory itself. Nothing is created in it:
+	// later operations may only land on paths that already exist there.
+	if len(ops) > 0 && isBind(ops[0].Kind) && path.Clean(ops[0].Dest) == "/" {
+		src, isDir, err := ResolveGuest(guest, ops[0].Src)
+		if err != nil || !isDir {
+			return nil, fmt.Errorf("sandbox: root bind source %q: not a directory in the guest", ops[0].Src)
+		}
+		p.Root, p.rootIsGuest = src, true
+		ops = ops[1:]
+	}
+	root, err := securefs.OpenRoot(p.Root)
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
-	p := &Prepared{Root: dir}
 	// Hard links in the guest (OSTree checks every file out as one) are
 	// PRoot link2symlink entries: symlinks to absolute host paths under the
 	// guest root. The guest root at its own host path lets them resolve in
-	// the sandbox, whose root is elsewhere.
-	if err := root.MkdirAll(guest.Path()); err != nil {
-		return nil, fmt.Errorf("sandbox: mount point for the guest root: %w", err)
+	// a sandbox rooted elsewhere; rooted at the guest, PRoot resolves them
+	// itself, as in the guest's own sessions.
+	if !p.rootIsGuest {
+		if err := root.MkdirAll(guest.Path()); err != nil {
+			return nil, fmt.Errorf("sandbox: mount point for the guest root: %w", err)
+		}
+		p.Binds = append(p.Binds, Bind{Source: guest.Path(), Target: guest.Path()})
 	}
-	p.Binds = append(p.Binds, Bind{Source: guest.Path(), Target: guest.Path()})
-	for _, op := range req.Ops {
+	for _, op := range ops {
 		if err := p.apply(op, req, guest, root); err != nil {
 			return nil, err
 		}
@@ -145,6 +177,9 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 		if op.Kind == OpROBind {
 			p.warn("%s is bound writable: PRoot has no read-only binds", dest)
 		}
+		if err := p.mustExist(root, dest, isDir); err != nil {
+			return err
+		}
 		if err := mountpoint(root, dest, isDir); err != nil {
 			return err
 		}
@@ -154,6 +189,12 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 			return fmt.Errorf("sandbox: --%s is only supported on /%s", op.Kind, op.Kind)
 		}
 	case OpTmpfs, OpDir:
+		if err := p.mustExist(root, dest, true); err != nil {
+			return err
+		}
+		if p.rootIsGuest {
+			return nil
+		}
 		if err := root.MkdirAll(dest); err != nil {
 			return fmt.Errorf("sandbox: %s %s: %w", op.Kind, dest, err)
 		}
@@ -163,6 +204,9 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 			}
 		}
 	case OpSymlink:
+		if p.rootIsGuest {
+			return fmt.Errorf("sandbox: --symlink %s in a sandbox rooted at the guest would change the guest", dest)
+		}
 		par, err := root.OpenParent(dest, true, nil)
 		if err != nil {
 			return fmt.Errorf("sandbox: symlink %s: %w", dest, err)
@@ -173,6 +217,9 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 			return fmt.Errorf("sandbox: symlink %s: %w", dest, err)
 		}
 	case OpFile, OpBindData, OpROBindData:
+		if p.rootIsGuest {
+			return fmt.Errorf("sandbox: --%s %s in a sandbox rooted at the guest would change the guest", op.Kind, dest)
+		}
 		data, ok := req.Files[op.FD]
 		if !ok {
 			return fmt.Errorf("sandbox: no contents for descriptor %d (%s)", op.FD, dest)
@@ -188,6 +235,9 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 			return err
 		}
 	case OpChmod:
+		if p.rootIsGuest {
+			return fmt.Errorf("sandbox: --chmod %s in a sandbox rooted at the guest would change the guest", dest)
+		}
 		if err := chmodIn(root, dest, uint32(op.Mode)); err != nil {
 			return err
 		}

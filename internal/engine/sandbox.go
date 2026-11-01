@@ -105,7 +105,7 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 		binds[i] = runtime.Bind{Source: b.Source, Target: b.Target}
 	}
 	proc, err := e.Runtime.Start(runtime.Spec{
-		ID: id, Rootfs: dir, Args: prep.Argv, Env: prep.Env, Cwd: prep.Cwd,
+		ID: id, Rootfs: prep.Root, Args: prep.Argv, Env: prep.Env, Cwd: prep.Cwd,
 		UID: req.UID, GID: req.GID, Binds: binds, Tty: req.Tty, OpenStdin: true,
 		NetIP: ip, Stdout: stdout, Stderr: stderr,
 	})

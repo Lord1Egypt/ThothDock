@@ -152,3 +152,50 @@ func TestEscapingSymlinkBindStaysInGuest(t *testing.T) {
 		t.Fatalf("bind source %s escaped the guest", p.Binds[1].Source)
 	}
 }
+
+// flatpak's triggers: "--ro-bind / / --proc /proc --dev /dev --bind D D".
+func TestRootBindUsesTheGuestDirectoryAndChangesNothing(t *testing.T) {
+	g := fakeGuest(t)
+	before := listTree(t, g.Path())
+	p, err := Prepare(&Request{Ops: []Op{
+		{Kind: OpROBind, Src: "/", Dest: "/", FD: -1, Perms: -1},
+		{Kind: OpProc, Dest: "/proc", FD: -1, Perms: -1},
+		{Kind: OpDev, Dest: "/dev", FD: -1, Perms: -1},
+		{Kind: OpBind, Src: "/home/thoth/.var", Dest: "/home/thoth/.var", FD: -1, Perms: -1},
+	}, Argv: []string{"/home/thoth/.local/share/flatpak/runtime/rt/files/bin/sh"}}, g, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Root != g.Path() || len(p.Binds) != 1 || p.Binds[0].Target != "/home/thoth/.var" {
+		t.Fatalf("root %s binds %v", p.Root, p.Binds)
+	}
+	if after := listTree(t, g.Path()); !reflect.DeepEqual(before, after) {
+		t.Fatalf("the guest changed:\n%v\n%v", before, after)
+	}
+	for _, op := range []Op{
+		{Kind: OpDir, Dest: "/brand-new", FD: -1, Perms: -1},
+		{Kind: OpFile, Dest: "/etc/passwd", FD: 3, Perms: -1},
+		{Kind: OpSymlink, Src: "x", Dest: "/y", FD: -1, Perms: -1},
+		{Kind: OpBind, Src: "/etc", Dest: "/not-there", FD: -1, Perms: -1},
+	} {
+		_, err := Prepare(&Request{Ops: []Op{{Kind: OpROBind, Src: "/", Dest: "/", FD: -1, Perms: -1}, op},
+			Argv: []string{"/bin/true"}, Files: map[int][]byte{3: []byte("x")}}, g, t.TempDir())
+		if err == nil {
+			t.Errorf("%+v accepted in a guest-rooted sandbox", op)
+		}
+	}
+	if after := listTree(t, g.Path()); !reflect.DeepEqual(before, after) {
+		t.Fatal("a refused operation changed the guest")
+	}
+}
+
+func listTree(t *testing.T, dir string) []string {
+	var out []string
+	filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
+		if err == nil {
+			out = append(out, strings.TrimPrefix(p, dir)+" "+fi.Mode().String())
+		}
+		return nil
+	})
+	return out
+}
