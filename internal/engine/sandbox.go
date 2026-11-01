@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 // in a root built from the request, like a container without an image.
 type Sandbox struct {
 	ID      string
+	AppID   string // FLATPAK_ID of the sandbox's environment, if any
 	Argv    []string
 	NetIP   string
 	Started time.Time
@@ -52,6 +54,7 @@ func (s *Sandbox) ExitCode() int {
 // SandboxInfo describes a running sandbox (for the Apps view and tests).
 type SandboxInfo struct {
 	ID      string
+	AppID   string
 	Pid     int
 	Argv    []string
 	NetIP   string
@@ -113,7 +116,7 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 		cleanup()
 		return nil, nil, err
 	}
-	s := &Sandbox{ID: id, Argv: prep.Argv, NetIP: ip, Started: time.Now(), proc: proc, done: make(chan struct{})}
+	s := &Sandbox{ID: id, AppID: envValue(prep.Env, "FLATPAK_ID"), Argv: prep.Argv, NetIP: ip, Started: time.Now(), proc: proc, done: make(chan struct{})}
 	e.mu.Lock()
 	e.sandboxes[id] = s
 	e.mu.Unlock()
@@ -143,7 +146,7 @@ func (e *Engine) Sandboxes() []SandboxInfo {
 	defer e.mu.Unlock()
 	out := make([]SandboxInfo, 0, len(e.sandboxes))
 	for _, s := range e.sandboxes {
-		out = append(out, SandboxInfo{ID: s.ID, Pid: s.Pid(), Argv: s.Argv, NetIP: s.NetIP, Started: s.Started})
+		out = append(out, SandboxInfo{ID: s.ID, AppID: s.AppID, Pid: s.Pid(), Argv: s.Argv, NetIP: s.NetIP, Started: s.Started})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Started.Before(out[j].Started) })
 	return out
@@ -161,4 +164,13 @@ func (e *Engine) killSandboxes() {
 		s.Kill()
 		<-s.done
 	}
+}
+
+func envValue(env []string, key string) string {
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, key+"="); ok {
+			return v
+		}
+	}
+	return ""
 }

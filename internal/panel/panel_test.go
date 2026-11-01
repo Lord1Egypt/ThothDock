@@ -806,3 +806,25 @@ func TestSummaryCarriesProcessGuard(t *testing.T) {
 		t.Fatal("no recovery report")
 	}
 }
+
+func TestAppsNeedASessionAndValidateSandboxIDs(t *testing.T) {
+	f := newFixture(t)
+	if resp, _ := f.req("GET", "/api/apps", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated apps: %d", resp.StatusCode)
+	}
+	f.pair()
+	resp, body := f.req("GET", "/api/apps", "", nil)
+	if resp.StatusCode != 200 || body["runtimes"] != float64(0) {
+		t.Fatalf("apps: %d %v", resp.StatusCode, body)
+	}
+	if apps, ok := body["apps"].([]any); !ok || len(apps) != 0 {
+		t.Fatalf("apps list %v", body["apps"])
+	}
+	hdr := f.authed()
+	if resp, _ := f.req("POST", "/api/apps/sandboxes/..%2fcontainers/stop", "", hdr); resp.StatusCode == 200 {
+		t.Fatal("a malformed sandbox id was accepted")
+	}
+	if resp, _ := f.req("POST", "/api/apps/sandboxes/"+strings.Repeat("a", 32)+"/stop", "", hdr); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown sandbox: %d", resp.StatusCode)
+	}
+}

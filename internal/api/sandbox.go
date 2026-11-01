@@ -158,3 +158,18 @@ func (s sandboxStream) Write(p []byte) (int, error) {
 }
 
 func (f *sandboxFrames) stream(typ byte) io.Writer { return sandboxStream{f, typ} }
+
+// listApps is GET /thothdock/apps: installed Flatpak apps with their running
+// sandboxes (the Containers screen's Apps tab and the Web Panel).
+func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
+	writeBody(w, s.Engine.Apps())
+}
+
+// killSandbox is POST /thothdock/sandboxes/{id}/kill (the Apps tab's Stop).
+func (s *Server) killSandbox(w http.ResponseWriter, r *http.Request) {
+	if err := s.Engine.KillSandbox(r.PathValue("id")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

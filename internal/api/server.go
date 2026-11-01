@@ -45,6 +45,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /info", s.info)
 	m.HandleFunc("GET /thothdock/process-guard", s.processGuard)
 	m.HandleFunc("POST /thothdock/sandboxes", s.runSandbox)
+	m.HandleFunc("GET /thothdock/apps", s.listApps)
+	m.HandleFunc("POST /thothdock/sandboxes/{id}/kill", s.killSandbox)
 
 	m.HandleFunc("GET /containers/json", s.listContainers)
 	m.HandleFunc("POST /containers/create", s.createContainer)

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -111,4 +112,72 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatal("condition not reached")
+}
+
+// A guest with one Flatpak app (a link2symlink entry included) and a runtime.
+func flatpakGuest(t *testing.T) string {
+	g := sandboxGuest(t)
+	fp := filepath.Join(g, "home/thoth/.local/share/flatpak")
+	dep := filepath.Join(fp, "app/org.example.Tool/aarch64/stable/abc123")
+	os.MkdirAll(filepath.Join(dep, "files/share/applications"), 0o755)
+	os.MkdirAll(filepath.Join(dep, "files/bin"), 0o755)
+	os.WriteFile(filepath.Join(dep, "metadata"), []byte("[Application]\nname=org.example.Tool\nruntime=org.freedesktop.Platform/aarch64/24.08\n"), 0o644)
+	os.WriteFile(filepath.Join(dep, "files/share/applications/org.example.Tool.desktop"), []byte("[Desktop Entry]\nName=Example Tool\nName[ar]=أداة\n"), 0o644)
+	os.WriteFile(filepath.Join(dep, "files/bin/tool"), make([]byte, 1000), 0o755)
+	obj := filepath.Join(fp, "repo/objects/e6/.l2s.deadbeef.file0001")
+	os.MkdirAll(filepath.Dir(obj), 0o755)
+	os.WriteFile(obj, make([]byte, 4000), 0o644)
+	os.Symlink(obj, filepath.Join(dep, "files/bin/hardlinked"))
+	os.Symlink("abc123", filepath.Join(fp, "app/org.example.Tool/aarch64/stable/active"))
+	rt := filepath.Join(fp, "runtime/org.freedesktop.Platform/aarch64/24.08/r1")
+	os.MkdirAll(rt, 0o755)
+	os.Symlink("r1", filepath.Join(fp, "runtime/org.freedesktop.Platform/aarch64/24.08/active"))
+	return g
+}
+
+func TestAppsListsFlatpakAppsAndStopsTheirSandboxes(t *testing.T) {
+	f := newAPIWith(t, engine.Config{GuestRoot: flatpakGuest(t)})
+	f.rt.Program("/usr/bin/hello", func(ctx context.Context, s runtime.Spec, in io.Reader) int {
+		<-ctx.Done()
+		return 137
+	})
+	req := helloRequest()
+	req.Env = append(req.Env, sandbox.EnvOp{Name: "FLATPAK_ID", Value: "org.example.Tool"})
+	started := make(chan sandbox.Started, 1)
+	done := make(chan int, 1)
+	go func() {
+		code, _ := sandbox.Run(dialAPI(t, f), req, nil, io.Discard, io.Discard, func(s sandbox.Started) { started <- s })
+		done <- code
+	}()
+	<-started
+
+	resp, body := f.do(t, "GET", "/thothdock/apps", "")
+	var view engine.AppsView
+	if resp.StatusCode != 200 || json.Unmarshal([]byte(body), &view) != nil {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	if len(view.Apps) != 1 || view.Runtimes != 1 || len(view.Sandboxes) != 1 {
+		t.Fatalf("view %+v", view)
+	}
+	a := view.Apps[0]
+	if a.ID != "org.example.Tool" || a.Name != "Example Tool" || a.Branch != "stable" || a.Arch != "aarch64" ||
+		a.Installation != "user:thoth" || a.Runtime != "org.freedesktop.Platform/aarch64/24.08" || a.SizeBytes < 5000 || a.SizeBytes > 7000 {
+		t.Fatalf("app %+v", a)
+	}
+	if len(a.Running) != 1 || a.Running[0].AppID != "org.example.Tool" {
+		t.Fatalf("running %+v", a.Running)
+	}
+	resp, body = f.do(t, "POST", "/thothdock/sandboxes/"+a.Running[0].ID+"/kill", "")
+	if resp.StatusCode != 204 {
+		t.Fatalf("kill %d %s", resp.StatusCode, body)
+	}
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("sandbox not stopped")
+	}
+	resp, _ = f.do(t, "POST", "/thothdock/sandboxes/nope/kill", "")
+	if resp.StatusCode != 404 {
+		t.Fatalf("unknown sandbox: %d", resp.StatusCode)
+	}
 }

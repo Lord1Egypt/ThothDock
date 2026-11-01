@@ -77,6 +77,7 @@ type Engine struct {
 	names      map[string]string // name -> ID
 	execs      map[string]*Exec
 	sandboxes  map[string]*Sandbox
+	appSizes   map[string]int64 // deployment host path -> size (commits never change)
 	// restore holds the containers whose restart policy asks for a start
 	// now that the daemon runs again; RestoreRestartPolicies consumes it.
 	restore []string
@@ -135,7 +136,7 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 	}
 	e := &Engine{Layout: layout, Volumes: vols, Networks: nets, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
 		Events: events.New(), addrs: network.NewPool(), containers: map[string]*Container{}, names: map[string]string{},
-		sandboxes: map[string]*Sandbox{}}
+		sandboxes: map[string]*Sandbox{}, appSizes: map[string]int64{}}
 	// Sandboxes never outlive the daemon; a crash may have left their roots.
 	if err := securefs.RemoveTree(filepath.Join(layout.Root, "sandboxes")); err != nil && !os.IsNotExist(err) {
 		log.Warn("removing old sandbox roots", "err", err)
