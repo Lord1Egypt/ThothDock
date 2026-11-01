@@ -139,6 +139,21 @@ func (p *yamlParser) value(rest string, indent int) (any, error) {
 		}
 		return scalar(joined), nil
 	case rest != "":
+		// A plain scalar continues on more-indented lines (redis's long
+		// command, mosquitto's description); YAML folds them with spaces.
+		if !strings.HasPrefix(rest, "[") && !strings.HasPrefix(rest, "'") && !strings.HasPrefix(rest, `"`) {
+			parts := []string{rest}
+			for p.pos < len(p.lines) && !blank(p.lines[p.pos]) && indentOf(p.lines[p.pos]) > indent {
+				l := stripComment(strings.TrimSpace(p.lines[p.pos]))
+				if _, _, isKey := cutKey(l); isKey {
+					// ": " cannot occur in a plain scalar: a key here is bad indentation.
+					return nil, fmt.Errorf("snap.yaml line %d: unexpected indentation", p.pos+1)
+				}
+				parts = append(parts, l)
+				p.pos++
+			}
+			rest = strings.Join(parts, " ")
+		}
 		return scalar(rest), nil
 	}
 	ind := p.next()

@@ -590,7 +590,7 @@ func buildRequest(name, appName string, s *installed, y *snapstore.SnapYAML, app
 		set("HOME", vars["SNAP_USER_DATA"])
 	}
 	set("THOTHDOCK_SNAP_APP", name+"."+appName) // the engine's Apps view groups sandboxes by it
-	expand := func(v string) string { return os.Expand(v, func(k string) string { return env[k] }) }
+	expand := func(v string) string { return expandVars(v, func(k string) string { return env[k] }) }
 	for _, m := range []map[string]string{y.Environment, app.Environment} {
 		keys := make([]string, 0, len(m))
 		for k := range m {
@@ -912,4 +912,62 @@ func firstErrors(b []byte, n int) string {
 		return strings.TrimSpace(string(b))
 	}
 	return strings.Join(out, " | ")
+}
+
+// expandVars expands $VAR, ${VAR}, ${VAR:-word} and ${VAR:+word} (word
+// expanded in turn), the forms snapcraft writes into snap.yaml environments,
+// e.g. ${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}.
+func expandVars(s string, get func(string) string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '$' || i+1 == len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		if s[i+1] == '{' {
+			depth, j := 1, i+2
+			for ; j < len(s) && depth > 0; j++ {
+				switch s[j] {
+				case '{':
+					depth++
+				case '}':
+					depth--
+				}
+			}
+			if depth != 0 {
+				b.WriteString(s[i:])
+				break
+			}
+			inner := s[i+2 : j-1]
+			name, op, word := inner, "", ""
+			if k := strings.Index(inner, ":"); k >= 0 && k+1 < len(inner) {
+				name, op, word = inner[:k], inner[k:k+2], inner[k+2:]
+			}
+			v := get(name)
+			switch op {
+			case ":-":
+				if v == "" {
+					v = expandVars(word, get)
+				}
+			case ":+":
+				if v != "" {
+					v = expandVars(word, get)
+				}
+			}
+			b.WriteString(v)
+			i = j - 1
+			continue
+		}
+		j := i + 1
+		for j < len(s) && (s[j] == '_' || s[j] >= 'A' && s[j] <= 'Z' || s[j] >= 'a' && s[j] <= 'z' || j > i+1 && s[j] >= '0' && s[j] <= '9') {
+			j++
+		}
+		if j == i+1 {
+			b.WriteByte('$')
+			continue
+		}
+		b.WriteString(get(s[i+1 : j]))
+		i = j - 1
+	}
+	return b.String()
 }

@@ -28,3 +28,24 @@ func TestOnlyDeviceNodeErrorsAreAccepted(t *testing.T) {
 		t.Fatal("exit 2 with no explained error accepted")
 	}
 }
+
+func TestExpandVars(t *testing.T) {
+	env := map[string]string{"SNAP": "/snap/m/1", "SNAP_LIBRARY_PATH": "/gl", "PATH": "/usr/bin"}
+	get := func(k string) string { return env[k] }
+	for in, want := range map[string]string{
+		"${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib": "/gl:/snap/m/1/usr/lib",
+		"$SNAP/usr/bin:$PATH": "/snap/m/1/usr/bin:/usr/bin",
+		"${NOPE:-fallback}":   "fallback",
+		"${PATH:+has}":        "has",
+		"cost $5 and $":       "cost $5 and $", // no positional parameters here
+		"${unterminated":      "${unterminated",
+	} {
+		if got := expandVars(in, get); got != want {
+			t.Errorf("%q: got %q, want %q", in, got, want)
+		}
+	}
+	env["LD_LIBRARY_PATH"] = "/x"
+	if got := expandVars("${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}", get); got != ":/x" {
+		t.Errorf("set :+ got %q", got)
+	}
+}
