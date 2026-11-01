@@ -305,9 +305,9 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	// -no-xattrs: a PRoot guest cannot set them. Device nodes, if any, fail
 	// individually; unsquashfs exits non-zero only on real errors.
 	out, err := exec.Command("unsquashfs", "-n", "-no-xattrs", "-d", partial, file).CombinedOutput()
-	if err != nil {
+	if err != nil && !onlyDeviceNodeErrors(err, out, partial) {
 		os.RemoveAll(partial)
-		return fmt.Errorf("unpacking %s: %v: %s", name, err, lastLines(out, 4))
+		return fmt.Errorf("unpacking %s: %v: %s", name, err, firstErrors(out, 4))
 	}
 	meta, err := os.ReadFile(filepath.Join(partial, "meta/snap.yaml"))
 	if err != nil {
@@ -876,10 +876,40 @@ func cmdLogs(args []string) int {
 	return 0
 }
 
-func lastLines(b []byte, n int) string {
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
+// onlyDeviceNodeErrors: base snaps ship /dev/null and friends, which a PRoot
+// guest cannot create (unsquashfs exits 2). Sandboxes get /dev from the
+// runtime, never from the snap, so that is the one failure accepted; any
+// error about another path still fails the install.
+func onlyDeviceNodeErrors(err error, out []byte, dir string) bool {
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 {
+		return false
 	}
-	return strings.Join(lines, " | ")
+	saw := false
+	for _, l := range strings.Split(string(out), "\n") {
+		if !strings.Contains(l, "failed") && !strings.Contains(l, "could not") && !strings.Contains(l, "rror") {
+			continue
+		}
+		if !strings.Contains(l, " "+dir+"/dev/") {
+			return false
+		}
+		saw = true
+	}
+	return saw
+}
+
+func firstErrors(b []byte, n int) string {
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, "failed") || strings.Contains(l, "could not") || strings.Contains(l, "rror") {
+			out = append(out, strings.TrimSpace(l))
+			if len(out) == n {
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return strings.TrimSpace(string(b))
+	}
+	return strings.Join(out, " | ")
 }
