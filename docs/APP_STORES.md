@@ -1,6 +1,6 @@
 # Flatpak and Snap on ThothDock: design and verified constraints
 
-Status (2026-11-01): Flatpak phase 1 engine side implemented and host-tested (internal/sandbox, POST /thothdock/sandboxes, cmd/thothdock-bwrap, serve --guest-root, tests/regression/sandbox.sh); Android wiring, a real Flathub app on the device, Snap and the Apps tab are not done yet. Every
+Status (2026-11-01): implemented and tested on the SM-A165F — Flatpak (bwrap shim, sandboxes, Apps tab), Snap (thothdock-snap: store installs with SHA3-384 check, bases, hooks, apps and services), the Apps tab in the Containers screen and Web Panel, and the stress/address test below. Not done: snap assertion verification, GUI apps (Phase 3).
 "verified" line below was run on the owner's Samsung SM-A165F (Android 16,
 kernel 6.12.38, production ThothTerm • ThothDock 0.4.1) or in a disposable
 Debian trixie container on the host, and says which.
@@ -149,3 +149,23 @@ Phase 1 works on the device.
 GUI apps: an X11 or Wayland server rendered to the Android app or to the
 browser (Web Panel), for example with Xvfb plus a VNC or Xpra HTML5 client.
 That is a separate design.
+
+## Results (SM-A165F, Android 16, 2026-11-01)
+
+`tests/device/app-stores-stress.sh 300`: 11 workloads at once (3 web and 2
+redis containers on a user network, 4 Flatpak `python3 -m http.server`
+sandboxes, the redis and mosquitto snaps from the Snap Store, one
+default-network container published on 127.0.0.1:18080). Every workload had
+its own loopback address and none was shared; all 7 web servers on :8080 and
+the 3 redis servers on :6379 answered as themselves (separate data), the
+published port answered, and all kept answering for 300 s. 42 processes at
+peak (13 at rest), Process Guard "high", engine RSS 12-16 MB; after teardown
+no sandbox was left, processes were back to 13 and addresses were reused.
+
+**Known limitation.** A container on the default network shares the phone's
+network, so its servers bind every address (0.0.0.0:PORT). Linux refuses that
+bind when any workload with its own address already holds 127.77.x.y:PORT
+("Address already in use"). Workloads with their own address (user-network
+containers, Flatpak sandboxes, snaps) never conflict with each other. Giving
+default-network containers pool addresses too would remove this, but changes
+how they reach each other today (through localhost): an owner decision.

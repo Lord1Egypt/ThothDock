@@ -576,6 +576,17 @@ func cmdRun(args []string, service bool) int {
 		}
 		return fail("%s.%s is a service; start it with: sudo snap start %s.%s", name, appName, name, appName)
 	}
+	if service {
+		// One instance per service, as under snapd.
+		if list, err := engineSandboxes(); err == nil {
+			for _, sb := range list {
+				if sb.AppID == "snap:"+name+"."+appName {
+					fmt.Printf("%s.%s is already running (pid %d)\n", name, appName, sb.Pid)
+					return 0
+				}
+			}
+		}
+	}
 	req, err := buildRequest(name, appName, s, y, app, snapDir, args[1:], service)
 	if err != nil {
 		return fail("%v", err)

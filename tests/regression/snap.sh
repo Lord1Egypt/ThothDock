@@ -49,6 +49,7 @@ s['snaps']['svc-test']={"revision":1,"version":"1","channel":"local","type":"app
 json.dump(s,open(p,'w'))
 EOF
 snap start svc-test.tick >/dev/null && ok "snap start" || no "start"
+snap start svc-test.tick | grep -q "already running" && ok "a running service is not started twice" || no "second start"
 sleep 3
 snap services | grep -q "svc-test.tick *active" && ok "service active (engine sandbox)" || no "services: $(snap services)"
 snap logs svc-test.tick | grep -q tick && ok "service log" || no "logs"
