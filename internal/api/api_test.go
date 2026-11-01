@@ -32,7 +32,10 @@ type apiFixture struct {
 	srv   *httptest.Server
 	rt    *runtime.FakeRuntime
 	image string
+	eng   *engine.Engine
 }
+
+func (f *apiFixture) engineOf() *engine.Engine { return f.eng }
 
 func newAPI(t *testing.T) *apiFixture { return newAPIWith(t, engine.Config{}) }
 
@@ -57,7 +60,7 @@ func newAPIWith(t *testing.T, cfg engine.Config) *apiFixture {
 	s := &Server{Engine: e, Log: quiet, DaemonID: "test", RuntimeName: "fake", RuntimeVersion: "0"}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
-	return &apiFixture{srv: ts, rt: rt, image: reg.Host() + "/library/tiny:1"}
+	return &apiFixture{srv: ts, rt: rt, image: reg.Host() + "/library/tiny:1", eng: e}
 }
 
 func (f *apiFixture) do(t *testing.T, method, path, body string) (*http.Response, string) {
@@ -218,15 +221,21 @@ func TestRunFlowOverHTTP(t *testing.T) {
 	expect(t, resp, body, 200, `"RootFS"`)
 	var img struct{ Id string }
 	json.Unmarshal([]byte(body), &img)
-	// By tag with another reference left: only untagged, as in Docker.
+	// The image's only tag (its digest reference does not count, as in Docker):
+	// a stopped container using it blocks the delete, by tag or by ID.
 	resp, body = f.do(t, "DELETE", "/v1.41/images/"+f.image, "")
-	expect(t, resp, body, 200, `"Untagged"`)
+	expect(t, resp, body, 409, "must be forced")
 	resp, body = f.do(t, "DELETE", "/v1.41/images/"+img.Id, "")
 	expect(t, resp, body, 409, "must be forced")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 204, "")
 	resp, body = f.do(t, "DELETE", "/v1.41/containers/web", "")
 	expect(t, resp, body, 404, "No such container")
+	// Unused now: removing the tag removes the image, not just the tag.
+	resp, body = f.do(t, "DELETE", "/v1.41/images/"+f.image, "")
+	expect(t, resp, body, 200, `"Deleted":"`+img.Id)
+	resp, body = f.do(t, "GET", "/v1.41/images/"+img.Id+"/json", "")
+	expect(t, resp, body, 404, "No such image")
 }
 
 func TestExecOverHTTP(t *testing.T) {

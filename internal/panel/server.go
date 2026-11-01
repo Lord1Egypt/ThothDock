@@ -187,6 +187,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /api/containers/{id}/logs", s.authed(s.containerLogs))
 	m.HandleFunc("GET /api/images", s.authed(s.images))
 	m.HandleFunc("GET /api/volumes", s.authed(s.volumes))
+	m.HandleFunc("GET /api/apps", s.authed(s.apps))
+	m.HandleFunc("POST /api/apps/sandboxes/{id}/stop", s.authed(s.appStop))
 	m.HandleFunc("GET /api/networks", s.authed(s.networks))
 	m.HandleFunc("GET /api/stacks", s.authed(s.stacks))
 	m.HandleFunc("POST /api/stacks/{project}/{action}", s.authed(s.stackAction))
@@ -509,6 +511,73 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request, _ string, _ sess
 		out = append(out, imageView{ID: strings.TrimPrefix(i.Id, "sha256:"), Tags: tags, Size: i.Size, Created: i.Created})
 	}
 	jsonOK(w, out)
+}
+
+// apps lists the Flatpak apps installed in the guest and their running
+// sandboxes. Running and removing an app stay in the terminal (flatpak run,
+// flatpak uninstall); a running sandbox can be stopped from here.
+func (s *Server) apps(w http.ResponseWriter, r *http.Request, _ string, _ session) {
+	var raw struct {
+		Apps []struct {
+			Kind, ID, Name, Branch, Arch, Installation, Runtime string
+			SizeBytes                                           int64
+			Running                                             []struct {
+				ID, NetIP string
+				Pid       int
+				Started   string
+			}
+		}
+		Runtimes int
+	}
+	if err := s.eng.getJSON(r.Context(), "/thothdock/apps", &raw); err != nil {
+		engineFail(w, err)
+		return
+	}
+	type run struct {
+		ID      string `json:"id"`
+		Pid     int    `json:"pid"`
+		Address string `json:"address,omitempty"`
+		Started string `json:"started"`
+	}
+	type view struct {
+		Kind         string `json:"kind"`
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		Branch       string `json:"branch"`
+		Arch         string `json:"arch"`
+		Installation string `json:"installation"`
+		Runtime      string `json:"runtime"`
+		Size         int64  `json:"size"`
+		Running      []run  `json:"running"`
+	}
+	out := struct {
+		Apps     []view `json:"apps"`
+		Runtimes int    `json:"runtimes"`
+	}{Apps: []view{}, Runtimes: raw.Runtimes}
+	for _, a := range raw.Apps {
+		v := view{Kind: a.Kind, ID: a.ID, Name: a.Name, Branch: a.Branch, Arch: a.Arch, Installation: a.Installation,
+			Runtime: a.Runtime, Size: a.SizeBytes, Running: []run{}}
+		for _, x := range a.Running {
+			v.Running = append(v.Running, run{ID: x.ID, Pid: x.Pid, Address: x.NetIP, Started: x.Started})
+		}
+		out.Apps = append(out.Apps, v)
+	}
+	jsonOK(w, out)
+}
+
+var sandboxIDRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+func (s *Server) appStop(w http.ResponseWriter, r *http.Request, _ string, _ session) {
+	id := r.PathValue("id")
+	if !sandboxIDRe.MatchString(id) {
+		jsonError(w, http.StatusBadRequest, "invalid sandbox id")
+		return
+	}
+	if err := s.eng.call(r.Context(), http.MethodPost, "/thothdock/sandboxes/"+id+"/kill"); err != nil {
+		engineFail(w, err)
+		return
+	}
+	jsonOK(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) volumes(w http.ResponseWriter, r *http.Request, _ string, _ session) {

@@ -32,6 +32,9 @@ type Spec struct {
 	// NetIP, when set, is the process's own loopback address (PRoot
 	// --net-ip, ThothDock user-defined networks).
 	NetIP string
+	// Hostname, when set, is what uname reports as the node name (PRoot
+	// --hostname), as a container's own UTS namespace would.
+	Hostname string
 	// Stdout receives output (the whole PTY stream with Tty); Stderr
 	// receives standard error when not Tty.
 	Stdout io.Writer

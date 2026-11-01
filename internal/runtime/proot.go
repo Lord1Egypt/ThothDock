@@ -40,6 +40,11 @@ type PRootRuntime struct {
 	cfg PRootConfig
 	// netIP: this PRoot has --net-ip (Garden patch 0009).
 	netIP bool
+	// sysvIPC: this PRoot has --sysvipc, System V shared memory, semaphores
+	// and message queues for kernels without them (Android's).
+	sysvIPC bool
+	// hostname: this PRoot has --hostname (Garden patch 0013).
+	hostname bool
 }
 
 // NewPRoot checks that proot is executable.
@@ -83,6 +88,8 @@ func (r *PRootRuntime) checkOptions() error {
 	}
 	help := string(out)
 	r.netIP = strings.Contains(help, "--net-ip")
+	r.sysvIPC = strings.Contains(help, "--sysvipc")
+	r.hostname = strings.Contains(help, "--hostname")
 	for _, opt := range requiredOptions {
 		if !strings.Contains(help, opt) {
 			if err != nil {
@@ -119,8 +126,19 @@ func (r *PRootRuntime) Argv(spec Spec) []string {
 		cwd = "/"
 	}
 	argv = append(argv, "--cwd="+cwd, "--kill-on-exit")
+	if r.sysvIPC {
+		// Handled inside this proot: one IPC namespace per proot (so per
+		// container, and per docker exec), costing nothing until a
+		// workload makes an IPC call.
+		argv = append(argv, "--sysvipc")
+	}
 	if spec.NetIP != "" {
 		argv = append(argv, "--net-ip="+spec.NetIP)
+	}
+	// Before --kernel-release: PRoot's extensions run newest first, and
+	// kompat rewrites the whole utsname.
+	if r.hostname && spec.Hostname != "" {
+		argv = append(argv, "--hostname="+spec.Hostname)
 	}
 	if r.cfg.KernelRelease != "" {
 		argv = append(argv, "--kernel-release="+r.cfg.KernelRelease)
@@ -151,6 +169,11 @@ func (r *PRootRuntime) Env(spec Spec) []string {
 		env = append(env, kv)
 	}
 	env = append(env, "PROOT_TMP_DIR="+r.cfg.TmpDir)
+	if r.sysvIPC {
+		// On Android, --sysvipc would otherwise route shared memory through
+		// libandroid-shmem, visible to every container of the app.
+		env = append(env, "PROOT_DONT_SHARE_LIBANDROID_SHMEM=1")
+	}
 	if r.cfg.Loader != "" {
 		env = append(env, "PROOT_LOADER="+r.cfg.Loader)
 	}
@@ -351,11 +374,64 @@ func (p *prootProc) Signal(sig syscall.Signal) error {
 	if p.gone {
 		return nil
 	}
-	err := syscall.Kill(-p.cmd.Process.Pid, sig)
+	pid := p.cmd.Process.Pid
+	err := syscall.Kill(-pid, sig)
 	if err == syscall.ESRCH {
-		return nil
+		err = nil
+	}
+	// A workload may leave the group (php-fpm, sshd and other daemons call
+	// setsid or setpgid): docker stop must still reach its main process.
+	if child := mainTracee(pid); child > 0 {
+		if pg, perr := syscall.Getpgid(child); perr == nil && pg != pid {
+			if kerr := syscall.Kill(child, sig); kerr != nil && kerr != syscall.ESRCH && err == nil {
+				err = kerr
+			}
+		}
 	}
 	return err
+}
+
+// mainTracee is the host pid of the container's first process: the one child
+// proot forks (its other tracees are descendants of that one). Looked up
+// only when a signal is sent. proot is neither reaped nor exited while the
+// caller holds sigMu, so a process whose parent is proot's pid is its own
+// child and the pid cannot have been reused.
+func mainTracee(proot int) int {
+	// Kernels with CONFIG_PROC_CHILDREN list a task's children directly.
+	if data, err := os.ReadFile("/proc/" + strconv.Itoa(proot) + "/task/" + strconv.Itoa(proot) + "/children"); err == nil {
+		if f := strings.Fields(string(data)); len(f) > 0 {
+			if pid, err := strconv.Atoi(f[0]); err == nil {
+				return pid
+			}
+		}
+		return 0
+	}
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0
+	}
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid == proot {
+			continue
+		}
+		stat, err := os.ReadFile("/proc/" + e.Name() + "/stat")
+		if err != nil {
+			continue
+		}
+		// pid (comm) state ppid ...: comm may contain spaces and parentheses.
+		i := bytes.LastIndexByte(stat, ')')
+		if i < 0 {
+			continue
+		}
+		f := strings.Fields(string(stat[i+1:]))
+		if len(f) > 1 {
+			if ppid, err := strconv.Atoi(f[1]); err == nil && ppid == proot {
+				return pid
+			}
+		}
+	}
+	return 0
 }
 
 func (p *prootProc) Kill() error {

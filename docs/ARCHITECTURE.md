@@ -2,6 +2,8 @@
 
 ```
 cmd/thothdock            serve · version · doctor · inspect-store · gc
+cmd/thothdock-bwrap      bubblewrap stand-in for Flatpak inside the guest (sends sandboxes to the engine)
+internal/sandbox         bwrap command-line parser, sandbox root builder (guest paths via securefs), wire protocol
 internal/api             Docker Engine API 1.41: router, version negotiation, errors,
                          containers, images, attach (hijack), logs (stdcopy framing)
 internal/engine          container object model, persistence, lifecycle, wait conditions,

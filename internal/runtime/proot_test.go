@@ -213,8 +213,90 @@ func TestPRootOptionCheck(t *testing.T) {
 		t.Fatalf("want missing-option error, got %v", err)
 	}
 	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
-	if _, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir}); err != nil {
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Without --sysvipc in the help text, neither the option nor its
+	// environment is passed.
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r"}), " "); strings.Contains(argv, "--sysvipc") {
+		t.Fatalf("argv without --sysvipc support: %s", argv)
+	}
+	if env := strings.Join(r.Env(Spec{}), " "); strings.Contains(env, "PROOT_DONT_SHARE_LIBANDROID_SHMEM") {
+		t.Fatalf("env without --sysvipc support: %s", env)
+	}
+}
+
+func TestPRootSysVIPCOption(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "proot")
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink --sysvipc\"\n"), 0o755)
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := r.Argv(Spec{Rootfs: "/r", Args: []string{"/bin/true"}})
+	at := -1
+	for i, a := range argv {
+		if a == "--sysvipc" {
+			at = i
+		}
+	}
+	// An option, so before the guest command and never part of it.
+	if at < 0 || at >= len(argv)-1 || argv[len(argv)-1] != "/bin/true" {
+		t.Fatalf("argv: %q", argv)
+	}
+	// A container's own PROOT_* settings never reach proot; ours always do.
+	env := r.Env(Spec{Env: []string{"PROOT_DONT_SHARE_LIBANDROID_SHMEM=0", "A=1"}})
+	n := 0
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PROOT_DONT_SHARE_LIBANDROID_SHMEM=") {
+			n++
+			if kv != "PROOT_DONT_SHARE_LIBANDROID_SHMEM=1" {
+				t.Fatalf("env: %q", env)
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("env: %q", env)
+	}
+}
+
+// System V IPC with a real PRoot: the probe a container runs (PostgreSQL's
+// interlock sequence, shared contents across processes, removal). The
+// host kernel has System V IPC, so the probe runs in an IPC namespace whose
+// limits are zero: a call that slipped past PRoot would fail.
+func TestPRootSysVIPC(t *testing.T) {
+	r := testPRoot(t)
+	if !r.sysvIPC {
+		t.Skip("this proot has no --sysvipc")
+	}
+	probe := os.Getenv("THOTHDOCK_TEST_IPC_PROBE")
+	if probe == "" {
+		t.Skip("THOTHDOCK_TEST_IPC_PROBE not set (tests/regression/ipc-probe.c, built static)")
+	}
+	unshare, err := exec.LookPath("unshare")
+	if err != nil {
+		t.Skip("no unshare")
+	}
+	if out, err := exec.Command(unshare, "-ri", "true").CombinedOutput(); err != nil {
+		t.Skipf("no unprivileged IPC namespaces: %v %s", err, out)
+	}
+	// unshare -ri, zero the limits, then exec the probe under proot.
+	cmd := exec.Command(unshare, append([]string{"-ri", "sh", "-c",
+		`echo 0 > /proc/sys/kernel/shmmni && echo "0 0 0 0" > /proc/sys/kernel/sem && echo 0 > /proc/sys/kernel/msgmni && exec "$@"`,
+		"ipcns"}, r.Argv(Spec{Rootfs: "/", UID: 0, GID: 0, Args: []string{probe, "all"}})...)...)
+	cmd.Env = r.Env(Spec{Env: []string{"PATH=/usr/bin:/bin"}})
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "all: 0 failure(s)") || strings.Contains(string(out), "FAIL") {
+		t.Fatalf("ipc probe under proot: %v\n%s", err, out)
+	}
+	// Nothing left behind in PROOT_TMP_DIR but proot's own loader copy.
+	ents, _ := os.ReadDir(r.cfg.TmpDir)
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), "prootshm") {
+			t.Fatalf("leftover %s", e.Name())
+		}
 	}
 }
 
@@ -292,5 +374,86 @@ func TestSignalRacesWithExit(t *testing.T) {
 		p.Wait()
 		wg.Wait()
 		p.Signal(syscall.SIGTERM)
+	}
+}
+
+func TestPRootHostnameOption(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "proot")
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink --hostname\"\n"), 0o755)
+	r, err := NewPRoot(PRootConfig{Path: fake, TmpDir: dir, KernelRelease: "6.1.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := r.Argv(Spec{Rootfs: "/r", Hostname: "web1", Args: []string{"/bin/true"}})
+	h, k := -1, -1
+	for i, a := range argv {
+		switch a {
+		case "--hostname=web1":
+			h = i
+		case "--kernel-release=6.1.0":
+			k = i
+		}
+	}
+	if h < 0 || k < 0 || h > k {
+		t.Fatalf("want --hostname before --kernel-release: %q", argv)
+	}
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r", Args: []string{"/bin/true"}}), " "); strings.Contains(argv, "--hostname") {
+		t.Fatalf("no hostname, no option: %s", argv)
+	}
+	// A PRoot without the option never gets it.
+	os.WriteFile(fake, []byte("#!/bin/sh\necho \"--kill-on-exit --root-id --change-id --link2symlink\"\n"), 0o755)
+	r, _ = NewPRoot(PRootConfig{Path: fake, TmpDir: dir})
+	if argv := strings.Join(r.Argv(Spec{Rootfs: "/r", Hostname: "web1"}), " "); strings.Contains(argv, "--hostname") {
+		t.Fatalf("unsupported PRoot got --hostname: %s", argv)
+	}
+}
+
+// With a real PRoot: uname, as hostname(1) and every runtime read it,
+// reports the container's host name.
+func TestPRootHostnameReachesUname(t *testing.T) {
+	r := testPRoot(t)
+	if !r.hostname {
+		t.Skip("this proot has no --hostname")
+	}
+	out, _, ex := run(t, r, Spec{Hostname: "compat-host", Args: []string{"/bin/sh", "-c", "uname -n"}})
+	if ex.Code != 0 || strings.TrimSpace(out) != "compat-host" {
+		t.Fatalf("uname -n = %q (%+v)", out, ex)
+	}
+}
+
+// A workload that calls setsid (php-fpm, sshd...) leaves proot's process
+// group; the stop signal must still reach it.
+func TestPRootSignalReachesAWorkloadThatLeftTheGroup(t *testing.T) {
+	r := testPRoot(t)
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("no setsid")
+	}
+	var out, errb syncBuf
+	p, err := r.Start(Spec{Rootfs: "/", Stdout: &out, Stderr: &errb, Args: []string{"/bin/sh", "-c",
+		`exec setsid sh -c 'trap "echo got-term; exit 7" TERM; echo ready; while :; do sleep 0.1; done'`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Kill()
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out.String(), "ready") {
+		if time.Now().After(deadline) {
+			t.Fatalf("workload did not start: %q %q", out.String(), errb.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan Exit, 1)
+	go func() { done <- p.Wait() }()
+	select {
+	case ex := <-done:
+		if ex.Code != 7 || !strings.Contains(out.String(), "got-term") {
+			t.Fatalf("exit %+v, output %q", ex, out.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("SIGTERM never reached the workload that left the process group; output %q", out.String())
 	}
 }

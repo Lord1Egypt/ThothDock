@@ -50,6 +50,10 @@ type Config struct {
 	AllowNonLoopbackPublish bool
 	// Pressure watches the app's process count (Process Guard); nil: off.
 	Pressure *procguard.Monitor
+	// GuestRoot is the guest's root file system (the Debian rootfs on
+	// Android). Flatpak sandboxes resolve their paths inside it; empty: no
+	// sandboxes.
+	GuestRoot string
 }
 
 // Engine manages containers.
@@ -72,6 +76,8 @@ type Engine struct {
 	containers map[string]*Container
 	names      map[string]string // name -> ID
 	execs      map[string]*Exec
+	sandboxes  map[string]*Sandbox
+	appSizes   map[string]int64 // deployment host path -> size (commits never change)
 	// restore holds the containers whose restart policy asks for a start
 	// now that the daemon runs again; RestoreRestartPolicies consumes it.
 	restore []string
@@ -129,7 +135,12 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 		return nil, err
 	}
 	e := &Engine{Layout: layout, Volumes: vols, Networks: nets, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
-		Events: events.New(), addrs: network.NewPool(), containers: map[string]*Container{}, names: map[string]string{}}
+		Events: events.New(), addrs: network.NewPool(), containers: map[string]*Container{}, names: map[string]string{},
+		sandboxes: map[string]*Sandbox{}, appSizes: map[string]int64{}}
+	// Sandboxes never outlive the daemon; a crash may have left their roots.
+	if err := securefs.RemoveTree(filepath.Join(layout.Root, "sandboxes")); err != nil && !os.IsNotExist(err) {
+		log.Warn("removing old sandbox roots", "err", err)
+	}
 	entries, err := os.ReadDir(layout.Containers())
 	if err != nil {
 		return nil, err

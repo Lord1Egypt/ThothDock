@@ -910,3 +910,41 @@ func TestPublishAllAndPassthroughWarning(t *testing.T) {
 		t.Fatalf("%v %v", w, err)
 	}
 }
+
+// An image volume covered by an explicit named volume or bind is not
+// anonymous: only uncovered ones are warned about (user report, PostgreSQL
+// and MongoDB images).
+func TestImageVolumeWarningOnlyWhenUncovered(t *testing.T) {
+	f := newFixture(t)
+	f.reg.Image(t, "library/withvol", "1", oci.HostPlatform(),
+		oci.ContainerConfig{Cmd: []string{"sh"}, Volumes: map[string]struct{}{"/data/db": {}, "/data/configdb": {}}}, true,
+		[]registrytest.File{{Name: "bin/", Type: tar.TypeDir}, {Name: "bin/sh", Body: "#!", Mode: 0o755}})
+	img := f.reg.Host() + "/library/withvol:1"
+	if _, _, err := f.e.Puller.Pull(context.Background(), img, image.PullOptions{Platform: oci.HostPlatform()}); err != nil {
+		t.Fatal(err)
+	}
+	anon := func(w []string) []string {
+		var out []string
+		for _, x := range w {
+			if strings.Contains(x, "anonymous volumes") {
+				out = append(out, x)
+			}
+		}
+		return out
+	}
+	_, w, err := f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: img},
+		HostConfig: &HostConfig{Binds: []string{"mongodata:/data/db/"}}}, "covered", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := anon(w); len(a) != 1 || !strings.Contains(a[0], "/data/configdb") {
+		t.Fatalf("covered: %q", a)
+	}
+	_, w, err = f.e.Create(CreateRequest{ContainerConfig: ContainerConfig{Image: img}}, "uncovered", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := anon(w); len(a) != 2 {
+		t.Fatalf("uncovered: %q", a)
+	}
+}

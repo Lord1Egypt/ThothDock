@@ -187,23 +187,66 @@ func TestDeleteUntagsThenRemoves(t *testing.T) {
 	none := func(oci.Digest) ([]string, []string) { return nil, nil }
 	stopped := func(oci.Digest) ([]string, []string) { return nil, []string{"c1"} }
 	running := func(oci.Digest) ([]string, []string) { return []string{"c1"}, nil }
-	// Two references (tag + digest): deleting the tag only untags.
-	items, err := e.store.Delete(e.reg.Host()+"/library/a:1", false, none)
+	a1, a2 := e.reg.Host()+"/library/a:1", e.reg.Host()+"/library/a:2"
+	if err := e.store.Tag(a1, a2); err != nil {
+		t.Fatal(err)
+	}
+	// Another tag of the repository remains: only this tag goes, the digest reference stays.
+	items, err := e.store.Delete(a1, false, none)
 	if err != nil || len(items) != 1 || items[0].Untagged == "" {
 		t.Fatalf("%v %v", items, err)
 	}
-	if _, err := e.store.Delete(string(sum.ID), false, stopped); errdefs.KindOf(err) != errdefs.KindConflict {
+	if got, err := e.store.Get(a2); err != nil || len(got.RepoDigests) != 1 || len(got.RepoTags) != 1 {
+		t.Fatalf("a:2 and the digest reference must stay: %+v %v", got, err)
+	}
+	// The last tag: users block it before anything is untagged.
+	if _, err := e.store.Delete(a2, false, stopped); errdefs.KindOf(err) != errdefs.KindConflict {
 		t.Fatalf("stopped user must block: %v", err)
 	}
-	if _, err := e.store.Delete(string(sum.ID), true, running); errdefs.KindOf(err) != errdefs.KindConflict {
+	if _, err := e.store.Delete(a2, true, running); errdefs.KindOf(err) != errdefs.KindConflict {
 		t.Fatalf("running user must block even forced: %v", err)
 	}
-	items, err = e.store.Delete(string(sum.ID), true, stopped)
-	if err != nil || items[len(items)-1].Deleted == "" && items[1].Deleted != string(sum.ID) {
-		t.Fatalf("%v %v", items, err)
+	if _, err := e.store.Get(a2); err != nil {
+		t.Fatalf("a refused delete must not untag: %v", err)
+	}
+	// Forced past a stopped user, the last tag removes the image with its digest reference.
+	items, err = e.store.Delete(a2, true, stopped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var untagged, deleted int
+	for _, it := range items {
+		if it.Untagged != "" {
+			untagged++
+		}
+		if it.Deleted == string(sum.ID) {
+			deleted++
+		}
+	}
+	if untagged != 2 || deleted != 1 {
+		t.Fatalf("want a:2 and the digest untagged and the image deleted: %+v", items)
 	}
 	if ds, _ := e.store.Blobs.List(); len(ds) != 0 {
 		t.Fatalf("blobs left: %v", ds)
+	}
+	assertNoImagesOrStaging(t, e)
+}
+
+// docker rmi name:tag on an image pulled by that tag deletes it, as Docker does,
+// instead of leaving it as <none>:<none> behind its digest reference.
+func TestDeleteLastTagRemovesThePulledImage(t *testing.T) {
+	e := newEnv(t)
+	e.reg.Image(t, "library/a", "1", arm64, oci.ContainerConfig{}, false, base)
+	if _, _, err := e.pull("library/a:1"); err != nil {
+		t.Fatal(err)
+	}
+	none := func(oci.Digest) ([]string, []string) { return nil, nil }
+	items, err := e.store.Delete(e.reg.Host()+"/library/a:1", false, none)
+	if err != nil || len(items) < 3 {
+		t.Fatalf("%v %v", items, err)
+	}
+	if list := e.store.List(); len(list) != 0 {
+		t.Fatalf("image left behind: %+v", list)
 	}
 	assertNoImagesOrStaging(t, e)
 }

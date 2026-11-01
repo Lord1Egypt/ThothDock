@@ -194,7 +194,7 @@ document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("cli
 async function render() {
   const view = $("view");
   if (!state.loaded) view.replaceChildren(el("div", { class: "list" }, el("div", { class: "skeleton" }), el("div", { class: "skeleton" })));
-  const views = { containers: containersView, stacks: stacksView, images: imagesView, volumes: volumesView, networks: networksView, events: eventsView };
+  const views = { containers: containersView, stacks: stacksView, images: imagesView, volumes: volumesView, apps: appsView, networks: networksView, events: eventsView };
   const content = await views[state.tab]();
   state.loaded = true;
   view.replaceChildren(content);
@@ -268,6 +268,23 @@ async function volumesView() {
   return el("div", { class: "list" }, ...vols.map((v) => el("div", { class: "row" },
     el("div", { class: "head" }, el("span", { class: "name", text: v.name }), el("span", { class: "state", text: v.driver })),
     el("div", { class: "meta dim", text: (v.project ? "stack " + v.project + " · " : "") + "created " + v.created }))));
+}
+
+async function appsView() {
+  const res = await api("GET", "/api/apps");
+  if (!res.apps.length) return empty("No Flatpak apps", "Install one in the terminal: flatpak --user install flathub <app-id>.");
+  const runtimes = el("p", { class: "meta dim", text: res.runtimes + (res.runtimes === 1 ? " runtime" : " runtimes") + " installed · run and remove apps in the terminal (flatpak run / flatpak uninstall)" });
+  return el("div", {}, runtimes, el("div", { class: "list" }, ...res.apps.map((a) => {
+    const running = a.running.length;
+    return el("div", { class: "row" },
+      el("div", { class: "head" }, el("span", { class: "dot " + (running ? "running" : "") }), el("span", { class: "name", text: a.name }),
+        el("span", { class: "state" + (running ? " running" : ""), text: running ? running + " running" : bytes(a.size) })),
+      el("div", { class: "meta dim", text: a.kind + " · " + a.id + " · " + a.branch + " · " + a.arch + " · " + a.installation + (running ? " · " + bytes(a.size) : "") }),
+      a.runtime ? el("div", { class: "meta dim", text: "runtime " + a.runtime }) : null,
+      ...a.running.map((r) => el("div", { class: "svc" }, el("span", { class: "dot running" }),
+        el("span", { text: "pid " + r.pid + (r.address ? " · " + r.address : "") + " · started " + ago(Date.parse(r.started) / 1000) }),
+        el("button", { class: "btn small", text: "Stop", onclick: (e) => act(e.target, () => api("POST", "/api/apps/sandboxes/" + r.id + "/stop"), "Stop · " + a.name) }))));
+  })));
 }
 
 const NETWORK_TYPE = {

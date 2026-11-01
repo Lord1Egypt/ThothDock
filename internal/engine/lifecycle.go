@@ -233,7 +233,7 @@ func (e *Engine) buildSpecFor(c *Container, p procParams) (runtime.Spec, error) 
 	return runtime.Spec{
 		ID: c.rec.ID, Rootfs: rootfs,
 		Args: append([]string{exe}, p.Argv[1:]...), Env: env, Cwd: cwd,
-		UID: user.UID, GID: user.GID, Binds: binds, NetIP: c.rec.NetIP,
+		UID: user.UID, GID: user.GID, Binds: binds, NetIP: c.rec.NetIP, Hostname: c.rec.Config.Hostname,
 		Tty: p.Tty, OpenStdin: p.OpenStdin,
 		Stdout: p.Stdout, Stderr: p.Stderr,
 	}, nil
@@ -661,6 +661,7 @@ func (e *Engine) Attach(ref string) (*Container, AttachStreams, error) {
 // stop: restart policies bring the containers back when the daemon starts.
 func (e *Engine) Shutdown(timeout int) {
 	e.shuttingDown.Store(true)
+	e.killSandboxes()
 	var wg sync.WaitGroup
 	for _, r := range e.List() {
 		if IsRunning(r.State.Status) {

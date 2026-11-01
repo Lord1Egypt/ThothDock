@@ -3,3 +3,5 @@
 *.test
 *.out
 __pycache__/
+/tests/compatibility/probes/**/bin/
+/tests/compatibility/probes/bin/

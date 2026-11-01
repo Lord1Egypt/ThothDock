@@ -22,12 +22,17 @@ func doctor(args []string) error {
 	var o options
 	o.register(fs)
 	guardOnly := fs.Bool("guard", false, "only the Engine Guard report (runs inside a guest)")
-	guestRoot := fs.String("guest-root", "/", "root filesystem to inspect for the Engine Guard")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// --guest-root is the serve option (the guest's root file system); here it
+	// names the root the Engine Guard report inspects, "/" by default.
+	guestRoot := o.guestRoot
+	if guestRoot == "" {
+		guestRoot = "/"
+	}
 	if *guardOnly {
-		return doctorGuard(*guestRoot, true)
+		return doctorGuard(guestRoot, true)
 	}
 	failed := false
 	report := func(status, what, detail string) {
@@ -113,8 +118,8 @@ func doctor(args []string) error {
 	if _, err := exec.LookPath("dockerd"); err == nil {
 		report("INFO", "dockerd", "present on PATH but unused by ThothDock")
 	}
-	if *guestRoot != "/" {
-		if err := doctorGuard(*guestRoot, false); err != nil {
+	if guestRoot != "/" {
+		if err := doctorGuard(guestRoot, false); err != nil {
 			failed = true
 		}
 	}
