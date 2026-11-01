@@ -14,18 +14,19 @@ import (
 )
 
 // program makes /bin/sh behave by its first argument: "exit:N" exits with N
-// at once, "gated" exits with 1 when gate is closed, anything else runs until
-// it is signalled. It counts starts.
+// at once, "gated" exits with 1 when gate is closed (its first run only: a later
+// start would otherwise exit at once and race the caller's state check),
+// anything else runs until it is signalled. It counts starts.
 func (f *fixture) program(gate ...chan struct{}) *atomic.Int32 {
 	var starts atomic.Int32
 	f.rt.Program("/bin/sh", func(ctx context.Context, s runtime.Spec, _ io.Reader) int {
-		starts.Add(1)
+		n := starts.Add(1)
 		if len(s.Args) > 1 {
 			if n, ok := strings.CutPrefix(s.Args[1], "exit:"); ok {
 				code, _ := strconv.Atoi(n)
 				return code
 			}
-			if s.Args[1] == "gated" {
+			if s.Args[1] == "gated" && n == 1 {
 				select {
 				case <-gate[0]:
 					return 1
