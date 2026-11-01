@@ -1,0 +1,13 @@
+name: core20
+version: '20260901'
+summary: Runtime environment based on Ubuntu 20.04
+description: 'The base snap based on the Ubuntu 20.04 release.
+
+  '
+architectures:
+- arm64
+assumes:
+- snapd2.61
+confinement: strict
+grade: stable
+type: base

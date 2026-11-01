@@ -2,10 +2,13 @@ package engine
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -13,6 +16,7 @@ import (
 	"github.com/Lord1Egypt/ThothDock/internal/errdefs"
 	"github.com/Lord1Egypt/ThothDock/internal/sandbox"
 	"github.com/Lord1Egypt/ThothDock/internal/securefs"
+	"github.com/Lord1Egypt/ThothDock/internal/snapstore"
 )
 
 // App is an installed Flatpak application found in the guest, with the
@@ -70,6 +74,7 @@ func (e *Engine) Apps() AppsView {
 			running[s.AppID] = append(running[s.AppID], s)
 		}
 	}
+	view.Apps = append(view.Apps, e.snapApps(guest, view.Sandboxes, &view.Runtimes)...)
 	for inst, dir := range flatpakInstallations(guest) {
 		view.Runtimes += len(deployments(guest, dir+"/runtime"))
 		for _, d := range deployments(guest, dir+"/app") {
@@ -190,6 +195,56 @@ func keyFile(guest *securefs.Root, path string) map[string]string {
 				out[key] = strings.TrimSpace(v)
 			}
 		}
+	}
+	return out
+}
+
+// snapApps lists the app snaps thothdock-snap installed in the guest
+// (/var/lib/thothdock-snaps/state.json); base snaps count as runtimes.
+func (e *Engine) snapApps(guest *securefs.Root, sandboxes []SandboxInfo, runtimes *int) []App {
+	host, isDir, err := sandbox.ResolveGuest(guest, "/var/lib/thothdock-snaps/state.json")
+	if err != nil || isDir {
+		return nil
+	}
+	f, err := os.OpenFile(host, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var st struct {
+		Snaps map[string]struct {
+			Revision         int
+			Version, Channel string
+			Type, Base       string
+			Confinement      string
+		}
+	}
+	if json.NewDecoder(io.LimitReader(f, 4<<20)).Decode(&st) != nil {
+		return nil
+	}
+	var out []App
+	for name, s := range st.Snaps {
+		if !snapstore.ValidName(name) {
+			continue
+		}
+		if s.Type != "app" {
+			*runtimes++
+			continue
+		}
+		app := App{Kind: "snap", ID: name, Name: name, Branch: s.Channel, Arch: goruntime.GOARCH,
+			Installation: "system", Runtime: s.Base}
+		if s.Confinement == "classic" {
+			app.Runtime = "classic"
+		}
+		if dir, isDir, err := sandbox.ResolveGuest(guest, fmt.Sprintf("/snap/%s/%d", name, s.Revision)); err == nil && isDir {
+			app.SizeBytes = e.deploymentSize(guest, dir)
+		}
+		for _, sb := range sandboxes {
+			if strings.HasPrefix(sb.AppID, "snap:"+name+".") {
+				app.Running = append(app.Running, sb)
+			}
+		}
+		out = append(out, app)
 	}
 	return out
 }

@@ -19,9 +19,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/Lord1Egypt/ThothDock/internal/sandbox"
+	"github.com/Lord1Egypt/ThothDock/internal/termutil"
 )
 
 // bwrapVersion is the bubblewrap whose option set this shim accepts.
@@ -99,28 +98,14 @@ func run(args []string) int {
 	}
 	defer conn.Close()
 
-	req.Tty = isTerminal(0) && isTerminal(1)
-	var resizes chan [2]uint16
+	req.Tty = termutil.IsTerminal(0) && termutil.IsTerminal(1)
+	var resizes <-chan [2]uint16
 	if req.Tty {
-		if restore, err := makeRaw(0); err == nil {
+		if restore, err := termutil.MakeRaw(0); err == nil {
 			defer restore()
 		}
-		if ws, err := unix.IoctlGetWinsize(1, unix.TIOCGWINSZ); err == nil {
-			req.Width, req.Height = ws.Col, ws.Row
-		}
-		resizes = make(chan [2]uint16, 1)
-		winch := make(chan os.Signal, 1)
-		signal.Notify(winch, syscall.SIGWINCH)
-		go func() {
-			for range winch {
-				if ws, err := unix.IoctlGetWinsize(1, unix.TIOCGWINSZ); err == nil {
-					select {
-					case resizes <- [2]uint16{ws.Col, ws.Row}:
-					default:
-					}
-				}
-			}
-		}()
+		req.Width, req.Height = termutil.Size(1)
+		resizes = termutil.Resizes(1)
 	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP)
@@ -205,30 +190,4 @@ func readFD(fd, max int) ([]byte, error) {
 		return nil, fmt.Errorf("more than %d bytes", max)
 	}
 	return b, nil
-}
-
-func isTerminal(fd int) bool {
-	_, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	return err == nil
-}
-
-// makeRaw puts the terminal into raw mode (cfmakeraw), as docker run -t does,
-// so keys reach the sandbox's own terminal unchanged.
-func makeRaw(fd int) (func(), error) {
-	old, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	if err != nil {
-		return nil, err
-	}
-	t := *old
-	t.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
-	t.Oflag &^= unix.OPOST
-	t.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
-	t.Cflag &^= unix.CSIZE | unix.PARENB
-	t.Cflag |= unix.CS8
-	t.Cc[unix.VMIN] = 1
-	t.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(fd, unix.TCSETS, &t); err != nil {
-		return nil, err
-	}
-	return func() { unix.IoctlSetTermios(fd, unix.TCSETS, old) }, nil
 }

@@ -124,11 +124,15 @@ func (f *sandboxFrames) frame(typ byte, p []byte) error {
 			}
 			f.pending = append(append(f.pending, hdr[:]...), p[:n]...)
 		} else {
+			// A client that left (a detached service) stops getting output;
+			// the sandbox must not fail on its own stdout because of that.
 			if _, err := f.w.Write(hdr[:]); err != nil {
-				return err
+				f.w = io.Discard
+				return nil
 			}
 			if _, err := f.w.Write(p[:n]); err != nil {
-				return err
+				f.w = io.Discard
+				return nil
 			}
 		}
 		p = p[n:]

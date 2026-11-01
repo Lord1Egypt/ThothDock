@@ -21,7 +21,7 @@ import (
 // in a root built from the request, like a container without an image.
 type Sandbox struct {
 	ID      string
-	AppID   string // FLATPAK_ID of the sandbox's environment, if any
+	AppID   string // FLATPAK_ID, or "snap:<snap>.<app>" for a snap, if any
 	Argv    []string
 	NetIP   string
 	Started time.Time
@@ -122,7 +122,11 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 	if req.Tty && req.Width > 0 && req.Height > 0 {
 		proc.Resize(req.Width, req.Height) // a PTY starts at 0x0: TUIs would draw nothing
 	}
-	s := &Sandbox{ID: id, AppID: envValue(prep.Env, "FLATPAK_ID"), Argv: prep.Argv, NetIP: ip, Started: time.Now(), proc: proc, done: make(chan struct{})}
+	appID := envValue(prep.Env, "FLATPAK_ID")
+	if snapApp := envValue(prep.Env, "THOTHDOCK_SNAP_APP"); appID == "" && snapApp != "" {
+		appID = "snap:" + snapApp
+	}
+	s := &Sandbox{ID: id, AppID: appID, Argv: prep.Argv, NetIP: ip, Started: time.Now(), proc: proc, done: make(chan struct{})}
 	e.mu.Lock()
 	e.sandboxes[id] = s
 	e.mu.Unlock()

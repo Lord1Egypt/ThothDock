@@ -1,0 +1,22 @@
+name: hello
+version: '2.10'
+summary: GNU Hello
+description: GNU hello prints a friendly greeting.
+apps:
+  hello:
+    command: bin/hello
+    command-chain:
+    - snap/command-chain/snapcraft-runner
+  universe:
+    command: bin/hello -g $SAY
+    environment:
+      SAY: Hello, universe!
+    command-chain:
+    - snap/command-chain/snapcraft-runner
+architectures:
+- arm64
+assumes:
+- command-chain
+base: core20
+confinement: strict
+grade: stable

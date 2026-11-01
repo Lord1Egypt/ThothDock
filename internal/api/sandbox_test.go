@@ -181,3 +181,33 @@ func TestAppsListsFlatpakAppsAndStopsTheirSandboxes(t *testing.T) {
 		t.Fatalf("unknown sandbox: %d", resp.StatusCode)
 	}
 }
+
+func TestAppsListsSnapsAndTheirServices(t *testing.T) {
+	g := sandboxGuest(t)
+	os.MkdirAll(filepath.Join(g, "var/lib/thothdock-snaps"), 0o755)
+	os.WriteFile(filepath.Join(g, "var/lib/thothdock-snaps/state.json"), []byte(`{"snaps":{
+		"core22":{"revision":2988,"version":"20260909","channel":"latest/stable","type":"base"},
+		"web-srv":{"revision":7,"version":"1.0","channel":"latest/stable","type":"app","base":"core22","confinement":"strict"},
+		"../bad":{"revision":1,"type":"app"}}}`), 0o644)
+	os.MkdirAll(filepath.Join(g, "snap/web-srv/7/bin"), 0o755)
+	os.WriteFile(filepath.Join(g, "snap/web-srv/7/bin/serve"), make([]byte, 2048), 0o755)
+	f := newAPIWith(t, engine.Config{GuestRoot: g})
+	f.rt.Program("/usr/bin/hello", func(ctx context.Context, s runtime.Spec, in io.Reader) int { <-ctx.Done(); return 0 })
+	req := helloRequest()
+	req.BaseEnv = []string{"THOTHDOCK_SNAP_APP=web-srv.serve"}
+	started := make(chan struct{})
+	go sandbox.Run(dialAPI(t, f), req, nil, io.Discard, io.Discard, func(sandbox.Started) { close(started) })
+	<-started
+	_, body := f.do(t, "GET", "/thothdock/apps", "")
+	var view engine.AppsView
+	if err := json.Unmarshal([]byte(body), &view); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Apps) != 1 || view.Runtimes != 1 {
+		t.Fatalf("view %+v", view)
+	}
+	a := view.Apps[0]
+	if a.Kind != "snap" || a.ID != "web-srv" || a.Runtime != "core22" || a.SizeBytes != 2048 || len(a.Running) != 1 || a.Running[0].AppID != "snap:web-srv.serve" {
+		t.Fatalf("snap %+v", a)
+	}
+}
