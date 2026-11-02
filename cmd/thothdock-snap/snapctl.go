@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/Lord1Egypt/ThothDock/internal/snapstore"
@@ -231,6 +232,7 @@ const snapctlUsage = `Usage: snapctl <command>
   unset <key>...                  remove configuration
   start|stop|restart <snap>[.<app>]...
                                   from a hook: applied when the hook ends
+  services [<snap>[.<app>]...]    from a hook: which services are active
   is-connected <plug>             whether the snap declares the plug
   set-health <status> [<message>] accepted and ignored
 
@@ -287,6 +289,8 @@ func snapctlMain(args []string) int {
 			return 0
 		}
 		return 1
+	case "services":
+		return snapctlServices(name, rest)
 	case "set-health":
 		return 0
 	}
@@ -733,4 +737,139 @@ func setDisabled(name, app string, off bool) {
 	if err := st.save(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 	}
+}
+
+// snapctlBinary is a copy of this binary inside the guest's own file system,
+// which the sandboxes bind as snapctl. The snap command itself reaches the
+// guest through a bind of the app's native library, which the engine, building
+// a sandbox from outside, does not see: it would find an empty placeholder.
+// The copy is made again when the binary changes. Without one (a read-only
+// guest) snaps run without snapctl.
+func snapctlBinary() string {
+	self, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	dst := path.Join(stateDir, "bin", "snapctl")
+	if sameContent(self, dst) {
+		return dst
+	}
+	if err := copyExecutable(self, dst); err != nil {
+		if _, serr := os.Stat(dst); serr == nil {
+			return dst // an older copy still gives snaps a snapctl
+		}
+		fmt.Fprintf(os.Stderr, "warning: snapctl is not available to snaps: %v\n", err)
+		return ""
+	}
+	return dst
+}
+
+func sameContent(a, b string) bool {
+	fa, err := os.Open(a)
+	if err != nil {
+		return false
+	}
+	defer fa.Close()
+	fb, err := os.Open(b)
+	if err != nil {
+		return false
+	}
+	defer fb.Close()
+	sa, _ := fa.Stat()
+	sb, _ := fb.Stat()
+	if sa == nil || sb == nil || sa.Size() != sb.Size() {
+		return false
+	}
+	ba, bb := make([]byte, 1<<16), make([]byte, 1<<16)
+	for {
+		na, ea := io.ReadFull(fa, ba)
+		nb, _ := io.ReadFull(fb, bb)
+		if na != nb || !bytes.Equal(ba[:na], bb[:nb]) {
+			return false
+		}
+		if ea != nil {
+			return true
+		}
+	}
+}
+
+func copyExecutable(src, dst string) error {
+	if err := os.MkdirAll(path.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp := dst + ".new"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// ---- snapctl services --------------------------------------------------------
+
+const servicesEnv = "THOTHDOCK_SNAPCTL_SERVICES"
+
+// writeServices describes the snap's services for a hook's "snapctl services":
+// the sandbox cannot ask the engine, so the snap command says what is running.
+func writeServices(name string, rec *installed, y *snapstore.SnapYAML, spool string) string {
+	file := spool + ".services"
+	var b strings.Builder
+	for _, d := range rec.Daemons {
+		startup, current := "enabled", "inactive"
+		if slices.Contains(rec.Disabled, d) {
+			startup = "disabled"
+		}
+		if _, ok := runningService(name, d); ok {
+			current = "active"
+		}
+		fmt.Fprintf(&b, "%s.%s %s %s\n", name, d, startup, current)
+	}
+	if os.WriteFile(file, []byte(b.String()), 0o644) != nil {
+		return ""
+	}
+	return file
+}
+
+func snapctlServices(name string, args []string) int {
+	b, err := os.ReadFile(os.Getenv(servicesEnv))
+	if err != nil {
+		return fail("snapctl services works only in a hook here; from a shell use: snap services")
+	}
+	want := map[string]bool{}
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			if a != name && !strings.HasPrefix(a, name+".") {
+				return fail("snapctl services: %q is not a service of this snap", a)
+			}
+			want[a] = true
+		}
+	}
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "Service\tStartup\tCurrent\tNotes")
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		f := strings.Fields(l)
+		if len(f) != 3 {
+			continue
+		}
+		if len(want) > 0 && !want[f[0]] && !want[name] {
+			continue
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t-\n", f[0], f[1], f[2])
+	}
+	tw.Flush()
+	return 0
 }

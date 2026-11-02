@@ -81,6 +81,8 @@ const usage = `Usage: snap <command> [options]
   unset <snap> <key>...
   refresh [--channel=C] [<snap>...]
                                install the newest revision
+  autostart                    start the services that are not running (a new
+                               window runs this, as snapd does at boot)
   version
 
 ThothDock's snap: installs from the Snap Store and runs apps through the
@@ -125,6 +127,8 @@ func run(args []string) int {
 		return asRoot(args, func() int { return cmdSetUnset(true, rest) })
 	case "refresh":
 		return asRoot(args, func() int { return cmdRefresh(rest) })
+	case "autostart":
+		return asRoot(args, cmdAutostart)
 	case "services":
 		return cmdServices()
 	case "logs":
@@ -725,6 +729,10 @@ func runHook(name, hook string, rec *installed, y *snapstore.SnapYAML, revDir st
 		return false
 	}
 	req.BaseEnv = append(req.BaseEnv, spoolEnv+"="+spool)
+	if f := writeServices(name, rec, y, spool); f != "" {
+		req.BaseEnv = append(req.BaseEnv, servicesEnv+"="+f)
+		defer os.Remove(f)
+	}
 	conn, err := net.Dial("unix", engineSocket())
 	if err != nil {
 		os.Remove(spool)
@@ -1113,11 +1121,9 @@ func sandboxOps(s *installed) ([]sandbox.Op, error) {
 		}
 	}
 	// snapctl is this binary: the base's /usr/bin/snapctl points here.
-	self, err := os.Executable()
-	if err != nil {
-		self = snapExe
+	if p := snapctlBinary(); p != "" {
+		ops = append(ops, roBind(p, "/usr/lib/snapd/snapctl"))
 	}
-	ops = append(ops, roBindTry(self, "/usr/lib/snapd/snapctl"))
 	ops = append(ops, dirOp("/var"), dirOp("/var/tmp"), dirOp("/run"), dirOp("/mnt"), dirOp("/media"),
 		bind(snapRoot, snapRoot), bind(dataRoot, dataRoot), bind("/home", "/home"), bind("/tmp", "/tmp"), proc, dev)
 	if os.Geteuid() == 0 {
@@ -1420,4 +1426,48 @@ func serviceNames(y *snapstore.SnapYAML, ref, app string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// cmdAutostart starts every service that is not disabled and not running.
+// The guest has no init system: a service ends with the app, and a window
+// opened after that calls this. Only one runs at a time, so two windows
+// opened together do not start a service twice.
+func cmdAutostart() int {
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return fail("%v", err)
+	}
+	lock, err := os.OpenFile(filepath.Join(stateDir, "autostart.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return fail("%v", err)
+	}
+	defer lock.Close()
+	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		return 0
+	}
+	st, err := loadState()
+	if err != nil {
+		return fail("%v", err)
+	}
+	names := make([]string, 0, len(st.Snaps))
+	for n, rec := range st.Snaps {
+		if len(rec.Daemons) > 0 {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		_, y, _, err := loadSnap(n)
+		if err != nil {
+			continue
+		}
+		for _, d := range daemonsOf(y) {
+			if slices.Contains(st.Snaps[n].Disabled, d) {
+				continue
+			}
+			if _, ok := runningService(n, d); !ok {
+				cmdRun([]string{n + "." + d}, true)
+			}
+		}
+	}
+	return 0
 }

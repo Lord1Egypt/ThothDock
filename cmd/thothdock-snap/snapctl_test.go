@@ -236,3 +236,59 @@ func TestStopDisableAndStartEnableReachTheSpool(t *testing.T) {
 		t.Fatalf("spool %q, want %q", b, want)
 	}
 }
+
+func TestCopyExecutableAndSameContent(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "snap")
+	body := make([]byte, 200000)
+	for i := range body {
+		body[i] = byte(i * 7)
+	}
+	os.WriteFile(src, body, 0o644)
+	dst := filepath.Join(dir, "bin", "snapctl")
+	if sameContent(src, dst) {
+		t.Fatal("a missing copy counted as the same")
+	}
+	if err := copyExecutable(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if fi, _ := os.Stat(dst); fi.Mode().Perm()&0o111 == 0 {
+		t.Errorf("copy is not executable: %v", fi.Mode())
+	}
+	if !sameContent(src, dst) {
+		t.Fatal("a fresh copy differs")
+	}
+	body[len(body)-1]++ // same size, last byte differs: a new build
+	os.WriteFile(src, body, 0o644)
+	if sameContent(src, dst) {
+		t.Fatal("a changed binary counted as the same")
+	}
+	if err := copyExecutable(src, dst); err != nil || !sameContent(src, dst) {
+		t.Fatalf("recopy: %v", err)
+	}
+}
+
+func TestSnapctlServicesFromAHook(t *testing.T) {
+	withDataRoot(t)
+	t.Setenv("SNAP_INSTANCE_NAME", "caddy")
+	f := filepath.Join(t.TempDir(), "services")
+	os.WriteFile(f, []byte("caddy.server disabled inactive\ncaddy.launcher enabled active\n"), 0o644)
+	t.Setenv(servicesEnv, f)
+	out, code := func() (string, int) {
+		r, w, _ := os.Pipe()
+		old := os.Stdout
+		os.Stdout = w
+		code := snapctlMain([]string{"services", "caddy.server"})
+		w.Close()
+		os.Stdout = old
+		b, _ := io.ReadAll(r)
+		return string(b), code
+	}()
+	if code != 0 || !strings.Contains(out, "caddy.server") || !strings.Contains(out, "inactive") || strings.Contains(out, "launcher") {
+		t.Fatalf("%d %q", code, out)
+	}
+	t.Setenv(servicesEnv, "")
+	if _, code := ctl(t, "services"); code == 0 {
+		t.Error("services outside a hook accepted")
+	}
+}
