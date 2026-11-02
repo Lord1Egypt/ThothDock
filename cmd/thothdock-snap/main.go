@@ -1270,16 +1270,21 @@ func cmdServices() int {
 	}
 	sort.Strings(names)
 	for _, n := range names {
+		_, y, _, _ := loadSnap(n)
 		for _, d := range st.Snaps[n].Daemons {
 			any = true
-			cur, addr := "inactive", "-"
+			cur, addr, note := "inactive", "-", "start with: sudo snap start "+n+"."+d
 			if sb, ok := running[n+"."+d]; ok {
-				cur = "active"
+				cur, note = "active", "stop with: sudo snap stop "+n+"."+d
 				if sb.NetIP != "" {
 					addr = sb.NetIP
 				}
+			} else if slices.Contains(st.Snaps[n].Disabled, d) {
+				note = "disabled; start with: sudo snap start --enable " + n + "." + d
+			} else if y != nil && y.Apps[d].Timer != "" {
+				note = "timer " + y.Apps[d].Timer + " (not scheduled); run once with: sudo snap start " + n + "." + d
 			}
-			fmt.Fprintf(tw, "%s.%s\t%s\t%s\t%s\n", n, d, cur, addr, "start with: sudo snap start "+n+"."+d)
+			fmt.Fprintf(tw, "%s.%s\t%s\t%s\t%s\n", n, d, cur, addr, note)
 		}
 	}
 	tw.Flush()
