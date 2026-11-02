@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,13 +40,22 @@ import (
 const (
 	snapRoot  = "/snap"
 	snapBin   = "/snap/bin"
-	dataRoot  = "/var/snap"
 	stateDir  = "/var/lib/thothdock-snaps"
 	stateFile = stateDir + "/state.json"
 	version   = "thothdock-snap 0.1 (ThothDock)"
+	snapExe   = "/usr/local/bin/snap"
 )
 
-func main() { os.Exit(run(os.Args[1:])) }
+// dataRoot is where snaps keep their data; a variable so tests can move it.
+var dataRoot = "/var/snap"
+
+func main() {
+	// snapctl is this binary under another name (see snapctl.go).
+	if filepath.Base(os.Args[0]) == "snapctl" {
+		os.Exit(snapctlMain(os.Args[1:]))
+	}
+	os.Exit(run(os.Args[1:]))
+}
 
 func fail(format string, args ...any) int {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
@@ -60,10 +70,19 @@ const usage = `Usage: snap <command> [options]
   remove <snap>...
   list                         installed snaps
   run <snap>[.<app>] [args]    run an app (also /snap/bin/<snap>)
+  run --shell <snap>[.<app>]   a shell in the snap's sandbox
   run --hook=configure <snap>  run a snap's install or configure hook again
-  start|stop <snap>[.<app>]    run or stop a service (a daemon in snap.yaml)
+  start|stop|restart <snap>[.<app>]
+                               run, stop or restart a service (a daemon in snap.yaml)
   services                     services and whether they run
   logs <snap>[.<app>]          a service's output
+  get [-d] <snap> [<key>...]   a snap's configuration
+  set <snap> <key>=<value>...  change it (runs the snap's configure hook)
+  unset <snap> <key>...
+  refresh [--channel=C] [<snap>...]
+                               install the newest revision
+  autostart                    start the services that are not running (a new
+                               window runs this, as snapd does at boot)
   version
 
 ThothDock's snap: installs from the Snap Store and runs apps through the
@@ -95,9 +114,21 @@ func run(args []string) int {
 		}
 		return cmdRun(rest, false)
 	case "start":
-		return asRoot(args, func() int { return cmdRun(rest, true) })
+		return asRoot(args, func() int { return cmdStart(rest, false) })
+	case "restart":
+		return asRoot(args, func() int { return cmdStart(rest, true) })
 	case "stop":
 		return asRoot(args, func() int { return cmdStop(rest) })
+	case "get":
+		return cmdGet(rest)
+	case "set":
+		return asRoot(args, func() int { return cmdSetUnset(false, rest) })
+	case "unset":
+		return asRoot(args, func() int { return cmdSetUnset(true, rest) })
+	case "refresh":
+		return asRoot(args, func() int { return cmdRefresh(rest) })
+	case "autostart":
+		return asRoot(args, cmdAutostart)
 	case "services":
 		return cmdServices()
 	case "logs":
@@ -140,7 +171,16 @@ type installed struct {
 	Apps        []string `json:"apps"`
 	Daemons     []string `json:"daemons"`
 	Aliases     []string `json:"aliases"`
+	// LinksFixed: the hard links under the snap's directory point at its
+	// final path, not at the temporary one older installs unpacked into.
+	LinksFixed bool `json:"links_fixed"`
+	// Disabled are the services that do not start with the snap
+	// (snapctl stop --disable, snap stop --disable).
+	Disabled []string `json:"disabled,omitempty"`
 }
+
+// linksFixedOrNone is true for no snap (a nil record) or a repaired one.
+func (i *installed) linksFixedOrNone() bool { return i == nil || i.LinksFixed }
 
 type state struct {
 	Snaps map[string]*installed `json:"snaps"`
@@ -246,6 +286,7 @@ func cmdInstall(args []string) int {
 	if err := ensureUnsquashfs(); err != nil {
 		return fail("%v", err)
 	}
+	snapctlBinary()
 	_, err = os.Stat(snapBin)
 	firstSnap := errors.Is(err, os.ErrNotExist)
 	st, err := loadState()
@@ -351,31 +392,38 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	defer os.Remove(file)
 	dir := filepath.Join(snapRoot, name)
 	revDir := filepath.Join(dir, strconv.Itoa(rel.Revision))
-	partial := revDir + ".partial"
-	os.RemoveAll(partial)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	// Unpack where the snap will stay: unsquashfs makes the snap's hard
+	// links, and PRoot stores each as a symlink to a path under the guest
+	// root, so a directory renamed afterwards leaves them dangling.
+	os.RemoveAll(revDir) // a half-unpacked earlier attempt; an installed revision returned above
 	// -no-xattrs: a PRoot guest cannot set them. Device nodes, if any, fail
 	// individually; unsquashfs exits non-zero only on real errors.
-	out, err := exec.Command("unsquashfs", "-n", "-no-xattrs", "-d", partial, file).CombinedOutput()
-	if err != nil && !onlyDeviceNodeErrors(err, out, partial) {
-		os.RemoveAll(partial)
+	out, err := exec.Command("unsquashfs", "-n", "-no-xattrs", "-d", revDir, file).CombinedOutput()
+	if err != nil && !onlyDeviceNodeErrors(err, out, revDir) {
+		os.RemoveAll(revDir)
 		return fmt.Errorf("unpacking %s: %v: %s", name, err, firstErrors(out, 4))
 	}
-	meta, err := os.ReadFile(filepath.Join(partial, "meta/snap.yaml"))
+	meta, err := os.ReadFile(filepath.Join(revDir, "meta/snap.yaml"))
 	if err != nil {
-		os.RemoveAll(partial)
+		os.RemoveAll(revDir)
 		return fmt.Errorf("%s has no meta/snap.yaml: %v", name, err)
 	}
 	y, err := snapstore.ParseSnapYAML(meta)
 	if err != nil || y.Name != name {
-		os.RemoveAll(partial)
+		os.RemoveAll(revDir)
 		return fmt.Errorf("%s: bad meta/snap.yaml: %v", name, err)
 	}
-	os.RemoveAll(revDir)
-	if err := os.Rename(partial, revDir); err != nil {
-		return err
+	old, refreshing := st.Snaps[name]
+	refreshing = refreshing && old.Revision != rel.Revision
+	if refreshing {
+		// snapd runs the old revision's pre-refresh hook, then stops its services.
+		if orec, oy, odir, err := loadSnap(name); err == nil {
+			runHook(name, "pre-refresh", orec, oy, odir)
+		}
+		stopAll(name)
 	}
 	cur := filepath.Join(dir, "current")
 	os.Remove(cur + ".new")
@@ -392,7 +440,7 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 		}
 	}
 	rec := &installed{Revision: rel.Revision, Version: rel.Version, Channel: rel.Channel, Type: y.Type,
-		Base: rel.Base, Confinement: rel.Confinement}
+		Base: rel.Base, Confinement: rel.Confinement, LinksFixed: true}
 	for app, a := range y.Apps {
 		if a.Daemon != "" {
 			rec.Daemons = append(rec.Daemons, app)
@@ -402,11 +450,31 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	}
 	sort.Strings(rec.Apps)
 	sort.Strings(rec.Daemons)
-	for _, d := range []string{filepath.Join(dataRoot, name, strconv.Itoa(rel.Revision)), filepath.Join(dataRoot, name, "common")} {
+	newData := filepath.Join(dataRoot, name, strconv.Itoa(rel.Revision))
+	if refreshing {
+		// The new revision starts with the data of the old one (snapd copies it).
+		oldData := filepath.Join(dataRoot, name, strconv.Itoa(old.Revision))
+		if _, err := os.Stat(newData); errors.Is(err, os.ErrNotExist) {
+			if err := os.Rename(oldData, newData); err != nil && !errors.Is(err, os.ErrNotExist) {
+				fmt.Fprintf(os.Stderr, "warning: the data of revision %d was not carried over: %v\n", old.Revision, err)
+			}
+		}
+	}
+	for _, d := range []string{newData, filepath.Join(dataRoot, name, "common")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
 		}
 	}
+	// $SNAP_DATA/../current, which snaps write into their configuration.
+	dataCur := filepath.Join(dataRoot, name, "current")
+	os.Remove(dataCur + ".new")
+	if err := os.Symlink(strconv.Itoa(rel.Revision), dataCur+".new"); err != nil {
+		return err
+	}
+	if err := os.Rename(dataCur+".new", dataCur); err != nil {
+		return err
+	}
+	ensureSnapctl()
 	if err := writeLaunchers(name, rec.Apps); err != nil {
 		return err
 	}
@@ -417,8 +485,18 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	if err := st.save(); err != nil {
 		return err
 	}
-	runHooks(name, rec, y, revDir)
+	runHooks(name, rec, y, revDir, refreshing)
 	fmt.Printf("%s %s from the Snap Store installed\n", name, rel.Version)
+	// Hooks may have disabled services through another copy of the state.
+	if fresh, err := loadState(); err == nil {
+		st.Snaps = fresh.Snaps
+	}
+	// snapd starts a snap's services when it installs it.
+	for _, d := range daemonsOf(y) {
+		if !slices.Contains(st.Snaps[name].Disabled, d) {
+			cmdRun([]string{name + "." + d}, true)
+		}
+	}
 	return nil
 }
 
@@ -512,28 +590,17 @@ func removeAliases(name string, aliases []string) {
 	}
 }
 
-// cmdHook is snap run --hook=<install|configure> <snap>, as in snapd.
+// cmdHook is snap run --hook=<install|configure|...> <snap>, as in snapd.
 func cmdHook(hook, name string) int {
-	if hook != "install" && hook != "configure" {
-		return fail("only the install and configure hooks can be run")
+	switch hook {
+	case "install", "configure", "post-refresh", "pre-refresh":
+	default:
+		return fail("only the install, configure, pre-refresh and post-refresh hooks can be run")
 	}
 	if !snapstore.ValidName(name) {
 		return fail("%q is not a valid snap name", name)
 	}
-	st, err := loadState()
-	if err != nil {
-		return fail("%v", err)
-	}
-	rec, ok := st.Snaps[name]
-	if !ok {
-		return fail("snap %q is not installed", name)
-	}
-	revDir := filepath.Join(snapRoot, name, strconv.Itoa(rec.Revision))
-	meta, err := os.ReadFile(filepath.Join(revDir, "meta/snap.yaml"))
-	if err != nil {
-		return fail("%v", err)
-	}
-	y, err := snapstore.ParseSnapYAML(meta)
+	rec, y, revDir, err := loadSnap(name)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -545,12 +612,104 @@ func cmdHook(hook, name string) int {
 
 // runHooks runs the snap's install and configure hooks, as snapd does after
 // unpacking (redis's configure hook writes $SNAP_COMMON/etc/redis/redis.conf),
-// in the snap's sandbox as root. snapctl is not available; a failing hook is
-// reported and the snap stays installed.
-func runHooks(name string, rec *installed, y *snapstore.SnapYAML, revDir string) {
-	for _, hook := range []string{"install", "configure"} {
+// in the snap's sandbox as root, with snapctl. A failing hook is reported and
+// the snap stays installed.
+func runHooks(name string, rec *installed, y *snapstore.SnapYAML, revDir string, refreshed bool) {
+	hooks := []string{"install", "configure"}
+	if refreshed {
+		hooks = []string{"post-refresh", "configure"}
+	}
+	for _, hook := range hooks {
 		runHook(name, hook, rec, y, revDir)
 	}
+}
+
+// ensureSnapctl makes snapctl available to classic snaps and to the shell:
+// strict snaps get it bound into their sandbox.
+func ensureSnapctl() {
+	p := filepath.Join(filepath.Dir(snapExe), "snapctl")
+	if _, err := os.Lstat(p); err != nil {
+		os.Symlink("snap", p)
+	}
+}
+
+// cmdStart is snap start and snap restart: the named service, or all of a
+// snap's services when only the snap is named.
+func cmdStart(args []string, restart bool) int {
+	var refs []string
+	enable := false
+	for _, a := range args {
+		if a == "--enable" {
+			enable = true
+		} else if !strings.HasPrefix(a, "-") {
+			refs = append(refs, a)
+		}
+	}
+	if len(refs) == 0 {
+		return fail("usage: snap %s <snap>[.<app>]...", map[bool]string{true: "restart", false: "start"}[restart])
+	}
+	for _, ref := range refs {
+		name, app, err := splitApp(ref)
+		if err != nil {
+			return fail("%v", err)
+		}
+		_, y, _, err := loadSnap(name)
+		if err != nil {
+			return fail("%v", err)
+		}
+		apps := []string{app}
+		if !strings.Contains(ref, ".") {
+			if apps = daemonsOf(y); len(apps) == 0 {
+				return fail("snap %q has no services", name)
+			}
+		} else if y.Apps[app].Daemon == "" {
+			return fail("%s.%s is not a service; run it with: snap run %s.%s", name, app, name, app)
+		}
+		for _, a := range apps {
+			if enable {
+				setDisabled(name, a, false)
+			}
+			if restart {
+				controlService("restart", name, a)
+			} else if code := cmdRun([]string{name + "." + a}, true); code != 0 {
+				return code
+			}
+		}
+	}
+	return 0
+}
+
+// cmdRefresh installs the newest revision of the named snaps, or of all.
+func cmdRefresh(args []string) int {
+	channel, classic, names, err := parseFlags(args)
+	if err != nil {
+		return fail("usage: snap refresh [--channel=C] [<snap>...]")
+	}
+	if err := ensureUnsquashfs(); err != nil {
+		return fail("%v", err)
+	}
+	snapctlBinary()
+	st, err := loadState()
+	if err != nil {
+		return fail("%v", err)
+	}
+	if len(names) == 0 {
+		for n := range st.Snaps {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+	}
+	store := snapstore.New()
+	for _, n := range names {
+		rec, ok := st.Snaps[n]
+		if !ok {
+			return fail("snap %q is not installed", n)
+		}
+		if err := install(store, st, n, channel, classic || rec.Confinement == "classic", map[string]bool{}); err != nil {
+			return fail("%v", err)
+		}
+	}
+	return 0
 }
 
 // runHook runs one hook if the snap has it; false when it exists and failed.
@@ -558,6 +717,7 @@ func runHook(name, hook string, rec *installed, y *snapstore.SnapYAML, revDir st
 	if fi, err := os.Stat(filepath.Join(revDir, "meta/hooks", hook)); err != nil || !fi.Mode().IsRegular() {
 		return true
 	}
+	repairLinks(name)
 	app := snapstore.App{Command: "meta/hooks/" + hook}
 	req, err := buildRequest(name, "hook."+hook, rec, y, app, revDir, nil, false)
 	if err != nil {
@@ -565,13 +725,25 @@ func runHook(name, hook string, rec *installed, y *snapstore.SnapYAML, revDir st
 		return false
 	}
 	req.Tty = false
+	spool, err := newSpool(name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %s hook of %s not run: %v\n", hook, name, err)
+		return false
+	}
+	req.BaseEnv = append(req.BaseEnv, spoolEnv+"="+spool)
+	if f := writeServices(name, rec, y, spool); f != "" {
+		req.BaseEnv = append(req.BaseEnv, servicesEnv+"="+f)
+		defer os.Remove(f)
+	}
 	conn, err := net.Dial("unix", engineSocket())
 	if err != nil {
+		os.Remove(spool)
 		fmt.Fprintf(os.Stderr, "warning: %s hook of %s not run: cannot reach the ThothDock engine: %v\n", hook, name, err)
 		return false
 	}
 	defer conn.Close()
 	code, err := sandbox.Run(conn, req, nil, os.Stdout, os.Stderr, nil)
+	applyRequests(name, spool, y)
 	if err != nil || code != 0 {
 		fmt.Fprintf(os.Stderr, "warning: the %s hook of %s failed (exit %d, %v)\n", hook, name, code, err)
 		return false
@@ -628,6 +800,7 @@ func cmdRemove(args []string) int {
 			}
 		}
 		stopAll(name)
+		forgetAddress(name)
 		removeAliases(name, st.Snaps[name].Aliases)
 		removeLaunchers(name)
 		os.RemoveAll(filepath.Join(snapRoot, name))
@@ -687,6 +860,11 @@ func splitApp(ref string) (snap, app string, err error) {
 }
 
 func cmdRun(args []string, service bool) int {
+	// snap run --shell <snap>[.<app>] [args]: a shell in the app's sandbox.
+	shell := len(args) > 0 && args[0] == "--shell"
+	if shell {
+		args = args[1:]
+	}
 	if len(args) == 0 {
 		return fail("usage: snap %s <snap>[.<app>] [args]", map[bool]string{true: "start", false: "run"}[service])
 	}
@@ -702,6 +880,9 @@ func cmdRun(args []string, service bool) int {
 	if !ok {
 		return fail("snap %q is not installed (try: sudo snap install %s)", name, name)
 	}
+	if !s.LinksFixed || !st.Snaps[s.Base].linksFixedOrNone() {
+		repairLinks(name)
+	}
 	snapDir := path.Join(snapRoot, name, strconv.Itoa(s.Revision))
 	meta, err := os.ReadFile(path.Join(snapDir, "meta/snap.yaml"))
 	if err != nil {
@@ -715,7 +896,9 @@ func cmdRun(args []string, service bool) int {
 	if !ok {
 		return fail("snap %q has no app %q", name, appName)
 	}
-	if service != (app.Daemon != "") {
+	if shell {
+		app = snapstore.App{Command: "/bin/bash", Environment: app.Environment}
+	} else if service != (app.Daemon != "") {
 		if service {
 			return fail("%s.%s is not a service; run it with: snap run %s.%s", name, appName, name, appName)
 		}
@@ -939,6 +1122,10 @@ func sandboxOps(s *installed) ([]sandbox.Op, error) {
 			ops = append(ops, roBindTry(f, f))
 		}
 	}
+	// snapctl is this binary: the base's /usr/bin/snapctl points here.
+	if p := snapctlBinary(); p != "" {
+		ops = append(ops, roBind(p, "/usr/lib/snapd/snapctl"))
+	}
 	ops = append(ops, dirOp("/var"), dirOp("/var/tmp"), dirOp("/run"), dirOp("/mnt"), dirOp("/media"),
 		bind(snapRoot, snapRoot), bind(dataRoot, dataRoot), bind("/home", "/home"), bind("/tmp", "/tmp"), proc, dev)
 	if os.Geteuid() == 0 {
@@ -989,6 +1176,19 @@ func engineSandboxes() ([]sandboxInfo, error) {
 	return v.Sandboxes, nil
 }
 
+// forgetAddress tells the engine a snap is gone, so its address is reused.
+func forgetAddress(name string) {
+	c := http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		Dial: func(_, _ string) (net.Conn, error) { return net.Dial("unix", engineSocket()) }}}
+	req, err := http.NewRequest(http.MethodDelete, "http://thothdock/thothdock/snaps/"+name+"/address", nil)
+	if err != nil {
+		return
+	}
+	if resp, err := c.Do(req); err == nil {
+		resp.Body.Close()
+	}
+}
+
 func killSandbox(id string) error {
 	c := http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{
 		Dial: func(_, _ string) (net.Conn, error) { return net.Dial("unix", engineSocket()) }}}
@@ -1017,8 +1217,10 @@ func stopAll(name string) {
 }
 
 func cmdStop(args []string) int {
+	disable := slices.Contains(args, "--disable")
+	args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--disable" })
 	if len(args) != 1 {
-		return fail("usage: snap stop <snap>[.<app>]")
+		return fail("usage: snap stop [--disable] <snap>[.<app>]")
 	}
 	name, app, err := splitApp(args[0])
 	if err != nil {
@@ -1031,6 +1233,13 @@ func cmdStop(args []string) int {
 	want := "snap:" + name + "." + app
 	if !strings.Contains(args[0], ".") {
 		want = "snap:" + name + "."
+	}
+	if disable {
+		if _, y, _, err := loadSnap(name); err == nil {
+			for _, a := range serviceNames(y, args[0], app) {
+				setDisabled(name, a, true)
+			}
+		}
 	}
 	n := 0
 	for _, sb := range list {
@@ -1069,16 +1278,21 @@ func cmdServices() int {
 	}
 	sort.Strings(names)
 	for _, n := range names {
+		_, y, _, _ := loadSnap(n)
 		for _, d := range st.Snaps[n].Daemons {
 			any = true
-			cur, addr := "inactive", "-"
+			cur, addr, note := "inactive", "-", "start with: sudo snap start "+n+"."+d
 			if sb, ok := running[n+"."+d]; ok {
-				cur = "active"
+				cur, note = "active", "stop with: sudo snap stop "+n+"."+d
 				if sb.NetIP != "" {
 					addr = sb.NetIP
 				}
+			} else if slices.Contains(st.Snaps[n].Disabled, d) {
+				note = "disabled; start with: sudo snap start --enable " + n + "." + d
+			} else if y != nil && y.Apps[d].Timer != "" {
+				note = "timer " + y.Apps[d].Timer + " (not scheduled); run once with: sudo snap start " + n + "." + d
 			}
-			fmt.Fprintf(tw, "%s.%s\t%s\t%s\t%s\n", n, d, cur, addr, "start with: sudo snap start "+n+"."+d)
+			fmt.Fprintf(tw, "%s.%s\t%s\t%s\t%s\n", n, d, cur, addr, note)
 		}
 	}
 	tw.Flush()
@@ -1198,4 +1412,65 @@ func expandVars(s string, get func(string) string) string {
 		i = j - 1
 	}
 	return b.String()
+}
+
+// serviceNames are the services a reference names: one app, or every service
+// of the snap when only the snap is named.
+func serviceNames(y *snapstore.SnapYAML, ref, app string) []string {
+	if strings.Contains(ref, ".") {
+		return []string{app}
+	}
+	var out []string
+	for n, a := range y.Apps {
+		if a.Daemon != "" {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cmdAutostart starts every service that is not disabled and not running.
+// The guest has no init system: a service ends with the app, and a window
+// opened after that calls this. Only one runs at a time, so two windows
+// opened together do not start a service twice.
+func cmdAutostart() int {
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return fail("%v", err)
+	}
+	lock, err := os.OpenFile(filepath.Join(stateDir, "autostart.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return fail("%v", err)
+	}
+	defer lock.Close()
+	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		return 0
+	}
+	snapctlBinary() // renewed after an app update, before any service starts
+	st, err := loadState()
+	if err != nil {
+		return fail("%v", err)
+	}
+	names := make([]string, 0, len(st.Snaps))
+	for n, rec := range st.Snaps {
+		if len(rec.Daemons) > 0 {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		_, y, _, err := loadSnap(n)
+		if err != nil {
+			continue
+		}
+		for _, d := range daemonsOf(y) {
+			if slices.Contains(st.Snaps[n].Disabled, d) {
+				continue
+			}
+			if _, ok := runningService(n, d); !ok {
+				cmdRun([]string{n + "." + d}, true)
+			}
+		}
+	}
+	return 0
 }

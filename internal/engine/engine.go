@@ -69,6 +69,7 @@ type Engine struct {
 	// addrs are the containers' loopback addresses; hostsMu serialises
 	// /etc/hosts rewrites so the last one always reflects every membership.
 	addrs   *network.Pool
+	snapIPs *snapAddrs
 	hostsMu sync.Mutex
 	log     *slog.Logger
 
@@ -137,6 +138,7 @@ func New(layout platform.Layout, images *image.Store, puller *image.Puller, rt r
 	e := &Engine{Layout: layout, Volumes: vols, Networks: nets, Images: images, Puller: puller, Runtime: rt, cfg: cfg, log: log,
 		Events: events.New(), addrs: network.NewPool(), containers: map[string]*Container{}, names: map[string]string{},
 		sandboxes: map[string]*Sandbox{}, appSizes: map[string]int64{}}
+	e.snapIPs = newSnapAddrs(filepath.Join(layout.Root, "snap-addrs.json"), e.addrs)
 	// Sandboxes never outlive the daemon; a crash may have left their roots.
 	if err := securefs.RemoveTree(filepath.Join(layout.Root, "sandboxes")); err != nil && !os.IsNotExist(err) {
 		log.Warn("removing old sandbox roots", "err", err)

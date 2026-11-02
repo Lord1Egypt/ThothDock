@@ -211,3 +211,40 @@ func TestAppsListsSnapsAndTheirServices(t *testing.T) {
 		t.Fatalf("snap %+v", a)
 	}
 }
+
+// A snap's sandboxes share one loopback address, as its processes share
+// localhost under snapd; another snap, and a Flatpak app, get their own.
+func TestSnapSandboxesShareOneAddress(t *testing.T) {
+	g := sandboxGuest(t)
+	f := newAPIWith(t, engine.Config{GuestRoot: g})
+	f.rt.Program("/usr/bin/hello", func(ctx context.Context, s runtime.Spec, in io.Reader) int { <-ctx.Done(); return 0 })
+	run := func(env ...string) {
+		req := helloRequest()
+		req.BaseEnv = env
+		started := make(chan struct{})
+		go sandbox.Run(dialAPI(t, f), req, nil, io.Discard, io.Discard, func(sandbox.Started) { close(started) })
+		<-started
+	}
+	run("THOTHDOCK_SNAP_APP=redis.server")
+	run("THOTHDOCK_SNAP_APP=redis.cli")
+	run("THOTHDOCK_SNAP_APP=mosquitto.mosquitto")
+	run("FLATPAK_ID=org.example.App")
+	byApp := map[string][]string{}
+	for _, sb := range f.engineOf().Sandboxes() {
+		byApp[sb.AppID] = append(byApp[sb.AppID], sb.NetIP)
+	}
+	server, cli := byApp["snap:redis.server"][0], byApp["snap:redis.cli"][0]
+	if server == "" || server != cli {
+		t.Fatalf("redis.server %q and redis.cli %q must share an address", server, cli)
+	}
+	seen := map[string]string{server: "redis"}
+	for app, ips := range byApp {
+		if strings.HasPrefix(app, "snap:redis.") {
+			continue
+		}
+		if prev, dup := seen[ips[0]]; dup || ips[0] == "" {
+			t.Errorf("%s has %q, also used by %s", app, ips[0], prev)
+		}
+		seen[ips[0]] = app
+	}
+}

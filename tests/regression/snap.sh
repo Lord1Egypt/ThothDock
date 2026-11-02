@@ -70,6 +70,32 @@ snap run --hook=configure hook-test >/dev/null 2>&1
 [ "$(cat /var/snap/hook-test/common/etc/marker 2>/dev/null)" = configured ] && ok "configure hook runs in the snap's sandbox" || no "hook did not run"
 snap remove hook-test >/dev/null
 
+# snapctl: configuration, and a service restarted from a hook. The hook reads
+# a default, sets one, and asks for a restart; "snap set" runs it again.
+mkdir -p "$WORK/ctlsnap/meta/hooks" "$WORK/ctlsnap/bin"
+printf 'name: ctl-test\nversion: "1"\nbase: core20\napps:\n  tick:\n    command: bin/tick\n    daemon: simple\n' > "$WORK/ctlsnap/meta/snap.yaml"
+printf '#!/bin/sh\nwhile :; do echo tick $(snapctl get greeting); sleep 1; done\n' > "$WORK/ctlsnap/bin/tick"
+printf '#!/bin/sh -e\n[ -n "$(snapctl get greeting)" ] || snapctl set greeting=hello ports.http=80 private.x=1\ncase "$(snapctl get greeting)" in bad) echo "bad greeting" >&2; exit 1;; esac\nsnapctl restart "$SNAP_INSTANCE_NAME.tick"\n' > "$WORK/ctlsnap/meta/hooks/configure"
+chmod 755 "$WORK/ctlsnap/bin/tick" "$WORK/ctlsnap/meta/hooks/configure"
+python3 - <<'PY'
+import json; p='/var/lib/thothdock-snaps/state.json'; s=json.load(open(p))
+s['snaps']['ctl-test']={"revision":1,"version":"1","channel":"local","type":"app","base":"core20","confinement":"strict","apps":[],"daemons":["tick"]}
+json.dump(s,open(p,'w'))
+PY
+mkdir -p /snap/ctl-test /var/snap/ctl-test/common && cp -a "$WORK/ctlsnap" /snap/ctl-test/1 && ln -sfn 1 /snap/ctl-test/current
+hookout=$(snap run --hook=configure ctl-test 2>&1)
+[ "$(snap get ctl-test greeting 2>&1)" = hello ] && ok "snapctl set in a hook, snap get reads it" || no "snapctl set: $(snap get ctl-test 2>&1) | hook said: $hookout | $(ls -la /var/lib/thothdock-snaps/bin 2>&1 | tr '\n' ' ')"
+[ "$(snap get ctl-test ports.http 2>&1)" = 80 ] && ok "a number keeps its type" || no "ports.http: $(snap get ctl-test ports.http 2>&1)"
+snap get ctl-test 2>&1 | grep -q private && no "private keys are shown" || ok "private keys are hidden from snap get"
+sleep 2
+snap services | grep -q "ctl-test.tick *active" && ok "snapctl restart from a hook starts the service" || no "restart: $(snap services)"
+snap logs ctl-test.tick | grep -q "tick hello" && ok "the service reads the configuration through snapctl" || no "service log: $(snap logs ctl-test.tick 2>&1 | tail -2)"
+snap set ctl-test greeting=bad >/dev/null 2>&1 && no "a failing configure hook was accepted" || ok "snap set with a failing hook is refused"
+[ "$(snap get ctl-test greeting 2>&1)" = hello ] && ok "...and the old configuration stays" || no "config after refusal: $(snap get ctl-test greeting 2>&1)"
+snap set ctl-test greeting=hi >/dev/null 2>&1; sleep 3
+snap logs ctl-test.tick | tail -3 | grep -q "tick hi" && ok "snap set restarts the service with the new value" || no "set/restart: $(snap logs ctl-test.tick | tail -2)"
+snap stop ctl-test.tick >/dev/null; snap remove ctl-test >/dev/null
+
 # A base cannot be removed while an app needs it.
 snap remove core20 2>&1 | grep -q "uses it as its base" && ok "base in use cannot be removed" || no "base removal"
 snap remove svc-test >/dev/null; snap remove hello >/dev/null && snap remove core20 >/dev/null

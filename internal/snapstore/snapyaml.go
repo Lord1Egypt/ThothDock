@@ -2,6 +2,8 @@ package snapstore
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 )
 
@@ -10,6 +12,9 @@ type SnapYAML struct {
 	Name, Version, Type, Base, Confinement string
 	Environment                            map[string]string
 	Apps                                   map[string]App
+	// Plugs are the interface names the apps and hooks declare, for
+	// snapctl is-connected.
+	Plugs []string
 }
 
 // App is one entry of snap.yaml's apps.
@@ -18,6 +23,8 @@ type App struct {
 	CommandChain []string
 	Environment  map[string]string
 	Daemon       string // simple, forking, oneshot, notify, ... or "" for a command
+	Timer        string // snapd runs a daemon with a timer on that schedule, not continuously
+	Plugs        []string
 }
 
 // ParseSnapYAML reads the YAML subset snapcraft writes: block maps by
@@ -50,9 +57,19 @@ func ParseSnapYAML(data []byte) (*SnapYAML, error) {
 		for name, v := range apps {
 			a, _ := v.(map[string]any)
 			y.Apps[name] = App{Command: str(a["command"]), CommandChain: strList(a["command-chain"]),
-				Environment: strMap(a["environment"]), Daemon: str(a["daemon"])}
+				Environment: strMap(a["environment"]), Daemon: str(a["daemon"]), Timer: str(a["timer"]),
+				Plugs: strList(a["plugs"])}
+			y.Plugs = append(y.Plugs, strList(a["plugs"])...)
 		}
 	}
+	if hooks, ok := m["hooks"].(map[string]any); ok {
+		for _, v := range hooks {
+			h, _ := v.(map[string]any)
+			y.Plugs = append(y.Plugs, strList(h["plugs"])...)
+		}
+	}
+	sort.Strings(y.Plugs)
+	y.Plugs = slices.Compact(y.Plugs)
 	if y.Name == "" {
 		return nil, fmt.Errorf("snap.yaml: no name")
 	}

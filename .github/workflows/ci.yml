@@ -87,7 +87,9 @@ jobs:
           scripts/build-host-proot.sh "$RUNNER_TEMP/proot"
           go build -o "$RUNNER_TEMP/thothdock" ./cmd/thothdock
           go build -o "$RUNNER_TEMP/thothdock-bwrap" ./cmd/thothdock-bwrap
-          go build -o "$RUNNER_TEMP/thothdock-snap" ./cmd/thothdock-snap
+          # Static, as every release build is: a snap's sandbox runs this binary as
+          # snapctl on the snap's own libc (core20's glibc is older than the runner's).
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/thothdock-snap" ./cmd/thothdock-snap
       - name: Flatpak sandbox path (bwrap shim, --guest-root, real PRoot)
         run: tests/regression/sandbox.sh "$RUNNER_TEMP/thothdock" "$RUNNER_TEMP/thothdock-bwrap" "$RUNNER_TEMP/proot/proot" /bin/busybox
       - name: Snap path against the real Snap Store (hello + core20, a service)

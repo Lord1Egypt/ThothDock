@@ -94,13 +94,27 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 		cleanup()
 		return nil, nil, errdefs.Invalid("%v", err)
 	}
+	appID := envValue(prep.Env, "FLATPAK_ID")
+	if snapApp := envValue(prep.Env, "THOTHDOCK_SNAP_APP"); appID == "" && snapApp != "" {
+		appID = "snap:" + snapApp
+	}
 	var ip string
+	// releaseIP gives a sandbox's own address back; a snap keeps its address.
+	releaseIP := func() {}
 	if e.supportsNetIP() {
-		// The same pool as containers on user networks: one address can
-		// never belong to two workloads.
-		if ip, err = e.addrs.Allocate("sandbox:" + id); err != nil {
-			cleanup()
-			return nil, nil, errdefs.Conflict("sandbox: no loopback address left: %v", err)
+		if snap := snapOf(appID); snap != "" {
+			if ip, err = e.snapIPs.address(snap); err != nil {
+				cleanup()
+				return nil, nil, errdefs.Conflict("sandbox: no loopback address for %s: %v", snap, err)
+			}
+		} else {
+			// The same pool as containers on user networks: one address can
+			// never belong to two workloads.
+			if ip, err = e.addrs.Allocate("sandbox:" + id); err != nil {
+				cleanup()
+				return nil, nil, errdefs.Conflict("sandbox: no loopback address left: %v", err)
+			}
+			releaseIP = func() { e.addrs.Release(ip) }
 		}
 	}
 	binds := make([]runtime.Bind, len(prep.Binds))
@@ -113,18 +127,12 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 		NetIP: ip, Stdout: stdout, Stderr: stderr,
 	})
 	if err != nil {
-		if ip != "" {
-			e.addrs.Release(ip)
-		}
+		releaseIP()
 		cleanup()
 		return nil, nil, err
 	}
 	if req.Tty && req.Width > 0 && req.Height > 0 {
 		proc.Resize(req.Width, req.Height) // a PTY starts at 0x0: TUIs would draw nothing
-	}
-	appID := envValue(prep.Env, "FLATPAK_ID")
-	if snapApp := envValue(prep.Env, "THOTHDOCK_SNAP_APP"); appID == "" && snapApp != "" {
-		appID = "snap:" + snapApp
 	}
 	s := &Sandbox{ID: id, AppID: appID, Argv: prep.Argv, NetIP: ip, Started: time.Now(), proc: proc, done: make(chan struct{})}
 	e.mu.Lock()
@@ -141,9 +149,7 @@ func (e *Engine) RunSandbox(req *sandbox.Request, stdout, stderr io.Writer) (*Sa
 		e.mu.Lock()
 		delete(e.sandboxes, id)
 		e.mu.Unlock()
-		if ip != "" {
-			e.addrs.Release(ip)
-		}
+		releaseIP()
 		cleanup()
 		close(s.done)
 	}()
