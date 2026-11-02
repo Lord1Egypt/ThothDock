@@ -169,6 +169,13 @@ func (p *Prepared) apply(op Op, req *Request, guest, root *securefs.Root) error 
 		if op.Kind == OpDevBind && path.Clean(op.Src) == "/dev" && dest == "/dev" {
 			return nil // the runtime binds /dev itself
 		}
+		if op.Kind == OpDevBind && strings.HasPrefix(path.Clean(op.Src), "/dev/") && path.Clean(op.Src) == dest {
+			// A device node the app asks for (--dev-bind /dev/dri /dev/dri):
+			// the sandbox's /dev is the runtime's, so the node is there when
+			// the phone has it, and there is nothing in the guest to bind.
+			// Without this, an app with devices=dri failed to start.
+			return nil
+		}
 		src, isDir, err := ResolveGuest(guest, op.Src)
 		if err != nil {
 			if op.Try && errors.Is(err, os.ErrNotExist) {
