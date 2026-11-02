@@ -3,6 +3,7 @@ package snapstore
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,37 @@ apps:
 		if _, err := ParseSnapYAML([]byte(bad)); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func TestSnapYAMLTimersAndPlugs(t *testing.T) {
+	y, err := ParseSnapYAML([]byte(`name: nc
+version: 1
+apps:
+  apache:
+    command: bin/run
+    daemon: simple
+    plugs:
+    - network
+    - network-bind
+  logrotate:
+    command: bin/rotate
+    timer: 00:00
+    daemon: simple
+    plugs: [network]
+hooks:
+  configure:
+    plugs:
+    - removable-media
+    - network
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if y.Apps["logrotate"].Timer != "00:00" || y.Apps["apache"].Timer != "" {
+		t.Fatalf("timers: %+v", y.Apps)
+	}
+	if got := strings.Join(y.Plugs, ","); got != "network,network-bind,removable-media" {
+		t.Fatalf("plugs %q", got)
 	}
 }
