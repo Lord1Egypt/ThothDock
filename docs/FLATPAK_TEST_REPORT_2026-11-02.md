@@ -41,6 +41,22 @@ display. Results below are what was observed; fixes are in ThothDock 0.4.1.
 4. `XDG_DATA_DIRS` now lists the Flatpak export directories, which silences the
    "directories currently searched" note after every install.
 
+## Found after the first fixes (engine 0.4.2)
+
+With 0.4.1 on the phone, KeePassXC, Firefox, GNOME Calculator, VLC, GIMP, Neovim and Emacs
+ran. Two engine problems remained:
+
+* LibreOffice: `bwrap: sandbox: libreoffice: command not found in PATH`. The command
+  is an absolute symlink into `/app`; the lookup could not follow it. Fixed.
+* Inkscape: `libinkscape_base.so.1.4.4.0: cannot open shared object file` although the
+  file is there: `$ORIGIN` of a program started by PRoot itself is a host path. Started
+  through a shell it works (`sh -c` of the same binary did). Fixed; verified in a QA APK
+  on a fresh guest: `Inkscape 1.4.4`, and an SVG converted to a PNG.
+* Krita, Okular and Meld start but need a display (`qt.qpa.xcb: could not connect to
+  display`, Gtk assertions); Qt apps might run headless with `QT_QPA_PLATFORM=offscreen` (not tried).
+* A new guest runs `apt` for a while; the wrapper's first install of flatpak failed on the
+  dpkg lock. It now waits up to five minutes for it.
+
 ## Known limits (not fixed)
 
 * The guest's `/etc/resolv.conf` is written from Android's active network when
