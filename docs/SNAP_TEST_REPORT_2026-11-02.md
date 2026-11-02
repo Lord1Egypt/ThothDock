@@ -1,9 +1,11 @@
 # Snap test campaign, 2026-11-02 (SM-A165F, Android 16, 8 GB)
 
-Why: Nextcloud's snap failed to install cleanly ("snapctl: not found"), so 29
-snaps of different kinds were installed and run to find the other things that
-did not work. Two rounds: ThothDock 0.3.1 as released (round 1, 20 snaps), then
-the build with the fixes below (round 2, 18 snaps; 9 were also in round 1).
+Why: Nextcloud's snap failed to install cleanly ("snapctl: not found"), so
+other snaps of different kinds were installed and run to find what else did
+not work. 31 snaps were tried in two rounds: ThothDock 0.3.1 as released
+(round 1, 20 snaps), then the build with the fixes below (round 2, a fresh
+guest, 20 snaps; 9 were also in round 1). 28 installed; 3 are not published
+for arm64.
 
 ## What was found and fixed
 
@@ -27,7 +29,8 @@ nextcloud 34.0.5 (8 services from `snap install nextcloud` alone, HTTP 200,
 `manual-install` works, login page in the phone's browser), hello-world.
 
 Refused correctly, with the store's own channel list: ripgrep, ffmpeg,
-prometheus (no arm64 on latest/stable), node (use `--channel=24/stable`).
+prometheus (no arm64 on latest/stable). node has none on latest/stable either;
+`--channel=24/stable` installs node 24.
 
 Data kept and services restarted by a refresh (simulated from an older
 revision): marker file carried over, `current` moved, old revision removed,
@@ -51,7 +54,7 @@ address back.
 
 * Visible processes: 43, 926 MB resident in total. One PRoot supervisor
   (about 37 MB) per running sandbox; `mysqld` 216 MB is the largest service.
-* Disk: 3.9 GB under `/snap` for 29 snaps and 6 bases; 615 MB `/var/snap`.
+* Disk: 3.9 GB under `/snap` for the 20 snaps and 6 bases of round 2; 615 MB `/var/snap`.
 * Install times: 4 to 37 s for most snaps over Wi-Fi; Nextcloud (366 MB) 86 s
   including the start of its 8 services.
 
