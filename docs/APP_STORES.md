@@ -84,6 +84,17 @@ engine: new empty root dir + PRoot -r <dir> -b <binds…> --link2symlink, argv, 
   for GL apps; the guest has none and the sandbox's `/dev` is the runtime's,
   so a bind whose source and destination are the same path under `/dev` is
   skipped (it failed with `bind source "/dev/dri": file does not exist`).
+* Commands that are symlinks (0.4.2). `/app/bin/libreoffice` is a symlink to
+  `/app/libreoffice/program/soffice`: the target names a path in the `/app`
+  bind, which the guest alone cannot follow, so the command lookup said
+  "command not found in PATH". A symlink found in the PATH is now accepted and
+  followed inside the sandbox, as bwrap's `execvp` does.
+* `$ORIGIN` (0.4.2). A program PRoot starts itself gets `$ORIGIN` from the host
+  path of the file, which the sandbox does not have: Inkscape (RPATH
+  `$ORIGIN/../lib/inkscape`) failed with "libinkscape_base.so: cannot open
+  shared object file". Flatpak sandboxes (those with `/app`) now start the app
+  through `/usr/bin/sh -c 'exec "$0" "$@"'`; as an exec inside the sandbox it
+  has the sandbox's own path.
 * Large installs. A 2.6 GB install (LibreOffice) ended on "The connection is
   closed"; the guest's `flatpak` wrapper runs `install` and `update` again on a
   network error (five runs at most) and OSTree goes on where it stopped.
