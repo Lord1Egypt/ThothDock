@@ -83,8 +83,8 @@ s['snaps']['ctl-test']={"revision":1,"version":"1","channel":"local","type":"app
 json.dump(s,open(p,'w'))
 PY
 mkdir -p /snap/ctl-test /var/snap/ctl-test/common && cp -a "$WORK/ctlsnap" /snap/ctl-test/1 && ln -sfn 1 /snap/ctl-test/current
-snap run --hook=configure ctl-test >/dev/null 2>&1
-[ "$(snap get ctl-test greeting 2>&1)" = hello ] && ok "snapctl set in a hook, snap get reads it" || no "snapctl set: $(snap get ctl-test 2>&1)"
+hookout=$(snap run --hook=configure ctl-test 2>&1)
+[ "$(snap get ctl-test greeting 2>&1)" = hello ] && ok "snapctl set in a hook, snap get reads it" || no "snapctl set: $(snap get ctl-test 2>&1) | hook said: $hookout | $(ls -la /var/lib/thothdock-snaps/bin 2>&1 | tr '\n' ' ')"
 [ "$(snap get ctl-test ports.http 2>&1)" = 80 ] && ok "a number keeps its type" || no "ports.http: $(snap get ctl-test ports.http 2>&1)"
 snap get ctl-test 2>&1 | grep -q private && no "private keys are shown" || ok "private keys are hidden from snap get"
 sleep 2
