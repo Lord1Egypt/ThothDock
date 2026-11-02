@@ -53,7 +53,7 @@ ran. Two engine problems remained:
   through a shell it works (`sh -c` of the same binary did). Fixed; verified in a QA APK
   on a fresh guest: `Inkscape 1.4.4`, and an SVG converted to a PNG.
 * Krita, Okular and Meld start but need a display (`qt.qpa.xcb: could not connect to
-  display`, Gtk assertions); `QT_QPA_PLATFORM=offscreen` runs Qt apps headless.
+  display`, Gtk assertions); Qt apps might run headless with `QT_QPA_PLATFORM=offscreen` (not tried).
 * A new guest runs `apt` for a while; the wrapper's first install of flatpak failed on the
   dpkg lock. It now waits up to five minutes for it.
 
