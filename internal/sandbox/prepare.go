@@ -137,7 +137,26 @@ func Prepare(req *Request, guest *securefs.Root, dir string) (*Prepared, error) 
 		return nil, err
 	}
 	p.Argv = append([]string{argv0}, req.Argv[1:]...)
+	// A program PRoot starts itself gets its $ORIGIN from the host path of
+	// the file, which does not exist in the sandbox: Inkscape (RPATH
+	// $ORIGIN/../lib/inkscape) died with "libinkscape_base.so: cannot open
+	// shared object file". Started by a shell it is an exec inside the
+	// sandbox, with the sandbox's own path. Flatpak apps (/app) only.
+	if p.hasBindTarget("/app") {
+		if _, isDir, err := p.resolveInSandbox("/usr/bin/sh", guest, root); err == nil && !isDir {
+			p.Argv = append([]string{"/usr/bin/sh", "-c", `exec "$0" "$@"`}, p.Argv...)
+		}
+	}
 	return p, nil
+}
+
+func (p *Prepared) hasBindTarget(target string) bool {
+	for _, b := range p.Binds {
+		if b.Target == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Prepared) warn(format string, args ...any) {
@@ -425,6 +444,21 @@ func (p *Prepared) lookPath(name string, guest, root *securefs.Root) (string, er
 		}
 		if fi, err := os.Lstat(host); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
 			return cand, nil
+		}
+	}
+	// A command that is a symlink whose target names a path inside another
+	// bind (/app/bin/libreoffice -> /app/libreoffice/program/soffice) cannot
+	// be followed from the guest alone; execvp follows it in the sandbox.
+	for _, dir := range strings.Split(pathVar, ":") {
+		if !strings.HasPrefix(dir, "/") {
+			continue
+		}
+		parent, isDir, err := p.resolveInSandbox(path.Clean(dir), guest, root)
+		if err != nil || !isDir {
+			continue
+		}
+		if fi, err := os.Lstat(filepath.Join(parent, name)); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			return path.Join(dir, name), nil
 		}
 	}
 	return "", fmt.Errorf("sandbox: %s: command not found in PATH %s", name, pathVar)

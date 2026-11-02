@@ -24,6 +24,8 @@ func fakeGuest(t *testing.T) *securefs.Root {
 	wr("home/thoth/.local/share/flatpak/app/org.example.Tool/files/bin/tool", "#!", 0o755)
 	wr("home/thoth/.local/share/flatpak/app/org.example.Tool/files/bin/data.txt", "x", 0o644)
 	wr("etc/secret", "guest-only", 0o600)
+	// A command that is an absolute symlink into /app (LibreOffice's /app/bin/libreoffice).
+	os.Symlink("/app/bin/tool", filepath.Join(g, "home/thoth/.local/share/flatpak/app/org.example.Tool/files/bin/tool-link"))
 	mk("home/thoth/.var/app/org.example.Tool")
 	// Relative, absolute-guest, escaping, and link2symlink (absolute host path) links.
 	os.Symlink(".local/share/flatpak/app", filepath.Join(g, "home/thoth/apps"))
@@ -84,7 +86,7 @@ func TestPrepareFlatpakShapedRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(p.Argv, []string{"/app/bin/tool", "--flag"}) {
+	if !reflect.DeepEqual(p.Argv, []string{"/usr/bin/sh", "-c", `exec "$0" "$@"`, "/app/bin/tool", "--flag"}) {
 		t.Fatalf("argv %q", p.Argv)
 	}
 	want := []Bind{
@@ -225,5 +227,47 @@ func TestDeviceNodesUnderDevAreNotBoundFromTheGuest(t *testing.T) {
 	}, g, t.TempDir())
 	if err == nil {
 		t.Error("a --bind of a missing /dev path was accepted")
+	}
+}
+
+// /app/bin/libreoffice is a symlink to /app/libreoffice/program/soffice: the
+// target names a path in the /app bind, which the guest alone cannot follow.
+func TestPrepareFollowsACommandSymlinkIntoAnotherBind(t *testing.T) {
+	g := fakeGuest(t)
+	req := &Request{
+		Ops: []Op{
+			{Kind: OpROBind, Src: "/rtlink/files", Dest: "/usr", FD: -1, Perms: -1},
+			{Kind: OpROBind, Src: "/home/thoth/apps/org.example.Tool/files", Dest: "/app", FD: -1, Perms: -1},
+		},
+		Env:  []EnvOp{{Name: "PATH", Value: "/app/bin:/usr/bin"}},
+		Argv: []string{"tool-link", "x"},
+	}
+	p, err := Prepare(req, g, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Argv[len(p.Argv)-2:]; !reflect.DeepEqual(got, []string{"/app/bin/tool-link", "x"}) {
+		t.Fatalf("argv %q", p.Argv)
+	}
+	req.Argv = []string{"missing-tool"}
+	if _, err := Prepare(req, g, t.TempDir()); err == nil {
+		t.Fatal("a command that is nowhere was found")
+	}
+}
+
+// A sandbox that is not a Flatpak one (no /app) keeps its command as it is.
+func TestPrepareRunsOnlyAppsThroughTheShell(t *testing.T) {
+	g := fakeGuest(t)
+	req := &Request{
+		Ops:  []Op{{Kind: OpROBind, Src: "/rtlink/files", Dest: "/usr", FD: -1, Perms: -1}},
+		Env:  []EnvOp{{Name: "PATH", Value: "/usr/bin"}},
+		Argv: []string{"/usr/bin/sh", "-c", "true"},
+	}
+	p, err := Prepare(req, g, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(p.Argv, []string{"/usr/bin/sh", "-c", "true"}) {
+		t.Fatalf("argv %q", p.Argv)
 	}
 }
