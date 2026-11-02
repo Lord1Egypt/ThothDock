@@ -104,6 +104,35 @@ engine: Snap Store API v2 (api.snapcraft.io) → .snap download → sha3-384 che
   for google-cloud-cli) become `/snap/bin/<alias>`, read from the snap's
   snap-declaration as snapd does. An alias whose path is taken is skipped and
   reported; removing the snap removes only aliases that still run it.
+* Hard links: PRoot stores each hard link of an unpacked snap as a symlink to
+  the path it was made at, so the snap is unpacked straight into
+  `/snap/<name>/<rev>` and never renamed afterwards. (A first version unpacked
+  into `<rev>.partial` and renamed, which left every hard link dangling:
+  core18's `python3.6` broke httpie.) Snaps installed that way are repaired
+  once, the first time they run.
+* `snapctl` is the snap binary under another name. A strict snap's sandbox gets
+  it bound at `/usr/lib/snapd/snapctl`, where its base's `/usr/bin/snapctl`
+  points; a classic snap finds `/usr/local/bin/snapctl`. `get`, `set`, `unset`
+  keep one JSON document per snap, `/var/snap/<snap>/config.json`, shared by
+  every revision, locked and written atomically (Nextcloud's apache and
+  php-fpm set their defaults at the same moment). `start`, `stop` and
+  `restart` work from a hook: the request goes into a spool file and
+  `snap` applies it when the hook ends, as snapd does, so the sandbox never
+  reaches the engine. `stop --disable` and `start --enable` decide whether a
+  service starts with its snap (caddy disables its own). `is-connected`
+  answers true for every plug the snap declares; there are no interface
+  connections. `snap get`, `snap set` (which runs the configure hook and puts
+  the old configuration back if it fails), `snap unset`, `snap restart`,
+  `snap refresh` and `snap run --shell` are there too.
+* Services start when the snap is installed, except a daemon with a `timer`,
+  which only snapd's timer can run on schedule. Nothing restarts a service
+  that exits: there is no `restart-condition` supervisor yet, so a service
+  that stops (etcd without its config file) stays stopped.
+* Refreshing keeps the data: `/var/snap/<snap>/<rev>` moves to the new
+  revision, `current` points at it, and the old revision's `pre-refresh` and
+  the new one's `post-refresh` and `configure` hooks run.
+* Not available: the snapd API socket (certbot asks it for plugins and
+  complains), interface connections, and confinement.
 * Engine Guard refuses the real `snapd` package, as it does dockerd.
 * The Snap Store backend is not free software. F-Droid will likely want the
   `NonFreeNet` anti-feature for it; Flathub's server side is free.
@@ -120,6 +149,18 @@ address can never belong to two workloads; exhaustion is an error, never a
 reuse. A service that listens on 0.0.0.0 is rewritten to its own address by
 `--net-ip`, as for containers. Reaching it from the phone uses that address;
 publishing to the phone's port (like `-p`) is a later, explicit option.
+
+A **snap** has one address for all its sandboxes (`snap-addrs.json`, kept
+across restarts, returned by `snap remove`). Under snapd a snap's services and
+commands share the host's network, so `redis.cli` reaches the redis service on
+`localhost`; with one address per snap, `localhost` in each of the snap's
+sandboxes is that address. Two snaps never share one, so two services on the
+same port in different snaps still do not collide. Flatpak apps keep one
+address per sandbox. A snap's address is also what a browser needs:
+`snap services` lists it, and a web app that checks the host name
+(Nextcloud's trusted domains) has to be told it, for example
+`sudo nextcloud.occ config:system:set trusted_domains 1 --value='127.77.*'`.
+Ports below 1024 are served 30000 higher (80 is 30080).
 
 ## Panel decision (Containers screen and Web Panel)
 
