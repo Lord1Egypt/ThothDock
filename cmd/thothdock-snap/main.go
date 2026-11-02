@@ -517,7 +517,7 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 		}
 	}
 	if ds := daemonsOf(y); len(ds) > 0 && !refreshing {
-		fmt.Printf("%s has %s; they start when asked: sudo snap start %s (add --enable to start with each window)\n",
+		fmt.Printf("%s has %s, not started. Start with: sudo snap start %s (--enable also starts it with each new window)\n",
 			name, plural(len(ds), "service"), name)
 	}
 	return nil
