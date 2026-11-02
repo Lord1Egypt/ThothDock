@@ -362,7 +362,12 @@ func snapctlService(name, verb string, targets []string) int {
 	var refs []string
 	for _, t := range targets {
 		if strings.HasPrefix(t, "-") {
-			continue // --reload, --enable, --disable: services are restarted or started outright
+			// --reload restarts; --disable and --enable also change whether
+			// the service starts with the snap.
+			if (verb == "stop" && t == "--disable") || (verb != "stop" && t == "--enable") {
+				verb += "-" + strings.TrimPrefix(t, "--")
+			}
+			continue
 		}
 		if t != name && !strings.HasPrefix(t, name+".") {
 			return fail("snapctl %s: %q is not a service of this snap", verb, t)
@@ -403,6 +408,9 @@ func newSpool(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := os.MkdirAll(path.Join(dataRoot, name), 0o755); err != nil {
+		return "", err
+	}
 	p := path.Join(dataRoot, name, fmt.Sprintf(".snapctl-%x", raw))
 	if err := os.WriteFile(p, nil, 0o666); err != nil {
 		return "", err
@@ -435,7 +443,14 @@ func applyRequests(name, spool string, y *snapstore.SnapYAML) {
 	sc := bufio.NewScanner(io.LimitReader(f, 1<<16))
 	for sc.Scan() {
 		verb, ref, _ := strings.Cut(sc.Text(), " ")
-		if verb != "start" && verb != "stop" && verb != "restart" {
+		persist := ""
+		switch verb {
+		case "start", "stop", "restart":
+		case "stop-disable":
+			verb, persist = "stop", "disable"
+		case "start-enable", "restart-enable":
+			verb, persist = "start", "enable"
+		default:
 			continue
 		}
 		var apps []string
@@ -448,6 +463,9 @@ func applyRequests(name, spool string, y *snapstore.SnapYAML) {
 			continue
 		}
 		for _, app := range apps {
+			if persist != "" {
+				setDisabled(name, app, persist == "disable")
+			}
 			controlService(verb, name, app)
 		}
 	}
@@ -632,4 +650,87 @@ func loadSnap(name string) (*installed, *snapstore.SnapYAML, string, error) {
 		return nil, nil, "", err
 	}
 	return rec, y, revDir, nil
+}
+
+// ---- repair of links made by older installs ----------------------------------
+
+// fixPartialLinks points the hard links of a snap unpacked by an older
+// version, under "<dir>.partial", at <dir>. They are relative now, so the
+// snap can be moved again. It returns how many it changed.
+func fixPartialLinks(dir string) (int, error) {
+	stale := dir + ".partial"
+	n := 0
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.Type()&os.ModeSymlink == 0 {
+			return nil
+		}
+		t, err := os.Readlink(p)
+		if err != nil || !strings.HasPrefix(t, stale+"/") {
+			return nil
+		}
+		rel, err := filepath.Rel(filepath.Dir(p), dir+strings.TrimPrefix(t, stale))
+		if err != nil {
+			return nil
+		}
+		tmp := p + ".fixing"
+		os.Remove(tmp)
+		if err := os.Symlink(rel, tmp); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, p); err != nil {
+			os.Remove(tmp)
+			return err
+		}
+		n++
+		return nil
+	})
+	return n, err
+}
+
+// repairLinks fixes the named snap and its bases once. A failure is
+// reported and tried again next time.
+func repairLinks(name string) {
+	st, err := loadState()
+	if err != nil {
+		return
+	}
+	changed := false
+	for seen := 0; name != "" && name != "bare" && name != "none" && seen < 4; seen++ {
+		rec, ok := st.Snaps[name]
+		if !ok {
+			break
+		}
+		if !rec.LinksFixed {
+			n, err := fixPartialLinks(filepath.Join(snapRoot, name, strconv.Itoa(rec.Revision)))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: repairing the hard links of %s: %v\n", name, err)
+				break
+			}
+			if n > 0 {
+				fmt.Fprintf(os.Stderr, "Repaired %d hard links of %s.\n", n, name)
+			}
+			rec.LinksFixed, changed = true, true
+		}
+		name = rec.Base
+	}
+	if changed {
+		st.save()
+	}
+}
+
+// setDisabled records whether a service starts with its snap.
+func setDisabled(name, app string, off bool) {
+	st, err := loadState()
+	if err != nil || st.Snaps[name] == nil {
+		return
+	}
+	rec := st.Snaps[name]
+	rec.Disabled = slices.DeleteFunc(rec.Disabled, func(a string) bool { return a == app })
+	if off {
+		rec.Disabled = append(rec.Disabled, app)
+		sort.Strings(rec.Disabled)
+	}
+	if err := st.save(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
 }

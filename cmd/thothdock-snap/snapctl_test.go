@@ -177,3 +177,62 @@ func TestDaemonsOfSkipsTimers(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// unsquashfs under PRoot makes a hard link as a symlink to the path it was
+// unpacked at; older installs unpacked into <dir>.partial and renamed.
+func TestFixPartialLinks(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "core18", "3085")
+	bin := filepath.Join(dir, "usr", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(bin, ".l2s.python3.60001.0002"), []byte("python"), 0o755)
+	stale := dir + ".partial"
+	os.Symlink(filepath.Join(stale, "usr/bin/.l2s.python3.60001.0002"), filepath.Join(bin, "python3.6"))
+	os.Symlink("python3.6", filepath.Join(bin, "python3")) // a real relative symlink stays
+	os.Symlink("/etc/alternatives/x", filepath.Join(bin, "abs"))
+	if _, err := os.ReadFile(filepath.Join(bin, "python3.6")); err == nil {
+		t.Fatal("the stale link resolved before the repair")
+	}
+	n, err := fixPartialLinks(dir)
+	if err != nil || n != 1 {
+		t.Fatalf("fixed %d (%v)", n, err)
+	}
+	b, err := os.ReadFile(filepath.Join(bin, "python3"))
+	if err != nil || string(b) != "python" {
+		t.Fatalf("python3 -> %q (%v)", b, err)
+	}
+	if got, _ := os.Readlink(filepath.Join(bin, "python3.6")); got != ".l2s.python3.60001.0002" {
+		t.Errorf("repaired link is %q, want one relative to its directory", got)
+	}
+	if got, _ := os.Readlink(filepath.Join(bin, "abs")); got != "/etc/alternatives/x" {
+		t.Errorf("an unrelated absolute link changed to %q", got)
+	}
+	if n, _ := fixPartialLinks(dir); n != 0 {
+		t.Errorf("second pass changed %d", n)
+	}
+}
+
+func TestStopDisableAndStartEnableReachTheSpool(t *testing.T) {
+	withDataRoot(t)
+	t.Setenv("SNAP_INSTANCE_NAME", "caddy")
+	spool, err := newSpool("caddy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(spoolEnv, spool)
+	if code := snapctlMain([]string{"stop", "--disable", "caddy.server"}); code != 0 {
+		t.Fatal("stop --disable refused")
+	}
+	if code := snapctlMain([]string{"start", "--enable", "caddy.server"}); code != 0 {
+		t.Fatal("start --enable refused")
+	}
+	if code := snapctlMain([]string{"restart", "--reload", "caddy.server"}); code != 0 {
+		t.Fatal("restart --reload refused")
+	}
+	b, _ := os.ReadFile(spool)
+	if want := "stop-disable caddy.server\nstart-enable caddy.server\nrestart caddy.server\n"; string(b) != want {
+		t.Fatalf("spool %q, want %q", b, want)
+	}
+}

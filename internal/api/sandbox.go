@@ -177,3 +177,10 @@ func (s *Server) killSandbox(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// forgetSnapAddress is DELETE /thothdock/snaps/{name}/address: a removed
+// snap gives its loopback address back (snap remove).
+func (s *Server) forgetSnapAddress(w http.ResponseWriter, r *http.Request) {
+	s.Engine.ForgetSnapAddress(r.PathValue("name"))
+	w.WriteHeader(http.StatusNoContent)
+}
