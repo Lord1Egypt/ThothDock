@@ -2,6 +2,7 @@ package main
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +48,43 @@ func TestExpandVars(t *testing.T) {
 	env["LD_LIBRARY_PATH"] = "/x"
 	if got := expandVars("${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}", get); got != ":/x" {
 		t.Errorf("set :+ got %q", got)
+	}
+}
+
+// Services start when asked: a window starts only what the user enabled with
+// start --enable, and a service the snap switched off stays off.
+func TestAutostartStartsOnlyEnabledServices(t *testing.T) {
+	rec := &installed{Daemons: []string{"mosquitto", "worker"}}
+	if autostarts(rec, "mosquitto") {
+		t.Fatal("a service nobody enabled would start with every window")
+	}
+	rec.setSwitched("mosquitto", false) // start --enable
+	if !autostarts(rec, "mosquitto") || autostarts(rec, "worker") {
+		t.Fatalf("enable reached the wrong service: %+v", rec)
+	}
+	rec.setSwitched("mosquitto", true) // stop --disable
+	if autostarts(rec, "mosquitto") || len(rec.Autostart) != 0 || len(rec.Disabled) != 1 {
+		t.Fatalf("disable did not switch it off: %+v", rec)
+	}
+	rec.setSwitched("mosquitto", false)
+	rec.Disabled = []string{"mosquitto"} // a snap that disabled it again behind our back
+	if autostarts(rec, "mosquitto") {
+		t.Fatal("a disabled service started")
+	}
+}
+
+func TestEnableTwiceKeepsOneEntry(t *testing.T) {
+	rec := &installed{}
+	rec.setSwitched("b", false)
+	rec.setSwitched("a", false)
+	rec.setSwitched("b", false)
+	if got := strings.Join(rec.Autostart, ","); got != "a,b" {
+		t.Fatalf("autostart %q, want a,b", got)
+	}
+}
+
+func TestPlural(t *testing.T) {
+	if plural(1, "service") != "1 service" || plural(3, "service") != "3 services" {
+		t.Fatal("plural wrong")
 	}
 }

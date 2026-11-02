@@ -722,20 +722,30 @@ func repairLinks(name string) {
 	}
 }
 
-// setDisabled records whether a service starts with its snap.
+// setDisabled records whether a service starts with its snap: off switches it
+// off, on enables it (a new window starts it).
 func setDisabled(name, app string, off bool) {
 	st, err := loadState()
 	if err != nil || st.Snaps[name] == nil {
 		return
 	}
-	rec := st.Snaps[name]
+	st.Snaps[name].setSwitched(app, off)
+	if err := st.save(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
+}
+
+// setSwitched records a service as switched off, or as enabled (a new window
+// starts it).
+func (rec *installed) setSwitched(app string, off bool) {
 	rec.Disabled = slices.DeleteFunc(rec.Disabled, func(a string) bool { return a == app })
+	rec.Autostart = slices.DeleteFunc(rec.Autostart, func(a string) bool { return a == app })
 	if off {
 		rec.Disabled = append(rec.Disabled, app)
 		sort.Strings(rec.Disabled)
-	}
-	if err := st.save(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	} else {
+		rec.Autostart = append(rec.Autostart, app)
+		sort.Strings(rec.Autostart)
 	}
 }
 

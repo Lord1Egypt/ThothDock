@@ -150,10 +150,19 @@ engine: Snap Store API v2 (api.snapcraft.io) → .snap download → sha3-384 che
   connections. `snap get`, `snap set` (which runs the configure hook and puts
   the old configuration back if it fails), `snap unset`, `snap restart`,
   `snap refresh` and `snap run --shell` are there too.
-* Services start when the snap is installed, except a daemon with a `timer`,
-  which only snapd's timer can run on schedule. Nothing restarts a service
-  that exits: there is no `restart-condition` supervisor yet, so a service
-  that stops (etcd without its config file) stays stopped.
+* Services start when asked (changed in 0.4.3; snapd starts them at
+  install). Each running service holds a PRoot process: measured on the
+  SM-A165F, 2-3 processes and about 50 MB as the phone counts it (about 8 MB
+  of it anonymous memory, the rest file pages Android can drop), while Android
+  allows about 32 processes. `snap install` prints how to start them;
+  `snap start <snap>` runs them and `snap start --enable <snap>` also starts
+  them with each new window (`snap autostart`). `snap refresh` runs again what
+  ran before it and what was enabled. `snap stop --disable` and
+  `snapctl stop --disable` switch a service off for good. A daemon with a
+  `timer` never starts by itself (only snapd's timer can run it on schedule).
+  Nothing restarts a service that exits: there is no `restart-condition`
+  supervisor yet, so a service that stops (etcd without its config file) stays
+  stopped. Snaps installed before 0.4.3 start on request from then on.
 * Refreshing keeps the data: `/var/snap/<snap>/<rev>` moves to the new
   revision, `current` points at it, and the old revision's `pre-refresh` and
   the new one's `post-refresh` and `configure` hooks run.
