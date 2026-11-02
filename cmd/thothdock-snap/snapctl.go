@@ -743,14 +743,18 @@ func setDisabled(name, app string, off bool) {
 // which the sandboxes bind as snapctl. The snap command itself reaches the
 // guest through a bind of the app's native library, which the engine, building
 // a sandbox from outside, does not see: it would find an empty placeholder.
-// The copy is made again when the binary changes. Without one (a read-only
-// guest) snaps run without snapctl.
+// Root makes the copy (install, refresh and autostart do, so it exists before
+// any snap runs) and renews it when the binary changes; anyone else uses what
+// is there, and without a copy snaps run without snapctl.
 func snapctlBinary() string {
+	dst := path.Join(stateDir, "bin", "snapctl")
 	self, err := os.Executable()
-	if err != nil {
+	if err != nil || os.Geteuid() != 0 {
+		if _, err := os.Stat(dst); err == nil {
+			return dst
+		}
 		return ""
 	}
-	dst := path.Join(stateDir, "bin", "snapctl")
 	if sameContent(self, dst) {
 		return dst
 	}

@@ -286,6 +286,7 @@ func cmdInstall(args []string) int {
 	if err := ensureUnsquashfs(); err != nil {
 		return fail("%v", err)
 	}
+	snapctlBinary()
 	_, err = os.Stat(snapBin)
 	firstSnap := errors.Is(err, os.ErrNotExist)
 	st, err := loadState()
@@ -687,6 +688,7 @@ func cmdRefresh(args []string) int {
 	if err := ensureUnsquashfs(); err != nil {
 		return fail("%v", err)
 	}
+	snapctlBinary()
 	st, err := loadState()
 	if err != nil {
 		return fail("%v", err)
@@ -1444,6 +1446,7 @@ func cmdAutostart() int {
 	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		return 0
 	}
+	snapctlBinary() // renewed after an app update, before any service starts
 	st, err := loadState()
 	if err != nil {
 		return fail("%v", err)
