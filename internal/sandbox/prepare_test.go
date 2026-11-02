@@ -199,3 +199,31 @@ func listTree(t *testing.T, dir string) []string {
 	})
 	return out
 }
+
+// Flatpak asks for GPU, sound and input nodes with --dev-bind /dev/X /dev/X.
+// They are not in the guest's file tree; the runtime's /dev is the sandbox's.
+func TestDeviceNodesUnderDevAreNotBoundFromTheGuest(t *testing.T) {
+	g := fakeGuest(t)
+	for _, dev := range []string{"/dev/dri", "/dev/snd", "/dev/input", "/dev/kvm"} {
+		p, err := Prepare(&Request{
+			Ops:  []Op{{Kind: OpDevBind, Src: dev, Dest: dev, FD: -1, Perms: -1}},
+			Argv: []string{"/home/thoth/.local/share/flatpak/app/org.example.Tool/files/bin/tool"},
+		}, g, t.TempDir())
+		if err != nil {
+			t.Fatalf("%s: %v", dev, err)
+		}
+		for _, b := range p.Binds {
+			if b.Target == dev {
+				t.Errorf("%s was bound: %+v", dev, b)
+			}
+		}
+	}
+	// Only the device tree is special: a plain bind of a missing path still fails.
+	_, err := Prepare(&Request{
+		Ops:  []Op{{Kind: OpBind, Src: "/dev/dri", Dest: "/dev/dri", FD: -1, Perms: -1}},
+		Argv: []string{"/bin/true"},
+	}, g, t.TempDir())
+	if err == nil {
+		t.Error("a --bind of a missing /dev path was accepted")
+	}
+}

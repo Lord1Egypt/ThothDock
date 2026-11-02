@@ -72,6 +72,21 @@ engine: new empty root dir + PRoot -r <dir> -b <binds…> --link2symlink, argv, 
 * Hard links. OSTree checks files out as hard links. In the guest those are
   PRoot link2symlink entries whose symlinks hold absolute host paths; the
   sandbox's PRoot also runs with `--link2symlink` and resolves them the same way.
+* `xdg-dbus-proxy` (0.4.1). An app whose manifest has `[System Bus Policy]`
+  entries (KeePassXC, Firefox) makes flatpak start `xdg-dbus-proxy` through
+  bwrap with `--args=FD` (the argument list, itself holding `--fd=N`: the write
+  end of a ready pipe) and descriptors that cannot cross the engine socket, so
+  the sandbox failed with "Failed to load --args / Failed to sync with dbus
+  proxy". The shim now recognises the command, expands `--args=FD` inline,
+  runs the proxy in the sandbox and writes the ready byte when its socket
+  exists; when flatpak closes the pipe, the proxy is stopped.
+* Device nodes. flatpak binds `/dev/dri` (and similar) with `--dev-bind-try`
+  for GL apps; the guest has none and the sandbox's `/dev` is the runtime's,
+  so a bind whose source and destination are the same path under `/dev` is
+  skipped (it failed with `bind source "/dev/dri": file does not exist`).
+* Large installs. A 2.6 GB install (LibreOffice) ended on "The connection is
+  closed"; the guest's `flatpak` wrapper runs `install` and `update` again on a
+  network error (five runs at most) and OSTree goes on where it stopped.
 
 ## Snap (Phase 2)
 
