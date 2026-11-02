@@ -48,8 +48,12 @@ func run(args []string) int {
 	if err != nil {
 		return fail("%v", err)
 	}
+	argv, proxy, err := planDBusProxy(spec.Argv, readArgs)
+	if err != nil {
+		return fail("%v", err)
+	}
 	req := &sandbox.Request{
-		Ops: spec.Ops, Env: spec.Env, BaseEnv: os.Environ(), Chdir: spec.Chdir, Argv: spec.Argv,
+		Ops: spec.Ops, Env: spec.Env, BaseEnv: os.Environ(), Chdir: spec.Chdir, Argv: argv,
 		UID: os.Getuid(), GID: os.Getgid(), DieWithParent: true, Files: map[int][]byte{},
 	}
 	// A directory descriptor cannot cross the socket: bind the path it names.
@@ -116,7 +120,16 @@ func run(args []string) int {
 		conn.Close() // the engine kills a --die-with-parent sandbox
 	}()
 
+	proxyDone := make(chan struct{})
+	defer close(proxyDone)
 	code, err := sandbox.RunWithResize(conn, req, os.Stdin, os.Stdout, os.Stderr, func(s sandbox.Started) {
+		if proxy != nil {
+			// The proxy ends with the app it served: stopped on purpose, no message.
+			go proxy.serve(proxyDone, func() {
+				stoppedBy.Store(int32(syscall.SIGTERM))
+				conn.Close()
+			})
+		}
 		info := fmt.Sprintf("{\n    \"child-pid\": %d\n}\n", s.Pid)
 		if spec.InfoFD >= 0 {
 			f := os.NewFile(uintptr(spec.InfoFD), "info-fd")
