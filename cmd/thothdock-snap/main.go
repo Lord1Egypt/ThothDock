@@ -73,7 +73,9 @@ const usage = `Usage: snap <command> [options]
   run --shell <snap>[.<app>]   a shell in the snap's sandbox
   run --hook=configure <snap>  run a snap's install or configure hook again
   start|stop|restart <snap>[.<app>]
-                               run, stop or restart a service (a daemon in snap.yaml)
+                               run, stop or restart a service (a daemon in snap.yaml);
+                               services start only when asked: start --enable
+                               also starts one with each new window
   services                     services and whether they run
   logs <snap>[.<app>]          a service's output
   get [-d] <snap> [<key>...]   a snap's configuration
@@ -81,8 +83,8 @@ const usage = `Usage: snap <command> [options]
   unset <snap> <key>...
   refresh [--channel=C] [<snap>...]
                                install the newest revision
-  autostart                    start the services that are not running (a new
-                               window runs this, as snapd does at boot)
+  autostart                    start the enabled services that are not running (a
+                               new window runs this, as snapd does at boot)
   version
 
 ThothDock's snap: installs from the Snap Store and runs apps through the
@@ -177,6 +179,11 @@ type installed struct {
 	// Disabled are the services that do not start with the snap
 	// (snapctl stop --disable, snap stop --disable).
 	Disabled []string `json:"disabled,omitempty"`
+	// Autostart are the services the user enabled (snap start --enable,
+	// snapctl start --enable): a new window starts only these. Every other
+	// service runs when asked, because each one holds a PRoot process and the
+	// phone allows about 32 processes.
+	Autostart []string `json:"autostart,omitempty"`
 }
 
 // linksFixedOrNone is true for no snap (a nil record) or a repaired one.
@@ -418,10 +425,16 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	}
 	old, refreshing := st.Snaps[name]
 	refreshing = refreshing && old.Revision != rel.Revision
+	var wasRunning []string // services that run again after the refresh
 	if refreshing {
 		// snapd runs the old revision's pre-refresh hook, then stops its services.
 		if orec, oy, odir, err := loadSnap(name); err == nil {
 			runHook(name, "pre-refresh", orec, oy, odir)
+			for _, d := range daemonsOf(oy) {
+				if _, ok := runningService(name, d); ok {
+					wasRunning = append(wasRunning, d)
+				}
+			}
 		}
 		stopAll(name)
 	}
@@ -450,6 +463,9 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	}
 	sort.Strings(rec.Apps)
 	sort.Strings(rec.Daemons)
+	if prev, ok := st.Snaps[name]; ok {
+		rec.Disabled, rec.Autostart = prev.Disabled, prev.Autostart
+	}
 	newData := filepath.Join(dataRoot, name, strconv.Itoa(rel.Revision))
 	if refreshing {
 		// The new revision starts with the data of the old one (snapd copies it).
@@ -491,13 +507,33 @@ func install(store *snapstore.Client, st *state, name, channel string, classic b
 	if fresh, err := loadState(); err == nil {
 		st.Snaps = fresh.Snaps
 	}
-	// snapd starts a snap's services when it installs it.
+	// snapd starts a snap's services when it installs it. Here a service
+	// starts when asked: each one costs a PRoot process (about 50 MB) and an
+	// older phone runs out of both. A refresh runs again what ran before it
+	// and what the user enabled.
 	for _, d := range daemonsOf(y) {
-		if !slices.Contains(st.Snaps[name].Disabled, d) {
+		if refreshing && (slices.Contains(wasRunning, d) || autostarts(st.Snaps[name], d)) {
 			cmdRun([]string{name + "." + d}, true)
 		}
 	}
+	if ds := daemonsOf(y); len(ds) > 0 && !refreshing {
+		fmt.Printf("%s has %s, not started. Start with: sudo snap start %s (--enable also starts it with each new window)\n",
+			name, plural(len(ds), "service"), name)
+	}
 	return nil
+}
+
+// autostarts is true for a service a new window starts: enabled by the user
+// and not switched off by the snap.
+func autostarts(rec *installed, app string) bool {
+	return slices.Contains(rec.Autostart, app) && !slices.Contains(rec.Disabled, app)
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 // progress draws one updating line while a snap downloads, on a terminal.
@@ -1289,6 +1325,8 @@ func cmdServices() int {
 				}
 			} else if slices.Contains(st.Snaps[n].Disabled, d) {
 				note = "disabled; start with: sudo snap start --enable " + n + "." + d
+			} else if autostarts(st.Snaps[n], d) {
+				note = "starts with each window; start now: sudo snap start " + n + "." + d
 			} else if y != nil && y.Apps[d].Timer != "" {
 				note = "timer " + y.Apps[d].Timer + " (not scheduled); run once with: sudo snap start " + n + "." + d
 			}
@@ -1430,7 +1468,7 @@ func serviceNames(y *snapstore.SnapYAML, ref, app string) []string {
 	return out
 }
 
-// cmdAutostart starts every service that is not disabled and not running.
+// cmdAutostart starts every service the user enabled that is not running.
 // The guest has no init system: a service ends with the app, and a window
 // opened after that calls this. Only one runs at a time, so two windows
 // opened together do not start a service twice.
@@ -1464,7 +1502,7 @@ func cmdAutostart() int {
 			continue
 		}
 		for _, d := range daemonsOf(y) {
-			if slices.Contains(st.Snaps[n].Disabled, d) {
+			if !autostarts(st.Snaps[n], d) {
 				continue
 			}
 			if _, ok := runningService(n, d); !ok {
